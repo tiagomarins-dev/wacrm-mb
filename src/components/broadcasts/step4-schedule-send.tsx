@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isFuture, format } from 'date-fns';
 import { createClient } from '@/lib/supabase/client';
 import { MessageTemplate } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Users, Save, CalendarClock } from 'lucide-react';
 
 interface AudienceConfig {
   type: string;
@@ -32,6 +33,9 @@ interface Step4Props {
   onBack: () => void;
   isProcessing: boolean;
   progress: number;
+  /** ISO do agendamento (null = enviar agora). */
+  scheduledAt: string | null;
+  onScheduleChange: (iso: string | null) => void;
 }
 
 export function Step4ScheduleSend({
@@ -44,10 +48,33 @@ export function Step4ScheduleSend({
   onBack,
   isProcessing,
   progress,
+  scheduledAt,
+  onScheduleChange,
 }: Step4Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
+  // Modo de envio + valor do input datetime-local (hora local).
+  const [timing, setTiming] = useState<'now' | 'schedule'>('now');
+  const [localDt, setLocalDt] = useState('');
+
+  // Agendamento válido = modo schedule + data futura preenchida.
+  const scheduleValid =
+    timing === 'schedule' && !!localDt && isFuture(new Date(localDt));
+  const scheduling = timing === 'schedule';
+
+  // Converte o input local em ISO e propaga (null se inválido).
+  function handleDtChange(value: string) {
+    setLocalDt(value);
+    const valid = value && isFuture(new Date(value));
+    onScheduleChange(valid ? new Date(value).toISOString() : null);
+  }
+
+  function selectTiming(mode: 'now' | 'schedule') {
+    setTiming(mode);
+    if (mode === 'now') onScheduleChange(null);
+    else handleDtChange(localDt); // revalida o valor atual
+  }
 
   useEffect(() => {
     async function calculateReach() {
@@ -142,13 +169,64 @@ export function Step4ScheduleSend({
         </div>
       </div>
 
+      {/* Send timing */}
+      <div className="rounded-xl border border-border bg-card/50 p-4 space-y-3">
+        <p className="text-sm font-medium text-foreground">Send Timing</p>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={timing === 'now' ? 'default' : 'outline'}
+            onClick={() => selectTiming('now')}
+            disabled={isProcessing}
+            className={
+              timing === 'now'
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-border text-muted-foreground'
+            }
+          >
+            <Send className="h-4 w-4" />
+            Send now
+          </Button>
+          <Button
+            type="button"
+            variant={timing === 'schedule' ? 'default' : 'outline'}
+            onClick={() => selectTiming('schedule')}
+            disabled={isProcessing}
+            className={
+              timing === 'schedule'
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                : 'border-border text-muted-foreground'
+            }
+          >
+            <CalendarClock className="h-4 w-4" />
+            Schedule
+          </Button>
+        </div>
+        {timing === 'schedule' && (
+          <div className="space-y-1.5">
+            <Input
+              type="datetime-local"
+              value={localDt}
+              onChange={(e) => handleDtChange(e.target.value)}
+              disabled={isProcessing}
+              className="border-border bg-muted text-foreground"
+            />
+            {localDt && !scheduleValid && (
+              <p className="text-xs text-red-400">Pick a future date and time.</p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Processing overlay */}
       {isProcessing && (
         <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <p className="text-sm font-medium text-foreground">Sending broadcast...</p>
+              <p className="text-sm font-medium text-foreground">
+                {scheduling ? 'Scheduling broadcast...' : 'Sending broadcast...'}
+              </p>
             </div>
             <span className="text-xs font-medium text-primary">{progress}%</span>
           </div>
@@ -189,23 +267,41 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing}
+                disabled={!name.trim() || isProcessing || (scheduling && !scheduleValid)}
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
           >
-            <Send className="h-4 w-4" />
-            Send Broadcast
+            {scheduling ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {scheduling ? 'Schedule Broadcast' : 'Send Broadcast'}
           </DialogTrigger>
           <DialogContent className="border-border bg-popover sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="text-popover-foreground">Confirm Broadcast</DialogTitle>
+              <DialogTitle className="text-popover-foreground">
+                {scheduling ? 'Confirm Schedule' : 'Confirm Broadcast'}
+              </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                You are about to send this broadcast to{' '}
-                <span className="font-medium text-popover-foreground">{estimatedReach.toLocaleString()}</span>{' '}
-                contacts using the{' '}
-                <span className="font-medium text-popover-foreground">{template.name}</span> template.
-                This action cannot be undone.
+                {scheduling ? (
+                  <>
+                    This broadcast to{' '}
+                    <span className="font-medium text-popover-foreground">{estimatedReach.toLocaleString()}</span>{' '}
+                    contacts using the{' '}
+                    <span className="font-medium text-popover-foreground">{template.name}</span> template
+                    will be sent on{' '}
+                    <span className="font-medium text-popover-foreground">
+                      {localDt ? format(new Date(localDt), 'PPp') : ''}
+                    </span>
+                    .
+                  </>
+                ) : (
+                  <>
+                    You are about to send this broadcast to{' '}
+                    <span className="font-medium text-popover-foreground">{estimatedReach.toLocaleString()}</span>{' '}
+                    contacts using the{' '}
+                    <span className="font-medium text-popover-foreground">{template.name}</span> template.
+                    This action cannot be undone.
+                  </>
+                )}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -223,8 +319,8 @@ export function Step4ScheduleSend({
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                <Send className="h-4 w-4" />
-                Confirm & Send
+                {scheduling ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+                {scheduling ? 'Confirm & Schedule' : 'Confirm & Send'}
               </Button>
             </DialogFooter>
           </DialogContent>

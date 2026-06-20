@@ -1,27 +1,16 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { sendTemplateMessage } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import type { SendTimeParams } from '@/lib/whatsapp/template-send-builder'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import {
-  sanitizePhoneForMeta,
-  isValidE164,
-  phoneVariants,
-  isRecipientNotAllowedError,
-} from '@/lib/whatsapp/phone-utils'
+  sendRecipients,
+  type BroadcastRecipientInput,
+} from '@/lib/broadcast/send-batch'
 import {
   checkRateLimit,
   rateLimitResponse,
   RATE_LIMITS,
 } from '@/lib/rate-limit'
-
-interface BroadcastResult {
-  phone: string
-  status: 'sent' | 'failed'
-  whatsapp_message_id?: string
-  error?: string
-}
 
 /**
  * Two input shapes are accepted:
@@ -45,19 +34,6 @@ interface BroadcastResult {
  * — meaning every recipient got contact-0's personalization. The new
  * shape is what actually fixes that.
  */
-interface NewRecipient {
-  phone: string
-  /** Body variable values, one per {{N}}. Legacy field. */
-  params?: string[]
-  /**
-   * Structured per-send values (header text variable, media URL
-   * override, URL/COPY_CODE button values). When set, takes
-   * precedence over `params` for the body too — see
-   * sendTemplateMessage for the merge rules.
-   */
-  messageParams?: SendTimeParams
-}
-
 export async function POST(request: Request) {
   try {
     const supabase = await createClient()
@@ -106,7 +82,7 @@ export async function POST(request: Request) {
     } = body
 
     // Normalize to a list of {phone, params} regardless of shape.
-    let recipients: NewRecipient[]
+    let recipients: BroadcastRecipientInput[]
     if (Array.isArray(newRecipients) && newRecipients.length > 0) {
       recipients = newRecipients
     } else if (Array.isArray(phone_numbers) && phone_numbers.length > 0) {
@@ -175,76 +151,16 @@ export async function POST(request: Request) {
     }
     const templateRow = rawTemplateRow ?? null
 
-    const results: BroadcastResult[] = []
-    let sentCount = 0
-    let failedCount = 0
-
-    for (const recipient of recipients) {
-      const sanitized = sanitizePhoneForMeta(recipient.phone)
-
-      if (!isValidE164(sanitized)) {
-        results.push({
-          phone: recipient.phone,
-          status: 'failed',
-          error: 'Invalid phone number format',
-        })
-        failedCount++
-        continue
-      }
-
-      // Retry with phone variants on "not in allowed list" so numbers
-      // that differ only in a trunk-prefix 0 still reach recipients.
-      const variants = phoneVariants(sanitized)
-      let sentMessageId: string | null = null
-      let lastError: string | null = null
-
-      for (const variant of variants) {
-        try {
-          const result = await sendTemplateMessage({
-            phoneNumberId: config.phone_number_id,
-            accessToken,
-            to: variant,
-            templateName: template_name,
-            language: template_language || 'en_US',
-            template: templateRow ?? undefined,
-            messageParams: recipient.messageParams,
-            params: recipient.params ?? [],
-          })
-          sentMessageId = result.messageId
-          lastError = null
-          break
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : 'Unknown error'
-          if (!isRecipientNotAllowedError(errorMessage)) {
-            lastError = errorMessage
-            break
-          }
-          lastError = errorMessage
-          // retry with next variant
-        }
-      }
-
-      if (sentMessageId) {
-        results.push({
-          phone: recipient.phone,
-          status: 'sent',
-          whatsapp_message_id: sentMessageId,
-        })
-        sentCount++
-      } else {
-        console.error(
-          `Failed to send broadcast to ${recipient.phone}:`,
-          lastError
-        )
-        results.push({
-          phone: recipient.phone,
-          status: 'failed',
-          error: lastError || 'Unknown error',
-        })
-        failedCount++
-      }
-    }
+    // Fan-out por destinatário extraído para lib compartilhada (reusada pelo
+    // engine de agendamento). Sem mudança de comportamento.
+    const { results, sentCount, failedCount } = await sendRecipients({
+      phoneNumberId: config.phone_number_id,
+      accessToken,
+      templateName: template_name,
+      language: template_language || 'en_US',
+      templateRow,
+      recipients,
+    })
 
     return NextResponse.json({
       success: true,

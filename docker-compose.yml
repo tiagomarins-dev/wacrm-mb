@@ -31,6 +31,32 @@ services:
     environment:
       - NODE_ENV=production
 
+  # Scheduler interno — pinga os endpoints de cron (broadcast agendado +
+  # automations + flows) em loop SEQUENCIAL (curl aguarda a resposta, então
+  # não há ticks sobrepostos). Usa AUTOMATION_CRON_SECRET (mesmo secret dos 3
+  # crons) via header x-cron-secret. Fala com app:3000 pela rede interna —
+  # nada na internet. CRON_INTERVAL (default 60s) controla a cadência.
+  # $$VAR escapa para $VAR no shell do container (lê o env em runtime).
+  cron:
+    image: curlimages/curl:latest
+    container_name: wacrm-cron
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      - AUTOMATION_CRON_SECRET=${AUTOMATION_CRON_SECRET:-}
+      - CRON_INTERVAL=${CRON_INTERVAL:-60}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        while true; do
+          for p in broadcasts automations flows; do
+            curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/$$p/cron" >/dev/null 2>&1 || true
+          done
+          sleep "$$CRON_INTERVAL"
+        done
+
   # Cloudflare Tunnel — expõe o app num domínio sem abrir portas.
   # Só sobe com o profile "tunnel" (quando há CF_TUNNEL_TOKEN).
   # No dashboard Zero Trust, aponte o public hostname → http://app:3000

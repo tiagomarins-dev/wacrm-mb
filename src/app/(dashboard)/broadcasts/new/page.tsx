@@ -42,6 +42,8 @@ export default function NewBroadcastPage() {
     Record<string, { type: 'static' | 'field' | 'custom_field'; value: string }>
   >({});
   const [name, setName] = useState('');
+  // ISO do agendamento (null = enviar agora).
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
 
   async function handleSend() {
     if (!template) return;
@@ -58,6 +60,7 @@ export default function NewBroadcastPage() {
           excludeTagIds: audience.excludeTagIds,
         },
         variables,
+        scheduledAt,
       });
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
@@ -220,6 +223,8 @@ export default function NewBroadcastPage() {
               onBack={() => setCurrentStep(2)}
               isProcessing={isProcessing}
               progress={progress}
+              scheduledAt={scheduledAt}
+              onScheduleChange={setScheduledAt}
             />
           )}
         </div>

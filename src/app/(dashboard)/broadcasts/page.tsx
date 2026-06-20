@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Radio, Plus, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { useCan } from '@/hooks/use-can';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
@@ -62,6 +63,31 @@ export default function BroadcastsPage() {
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // id da broadcast aguardando confirmação de cancelamento (inline).
+  const [cancelingId, setCancelingId] = useState<string | null>(null);
+  const [cancelBusy, setCancelBusy] = useState(false);
+
+  // Cancela uma broadcast agendada — DELETE (recipients cascateiam). Só vale
+  // enquanto status='scheduled'; o .eq garante que não apaga uma já em envio.
+  async function handleCancel(id: string) {
+    setCancelBusy(true);
+    try {
+      const supabase = createClient();
+      const { error: delError } = await supabase
+        .from('broadcasts')
+        .delete()
+        .eq('id', id)
+        .eq('status', 'scheduled');
+      if (delError) throw delError;
+      toast.success('Scheduled broadcast canceled');
+      setCancelingId(null);
+      await fetchBroadcasts();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to cancel broadcast');
+    } finally {
+      setCancelBusy(false);
+    }
+  }
 
   // Used to kick off polling only while something is actively sending.
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -226,6 +252,7 @@ export default function BroadcastsPage() {
                 <TableHead className="hidden text-muted-foreground lg:table-cell">Read</TableHead>
                 <TableHead className="text-muted-foreground">Status</TableHead>
                 <TableHead className="hidden text-muted-foreground sm:table-cell">Date</TableHead>
+                <TableHead className="text-right text-muted-foreground" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -274,7 +301,48 @@ export default function BroadcastsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
-                      {new Date(broadcast.created_at).toLocaleDateString()}
+                      {broadcast.status === 'scheduled' && broadcast.scheduled_at
+                        ? `🕒 ${new Date(broadcast.scheduled_at).toLocaleString()}`
+                        : new Date(broadcast.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell
+                      className="text-right"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {broadcast.status === 'scheduled' &&
+                        canCreate &&
+                        (cancelingId === broadcast.id ? (
+                          <span className="inline-flex gap-1">
+                            <Button
+                              variant="outline"
+                              disabled={cancelBusy}
+                              onClick={() => handleCancel(broadcast.id)}
+                              className="h-7 border-red-500/30 px-2 text-xs text-red-400 hover:bg-red-500/10"
+                            >
+                              {cancelBusy ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                'Confirm'
+                              )}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              disabled={cancelBusy}
+                              onClick={() => setCancelingId(null)}
+                              className="h-7 border-border px-2 text-xs text-muted-foreground"
+                            >
+                              Keep
+                            </Button>
+                          </span>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            onClick={() => setCancelingId(broadcast.id)}
+                            className="h-7 border-border px-2 text-xs text-muted-foreground hover:bg-muted"
+                          >
+                            Cancel
+                          </Button>
+                        ))}
                     </TableCell>
                   </TableRow>
                 );
