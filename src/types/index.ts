@@ -176,6 +176,13 @@ export interface Message {
   conversation_id: string;
   sender_type: SenderType;
   sender_id?: string;
+  /**
+   * Snapshot do responsável (dono do atendimento) da conversa no
+   * instante em que a mensagem foi gravada. Preenchido pelo trigger
+   * set_message_assignee (migration 024) a partir de
+   * conversations.assigned_agent_id. Preservado mesmo após reatribuição.
+   */
+  assigned_agent_id?: string;
   content_type: ContentType;
   content_text?: string;
   media_url?: string;

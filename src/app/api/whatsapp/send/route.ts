@@ -369,6 +369,10 @@ export async function POST(request: Request) {
       .insert({
         conversation_id,
         sender_type: 'agent',
+        // Rastreabilidade: grava qual usuário do CRM enviou a mensagem.
+        // Essencial em inbox compartilhada (multi-agente) para auditar
+        // quem respondeu cada conversa. Resolvível depois via profiles.
+        sender_id: user.id,
         content_type: message_type,
         content_text: content_text || null,
         media_url: media_url || null,

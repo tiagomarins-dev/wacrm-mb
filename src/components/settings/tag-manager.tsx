@@ -113,7 +113,14 @@ export function TagManager() {
       await fetchTags(user.id);
     } catch (err) {
       console.error('Create error:', err);
-      toast.error('Failed to create tag');
+      // 42501 = violação de RLS (sem permissão). Criar tag exige admin+;
+      // mostra mensagem clara em vez do erro genérico.
+      const code = (err as { code?: string })?.code;
+      if (code === '42501') {
+        toast.error('Only admins can create tags. Ask an account admin.');
+      } else {
+        toast.error('Failed to create tag');
+      }
     } finally {
       setSaving(false);
     }

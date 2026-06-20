@@ -184,8 +184,12 @@ apply_migrations() {
   info "Garantindo imagem postgres:16-alpine…"
   docker pull -q postgres:16-alpine >/dev/null 2>&1 || true
 
+  # A connection string vai via env var (-e PGURI, sem valor inline) para
+  # a senha NÃO aparecer no process table do host (/proc/<pid>/cmdline).
+  # O psql lê a URI de $PGURI dentro do container via sh -c.
   # Testa conexão antes de começar.
-  if ! docker run --rm -i postgres:16-alpine psql "$conn" -tAc "SELECT 1" >/dev/null 2>&1; then
+  if ! PGURI="$conn" docker run --rm -i -e PGURI postgres:16-alpine \
+       sh -c 'psql "$PGURI" -tAc "SELECT 1"' >/dev/null 2>&1; then
     err "Não consegui conectar no banco. Confira a connection string (senha/host)."
     return 1
   fi
@@ -194,7 +198,8 @@ apply_migrations() {
   local f name out count=0
   for f in "$dir"/*.sql; do            # glob ordena 001..023 lexicograficamente
     name="$(basename "$f")"
-    if out="$(docker run --rm -i postgres:16-alpine psql "$conn" -v ON_ERROR_STOP=1 -q < "$f" 2>&1)"; then
+    if out="$(PGURI="$conn" docker run --rm -i -e PGURI postgres:16-alpine \
+              sh -c 'psql "$PGURI" -v ON_ERROR_STOP=1 -q' < "$f" 2>&1)"; then
       ok "  $name"
       count=$((count + 1))
     else
@@ -228,12 +233,21 @@ create_admin_user() {
   ask_required pw    "Senha (mín. 6 caracteres)" 1
   ask_optional name  "Nome completo"
 
-  local payload resp
+  local payload resp cfg
   payload="{\"email\":\"$(json_escape "$email")\",\"password\":\"$(json_escape "$pw")\",\"email_confirm\":true,\"user_metadata\":{\"full_name\":\"$(json_escape "${name:-}")\"}}"
 
-  resp="$(curl -sS -X POST "${url%/}/auth/v1/admin/users" \
-    -H "apikey: $svc" -H "Authorization: Bearer $svc" \
-    -H "Content-Type: application/json" -d "$payload" 2>&1)"
+  # Headers sensíveis (service-role key) num arquivo 0600 lido via curl -K,
+  # e o body (com a senha) via stdin (--data-binary @-). Assim nem a key
+  # nem a senha aparecem no process table (argv) do host.
+  cfg="$(mktemp)"; chmod 600 "$cfg"
+  {
+    printf 'header = "apikey: %s"\n' "$svc"
+    printf 'header = "Authorization: Bearer %s"\n' "$svc"
+    printf 'header = "Content-Type: application/json"\n'
+  } > "$cfg"
+  resp="$(printf '%s' "$payload" | curl -sS -X POST "${url%/}/auth/v1/admin/users" \
+    -K "$cfg" --data-binary @- 2>&1)"
+  rm -f "$cfg"
 
   if printf '%s' "$resp" | grep -q '"id"'; then
     ok "Usuário criado: $email (confirmado, role owner)."
