@@ -1,0 +1,45 @@
+# ============================================================
+# wacrm — orquestração local/produção via Docker Compose.
+# Banco = Supabase gerenciado (externo). Só o app Next sobe aqui.
+# Env vem do arquivo .env.local (não versionado).
+# ============================================================
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Vars públicas precisam entrar no build (inline no bundle).
+      # Interpoladas do env-file passado ao compose (ver instruções).
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+    image: wacrm:latest
+    container_name: wacrm
+    restart: unless-stopped
+    # Host 10300 → container 3000. APP_PORT sobrescreve a porta do host.
+    ports:
+      - "${APP_PORT:-10300}:3000"
+    # Lê todas as variáveis (Supabase, Meta, ENCRYPTION_KEY, etc.)
+    # do arquivo de ambiente — mesmo formato do .env.local.example.
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+
+  # Cloudflare Tunnel — expõe o app num domínio sem abrir portas.
+  # Só sobe com o profile "tunnel" (quando há CF_TUNNEL_TOKEN).
+  # No dashboard Zero Trust, aponte o public hostname → http://app:3000
+  # (mesma rede do compose, porta interna do container).
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: wacrm-tunnel
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN:-}
+    depends_on:
+      - app
+    profiles:
+      - tunnel

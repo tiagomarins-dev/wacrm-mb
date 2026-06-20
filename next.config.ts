@@ -61,6 +61,11 @@ const SECURITY_HEADERS = [
 ] as const;
 
 const nextConfig: NextConfig = {
+  // Gera build "standalone" — empacota só os arquivos necessários
+  // para rodar em produção (server.js + deps usadas), permitindo
+  // uma imagem Docker mínima sem o node_modules completo.
+  output: "standalone",
+
   /**
    * Cache-Control policy.
    *
