@@ -201,6 +201,32 @@ export interface LinkClick {
   clicked_at: string;
 }
 
+/** Config de Lead Score por conta (migration 031). Pesos/janela/limiares. */
+export interface LeadScoreConfig {
+  msg_weight: number;
+  button_weight: number;
+  link_weight: number;
+  sale_multiplier: number;
+  window_days: number;
+  hot_threshold: number;
+  warm_threshold: number;
+}
+
+/** Linha do ranking de leads (retorno da RPC `lead_scores`). */
+export interface LeadScoreRow {
+  contact_id: string;
+  conversation_id: string | null;
+  name: string | null;
+  phone: string;
+  msg_count: number;
+  button_count: number;
+  link_count: number;
+  sale_count: number;
+  score: number;
+  classification: 'quente' | 'morno' | 'frio';
+  last_interaction_at: string | null;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

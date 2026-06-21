@@ -14,6 +14,7 @@ import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { TemplateManager } from '@/components/settings/template-manager';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { IntegrationsConfig } from '@/components/settings/integrations-config';
+import { LeadScoreConfigPanel } from '@/components/settings/lead-score-config';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
@@ -60,6 +61,7 @@ export default function SettingsPage() {
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     integrations: <IntegrationsConfig />,
+    'lead-score': <LeadScoreConfigPanel />,
     fields: <FieldsAndTagsPanel />,
     deals: <DealsSettings />,
     members: <MembersTab />,
