@@ -23,6 +23,7 @@ import {
   ListChecks,
   ListPlus,
   MessageCircle,
+  MousePointerClick,
   Paperclip,
   PlayCircle,
   Tag,
@@ -47,6 +48,7 @@ export type NodeType =
   | "collect_input"
   | "condition"
   | "set_tag"
+  | "wait_for_link_click"
   | "handoff"
   | "end";
 
@@ -104,6 +106,11 @@ export const NODE_META: Record<
     label: "Tag contact",
     icon: Tag,
     color: "text-pink-400",
+  },
+  wait_for_link_click: {
+    label: "Wait for link click",
+    icon: MousePointerClick,
+    color: "text-blue-400",
   },
   handoff: {
     label: "Handoff to agent",
@@ -246,6 +253,12 @@ export function summarizeNode(node: BuilderNode): string | null {
       // short prefix of the UUID so users can disambiguate between
       // multiple set_tag nodes at a glance.
       return tagId ? `${mode} tag ${tagId.slice(0, 8)}…` : `${mode} tag (none picked)`;
+    }
+    case "wait_for_link_click": {
+      const url = typeof cfg.link_url === "string" ? cfg.link_url : "";
+      const text = typeof cfg.message_text === "string" ? cfg.message_text : "";
+      if (url) return `🔗 ${truncate(url, 50)}`;
+      return text.length > 0 ? truncate(text) : null;
     }
     case "handoff": {
       const note = typeof cfg.note === "string" ? cfg.note : "";

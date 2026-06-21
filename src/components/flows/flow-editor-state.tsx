@@ -182,6 +182,14 @@ export function defaultConfigFor(type: NodeType): Record<string, unknown> {
       };
     case "set_tag":
       return { mode: "add", tag_id: "", next_node_key: "" };
+    case "wait_for_link_click":
+      return {
+        message_text: "",
+        link_url: "",
+        link_label: "",
+        on_click_next_node_key: "",
+        on_timeout_next_node_key: "",
+      };
     case "handoff":
       return { note: "" };
     case "end":

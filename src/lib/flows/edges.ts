@@ -85,6 +85,32 @@ export function deriveCanvasEdges(nodes: BuilderNode[]): CanvasEdge[] {
         break;
       }
 
+      case "wait_for_link_click": {
+        const clickNext = (cfg as { on_click_next_node_key?: string })
+          .on_click_next_node_key;
+        const timeoutNext = (cfg as { on_timeout_next_node_key?: string })
+          .on_timeout_next_node_key;
+        if (clickNext && knownKeys.has(clickNext)) {
+          edges.push({
+            id: `${node.node_key}--click--${clickNext}`,
+            source: node.node_key,
+            target: clickNext,
+            sourceHandle: "click",
+            label: "clicou",
+          });
+        }
+        if (timeoutNext && knownKeys.has(timeoutNext)) {
+          edges.push({
+            id: `${node.node_key}--timeout--${timeoutNext}`,
+            source: node.node_key,
+            target: timeoutNext,
+            sourceHandle: "timeout",
+            label: "timeout",
+          });
+        }
+        break;
+      }
+
       case "send_buttons": {
         const buttons = Array.isArray(
           (cfg as { buttons?: unknown }).buttons,
@@ -187,6 +213,12 @@ export function outgoingSlots(node: BuilderNode): OutgoingSlot[] {
         { id: "false", label: "false" },
       ];
 
+    case "wait_for_link_click":
+      return [
+        { id: "click", label: "clicou" },
+        { id: "timeout", label: "timeout" },
+      ];
+
     case "send_buttons": {
       const buttons = Array.isArray((cfg as { buttons?: unknown }).buttons)
         ? ((cfg as { buttons: Array<Record<string, unknown>> }).buttons)
@@ -259,6 +291,13 @@ export function applyEdgeConnection(
     case "condition":
       if (sourceHandle === "true") return { true_next: targetKey };
       if (sourceHandle === "false") return { false_next: targetKey };
+      return null;
+
+    case "wait_for_link_click":
+      if (sourceHandle === "click")
+        return { on_click_next_node_key: targetKey };
+      if (sourceHandle === "timeout")
+        return { on_timeout_next_node_key: targetKey };
       return null;
 
     case "send_buttons": {
@@ -361,6 +400,21 @@ function patchedConfigWithoutKey(
         ...cfg,
         ...(trueMatch ? { true_next: "" } : {}),
         ...(falseMatch ? { false_next: "" } : {}),
+      };
+    }
+
+    case "wait_for_link_click": {
+      const c = cfg as {
+        on_click_next_node_key?: string;
+        on_timeout_next_node_key?: string;
+      };
+      const clickMatch = c.on_click_next_node_key === deletedKey;
+      const timeoutMatch = c.on_timeout_next_node_key === deletedKey;
+      if (!clickMatch && !timeoutMatch) return null;
+      return {
+        ...cfg,
+        ...(clickMatch ? { on_click_next_node_key: "" } : {}),
+        ...(timeoutMatch ? { on_timeout_next_node_key: "" } : {}),
       };
     }
 

@@ -173,6 +173,28 @@ export interface SetTagNodeConfig {
   next_node_key: string;
 }
 
+/**
+ * Envia uma mensagem com link RASTREÁVEL e SUSPENDE (como send_buttons).
+ * O link enviado aponta pro nosso `/r/[token]`; ao ser clicado, a run
+ * retoma por `on_click_next_node_key`. Se o contato não clicar dentro do
+ * timeout, o cron de varredura ramifica por `on_timeout_next_node_key`
+ * (ou encerra a run, se não houver). Dois "edges": click / timeout.
+ */
+export interface WaitForLinkClickNodeConfig {
+  /** Texto enviado ao cliente; o link rastreável é anexado ao final. */
+  message_text: string;
+  /** URL de destino real (http/https). É enrolada por contato no envio. */
+  link_url: string;
+  /** Rótulo opcional exibido antes do link (ex: "Acesse:"). */
+  link_label?: string;
+  /** node_key destino quando o link é clicado. */
+  on_click_next_node_key: string;
+  /** node_key destino quando estoura o timeout sem clique (opcional). */
+  on_timeout_next_node_key?: string;
+  /** Janela de espera em segundos. Default = fallback_policy.on_timeout_hours×3600. */
+  timeout_seconds?: number;
+}
+
 // Terminal nodes carry no config — they just stop the run.
 export type EndNodeConfig = Record<string, never>;
 
@@ -193,6 +215,7 @@ export type FlowNodeConfig =
   | { node_type: "collect_input"; config: CollectInputNodeConfig }
   | { node_type: "condition"; config: ConditionNodeConfig }
   | { node_type: "set_tag"; config: SetTagNodeConfig }
+  | { node_type: "wait_for_link_click"; config: WaitForLinkClickNodeConfig }
   | { node_type: "handoff"; config: HandoffNodeConfig }
   | { node_type: "end"; config: EndNodeConfig };
 

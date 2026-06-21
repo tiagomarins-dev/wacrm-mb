@@ -40,6 +40,7 @@ import {
   engineSendText,
 } from "./meta-send";
 import { decideFallback, resolveFallbackPolicy } from "./fallback";
+import { createLinkToken, type LinkTokenPayload } from "@/lib/link-tracking/token";
 import {
   type CollectInputNodeConfig,
   type ConditionNodeConfig,
@@ -55,6 +56,7 @@ import {
   type SendMessageNodeConfig,
   type SetTagNodeConfig,
   type StartNodeConfig,
+  type WaitForLinkClickNodeConfig,
   type KeywordTriggerConfig,
 } from "./types";
 
@@ -125,7 +127,8 @@ export function isSuspending(node_type: string): boolean {
   return (
     node_type === "send_buttons" ||
     node_type === "send_list" ||
-    node_type === "collect_input"
+    node_type === "collect_input" ||
+    node_type === "wait_for_link_click"
   );
 }
 
@@ -255,6 +258,7 @@ async function logEvent(
     | "fallback_fired"
     | "handoff"
     | "timeout"
+    | "link_clicked"
     | "error"
     | "completed",
   node_key: string | null,
@@ -428,6 +432,63 @@ async function sendListAndSuspend(
     })
     .eq("id", run.id);
   return { outcome: "advanced", node_key: node.node_key };
+}
+
+/**
+ * Envia a mensagem com link RASTREÁVEL e suspende — espelha
+ * sendButtonsAndSuspend. O link aponta pro nosso /r/<token>; o token é
+ * assinado por contato (carrega flow_id+run_id+node_key) e retomado pela
+ * rota de redirect. Lança se NEXT_PUBLIC_SITE_URL não estiver setado
+ * (sem base, o link sairia quebrado).
+ */
+async function sendLinkAndSuspend(
+  db: AdminClient,
+  run: FlowRunRow,
+  node: FlowNodeRow,
+): Promise<void> {
+  const cfg = node.config as unknown as WaitForLinkClickNodeConfig;
+  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  if (!base) throw new Error("NEXT_PUBLIC_SITE_URL is not set");
+
+  // Token curto persistido (capability) → URL clicável no WhatsApp.
+  const token = await createLinkToken(
+    db,
+    {
+      account_id: run.account_id,
+      flow_id: run.flow_id,
+      run_id: run.id,
+      node_key: node.node_key,
+      contact_id: run.contact_id!,
+      url: cfg.link_url,
+    },
+    Date.now(),
+  );
+  const wrapped = `${base}/r/${token}`;
+  const body = interpolateVars(cfg.message_text, run.vars);
+  const text = `${body}\n${cfg.link_label ? `${cfg.link_label} ` : ""}${wrapped}`;
+
+  const { whatsapp_message_id } = await engineSendText({
+    accountId: run.account_id,
+    userId: run.user_id,
+    conversationId: run.conversation_id!,
+    contactId: run.contact_id!,
+    text,
+  });
+  await logEvent(db, run.id, "message_sent", node.node_key, {
+    node_type: "wait_for_link_click",
+    whatsapp_message_id,
+  });
+  const { data: msg } = await db
+    .from("messages")
+    .select("id")
+    .eq("message_id", whatsapp_message_id)
+    .maybeSingle();
+  await db
+    .from("flow_runs")
+    .update({
+      last_prompt_message_id: (msg as { id: string } | null)?.id ?? null,
+    })
+    .eq("id", run.id);
 }
 
 async function executeHandoff(
@@ -732,6 +793,32 @@ async function advanceFromNodeKey(
       currentKey = cfg.next_node_key;
       continue;
     }
+    if (node.node_type === "wait_for_link_click") {
+      // Envia a msg com link rastreável e suspende. O "reply" (clique)
+      // chega pela rota /r/[token] → resumeRunOnLinkClick, não pelo webhook.
+      try {
+        await sendLinkAndSuspend(db, run, node);
+      } catch (err) {
+        await logEvent(db, run.id, "error", node.node_key, {
+          reason: "send_link_failed",
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        await endRun(db, run.id, "failed", "send_link_failed");
+        return { outcome: "completed" };
+      }
+      const advanced = await advanceCurrentNodeKey(
+        db,
+        run.id,
+        run.current_node_key,
+        node.node_key,
+      );
+      if (!advanced) {
+        await logEvent(db, run.id, "error", node.node_key, {
+          reason: "lost_race_during_advance",
+        });
+      }
+      return { outcome: "advanced" };
+    }
     if (node.node_type === "send_buttons") {
       await sendButtonsAndSuspend(db, run, node);
       // Persist the new current_node_key via optimistic UPDATE.
@@ -984,6 +1071,14 @@ async function handleReplyForActiveRun(
     };
   }
 
+  // Nó de espera de clique: uma mensagem de texto recebida enquanto
+  // aguardamos o clique NÃO deve estourar fallback/reprompt (mataria a
+  // run). Ignora (consumed:false → automations/inbox tratam normalmente);
+  // a run segue esperando o clique (ou o cron a varre no timeout).
+  if (currentNode.node_type === "wait_for_link_click") {
+    return { consumed: false, flow_run_id: run.id, outcome: "no_match" };
+  }
+
   // No match → fallback. Apply the policy.
   const policy = resolveFallbackPolicy(
     (await loadFlow(db, run.flow_id))?.fallback_policy,
@@ -1114,4 +1209,99 @@ async function startNewRun(
     flow_run_id: run.id,
     outcome: outcome.outcome === "advanced" ? "started" : outcome.outcome,
   };
+}
+
+// ============================================================
+// Link-click resume — chamado pela rota pública /r/[token]. Carrega a
+// run inteira (precisa de account/conversation/contact pros sends e do
+// current_node_key pra checagem otimista) e retoma pelo ramo "clicou".
+// Idempotente: clique repetido após avançar = no-op (guard de node_key).
+// ============================================================
+
+export async function resumeRunOnLinkClick(
+  db: AdminClient,
+  payload: LinkTokenPayload,
+  userAgent: string | null,
+): Promise<void> {
+  const { data } = await db
+    .from("flow_runs")
+    .select("*")
+    .eq("id", payload.run_id)
+    .maybeSingle();
+  const run = (data as FlowRunRow | null) ?? null;
+  if (!run || run.status !== "active") return;
+  // flow_id + node_key juntos: node_key só é único por flow, então o
+  // par evita avançar a run errada com um token antigo reaproveitado.
+  if (run.flow_id !== payload.flow_id) return;
+  if (run.current_node_key !== payload.node_key) return;
+
+  const nodes = await loadAllNodes(db, run.flow_id);
+  const node = nodes.get(payload.node_key) ?? null;
+  if (!node || node.node_type !== "wait_for_link_click") return;
+
+  // Clique humano válido → audita + retoma. account_id vem da run
+  // (o token não carrega account_id; aqui temos a row inteira).
+  await db.from("link_clicks").insert({
+    account_id: run.account_id,
+    contact_id: run.contact_id,
+    flow_run_id: run.id,
+    node_key: node.node_key,
+    source: "flow",
+    target_url: payload.url,
+    user_agent: userAgent,
+  });
+  await logEvent(db, run.id, "link_clicked", node.node_key, {});
+
+  const cfg = node.config as unknown as WaitForLinkClickNodeConfig;
+  await advanceFromNodeKey(db, run, cfg.on_click_next_node_key, nodes);
+}
+
+// ============================================================
+// Timeout branch — chamado pelo cron de varredura POR run. Encapsula a
+// decisão de domínio (o cron fica fino). Para nós wait_for_link_click,
+// usa a janela per-nó (timeout_seconds) sobre last_advanced_at e ramifica
+// pelo on_timeout (ou encerra). Para os demais nós devolve 'not_waiting'
+// → o cron aplica a varredura genérica por on_timeout_hours.
+// ============================================================
+
+export type TimeoutBranchResult = "branched" | "skip" | "not_waiting";
+
+export async function timeoutBranch(
+  db: AdminClient,
+  runId: string,
+  policyHours: number,
+): Promise<TimeoutBranchResult> {
+  const { data } = await db
+    .from("flow_runs")
+    .select("*")
+    .eq("id", runId)
+    .maybeSingle();
+  const run = (data as FlowRunRow | null) ?? null;
+  if (!run || run.status !== "active" || !run.current_node_key) {
+    return "not_waiting";
+  }
+  const nodes = await loadAllNodes(db, run.flow_id);
+  const node = nodes.get(run.current_node_key) ?? null;
+  if (!node || node.node_type !== "wait_for_link_click") return "not_waiting";
+
+  const cfg = node.config as unknown as WaitForLinkClickNodeConfig;
+  const windowSecs = cfg.timeout_seconds ?? policyHours * 3600;
+  const ageSecs =
+    (Date.now() - new Date(run.last_advanced_at).getTime()) / 1000;
+  if (ageSecs < windowSecs) return "skip"; // ainda dentro da janela
+
+  if (cfg.on_timeout_next_node_key) {
+    await logEvent(db, run.id, "timeout", node.node_key, {
+      branch: true,
+      age_seconds: Math.round(ageSecs),
+    });
+    await advanceFromNodeKey(db, run, cfg.on_timeout_next_node_key, nodes);
+    return "branched";
+  }
+  // Sem ramo de timeout → encerra (igual à varredura genérica).
+  await logEvent(db, run.id, "timeout", node.node_key, {
+    age_seconds: Math.round(ageSecs),
+  });
+  await endRun(db, run.id, "timed_out", "stale_sweep");
+  return "branched";
 }

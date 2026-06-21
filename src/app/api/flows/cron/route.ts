@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resolveFallbackPolicy } from '@/lib/flows/fallback'
+import { timeoutBranch } from '@/lib/flows/engine'
 
 /**
  * Sweep abandoned active flow runs.
@@ -77,6 +78,19 @@ export async function GET(request: Request) {
   for (const r of runs as Row[]) {
     const flowsField = Array.isArray(r.flows) ? r.flows[0] : r.flows
     const policy = resolveFallbackPolicy(flowsField?.fallback_policy ?? null)
+
+    // Nós wait_for_link_click têm janela própria (timeout_seconds) e podem
+    // RAMIFICAR no timeout em vez de só encerrar. timeoutBranch decide:
+    //   'branched' → ramificou ou encerrou o nó de link (já tratado)
+    //   'skip'     → ainda dentro da janela per-nó (não encerrar)
+    //   'not_waiting' → não é nó de link → varredura genérica abaixo.
+    const branch = await timeoutBranch(admin, r.id, policy.on_timeout_hours)
+    if (branch === 'branched') {
+      swept += 1
+      continue
+    }
+    if (branch === 'skip') continue
+
     const lastAdvanced = new Date(r.last_advanced_at)
     const ageHours = (now.getTime() - lastAdvanced.getTime()) / (1000 * 60 * 60)
     if (ageHours < policy.on_timeout_hours) continue

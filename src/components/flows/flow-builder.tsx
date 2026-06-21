@@ -567,6 +567,7 @@ function AddNodeButton({ onAdd }: { onAdd: (type: NodeType) => void }) {
     "collect_input",
     "condition",
     "set_tag",
+    "wait_for_link_click",
     "handoff",
     "end",
   ];

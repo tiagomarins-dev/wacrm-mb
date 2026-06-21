@@ -188,6 +188,19 @@ export interface ConversationShare {
   created_at: string;
 }
 
+/** Clique humano num link rastreável (migration 029). */
+export interface LinkClick {
+  id: string;
+  account_id: string;
+  contact_id?: string | null;
+  flow_run_id?: string | null;
+  node_key?: string | null;
+  source: 'flow' | 'broadcast' | 'automation' | 'manual';
+  target_url: string;
+  user_agent?: string | null;
+  clicked_at: string;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {

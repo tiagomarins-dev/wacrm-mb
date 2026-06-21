@@ -627,6 +627,7 @@ const ADD_NODE_TYPES: NodeType[] = [
   "collect_input",
   "condition",
   "set_tag",
+  "wait_for_link_click",
   "handoff",
   "end",
 ];

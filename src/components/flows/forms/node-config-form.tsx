@@ -188,6 +188,16 @@ export function NodeConfigForm({
         />
       );
 
+    case "wait_for_link_click":
+      return (
+        <WaitForLinkClickForm
+          cfg={cfg as WaitForLinkClickCfg}
+          allNodes={allNodes}
+          currentKey={node.node_key}
+          onUpdateConfig={onUpdateConfig}
+        />
+      );
+
     case "handoff":
       return (
         <TextRow
@@ -818,6 +828,90 @@ function SetTagForm({
         onChange={(v) => onUpdateConfig({ next_node_key: v })}
         label="Then advance to"
       />
+    </>
+  );
+}
+
+// ============================================================
+// wait_for_link_click
+// ============================================================
+
+interface WaitForLinkClickCfg {
+  message_text?: string;
+  link_url?: string;
+  link_label?: string;
+  on_click_next_node_key?: string;
+  on_timeout_next_node_key?: string;
+  timeout_seconds?: number;
+}
+
+function WaitForLinkClickForm({
+  cfg,
+  allNodes,
+  currentKey,
+  onUpdateConfig,
+}: {
+  cfg: WaitForLinkClickCfg;
+  allNodes: BuilderNode[];
+  currentKey: string;
+  onUpdateConfig: (patch: Record<string, unknown>) => void;
+}) {
+  return (
+    <>
+      <TextRow
+        label="Mensagem enviada (o link rastreável é anexado ao final)"
+        value={cfg.message_text ?? ""}
+        onChange={(v) => onUpdateConfig({ message_text: v })}
+        rows={3}
+      />
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <TextRow
+          label="URL de destino (http/https)"
+          value={cfg.link_url ?? ""}
+          onChange={(v) => onUpdateConfig({ link_url: v })}
+        />
+        <TextRow
+          label="Rótulo antes do link (opcional)"
+          value={cfg.link_label ?? ""}
+          onChange={(v) => onUpdateConfig({ link_label: v })}
+        />
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <NextNodeRow
+          value={cfg.on_click_next_node_key ?? ""}
+          allNodes={allNodes}
+          currentKey={currentKey}
+          onChange={(v) => onUpdateConfig({ on_click_next_node_key: v })}
+          label="Se clicar → avança para"
+        />
+        <NextNodeRow
+          value={cfg.on_timeout_next_node_key ?? ""}
+          allNodes={allNodes}
+          currentKey={currentKey}
+          onChange={(v) => onUpdateConfig({ on_timeout_next_node_key: v })}
+          label="Se não clicar (timeout) → avança para (opcional)"
+        />
+      </div>
+      <div>
+        <label className="mb-1 block text-xs text-muted-foreground">
+          Janela de espera em segundos (vazio = padrão do flow, 24h)
+        </label>
+        <Input
+          type="number"
+          min={0}
+          value={
+            typeof cfg.timeout_seconds === "number" ? cfg.timeout_seconds : ""
+          }
+          onChange={(e) =>
+            onUpdateConfig({
+              timeout_seconds:
+                e.target.value === "" ? undefined : Number(e.target.value),
+            })
+          }
+          placeholder="ex: 3600"
+          className="bg-muted"
+        />
+      </div>
     </>
   );
 }

@@ -115,6 +115,26 @@ export function validateFlowForActivation(
     issues.push(...validateNode(n, keys));
   }
 
+  // Janela 24h (WhatsApp): um clique NÃO reabre a janela de atendimento.
+  // Se o ramo "clicou" manda direto um send_message e o último inbound do
+  // contato foi > 24h, a Meta rejeita o envio. Avisa (não bloqueia).
+  const typeByKey = new Map(nodes.map((n) => [n.node_key, n.node_type]));
+  for (const n of nodes) {
+    if (n.node_type !== "wait_for_link_click") continue;
+    const clickNext = (n.config as { on_click_next_node_key?: string })
+      .on_click_next_node_key;
+    if (clickNext && typeByKey.get(clickNext) === "send_message") {
+      issues.push({
+        severity: "warning",
+        scope: "node",
+        node_key: n.node_key,
+        field: "on_click_next_node_key",
+        message:
+          'O ramo "clicou" envia uma mensagem: um clique não reabre a janela de 24h do WhatsApp; se o último contato foi há mais de 24h, o envio pode falhar.',
+      });
+    }
+  }
+
   // Reachability — every non-orphan node must be reachable from the
   // entry. Done after per-node validation so we don't double-report
   // when a node has bad config AND is unreachable.
@@ -701,6 +721,72 @@ function validateNode(
       break;
     }
 
+    case "wait_for_link_click": {
+      const cfg = node.config as {
+        message_text?: string;
+        link_url?: string;
+        on_click_next_node_key?: string;
+        on_timeout_next_node_key?: string;
+        timeout_seconds?: number;
+      };
+      if (!cfg.message_text?.trim()) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "message_text",
+          message: "Wait-for-link-click needs a message body.",
+        });
+      }
+      if (!cfg.link_url?.trim()) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "link_url",
+          message: "Wait-for-link-click needs a link URL to track.",
+        });
+      } else if (!/^https?:\/\//i.test(cfg.link_url.trim())) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "link_url",
+          message: "Link URL must start with http:// or https://.",
+        });
+      }
+      if (!cfg.on_click_next_node_key) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "on_click_next_node_key",
+          message: 'Pick a node for the "clicked" branch.',
+        });
+      } else if (!knownKeys.has(cfg.on_click_next_node_key)) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "on_click_next_node_key",
+          message: `"Clicked" branch points to non-existent node "${cfg.on_click_next_node_key}".`,
+        });
+      }
+      if (
+        cfg.on_timeout_next_node_key &&
+        !knownKeys.has(cfg.on_timeout_next_node_key)
+      ) {
+        issues.push({
+          severity: "error",
+          scope: "node",
+          node_key: node.node_key,
+          field: "on_timeout_next_node_key",
+          message: `"Timeout" branch points to non-existent node "${cfg.on_timeout_next_node_key}".`,
+        });
+      }
+      break;
+    }
+
     case "handoff":
     case "end":
       // Terminal nodes have no outgoing edges; nothing to validate
@@ -763,6 +849,16 @@ function outgoingEdges(node: NodeInput): string[] {
       const out: string[] = [];
       if (cfg.true_next) out.push(cfg.true_next);
       if (cfg.false_next) out.push(cfg.false_next);
+      return out;
+    }
+    case "wait_for_link_click": {
+      const cfg = node.config as {
+        on_click_next_node_key?: string;
+        on_timeout_next_node_key?: string;
+      };
+      const out: string[] = [];
+      if (cfg.on_click_next_node_key) out.push(cfg.on_click_next_node_key);
+      if (cfg.on_timeout_next_node_key) out.push(cfg.on_timeout_next_node_key);
       return out;
     }
     case "send_buttons": {
