@@ -24,6 +24,8 @@ import {
   RefreshCw,
   PanelRightOpen,
   PanelRightClose,
+  FileText,
+  Hash,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +39,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { MessageBubble } from "./message-bubble";
 import { MessageActions } from "./message-actions";
+import { ShareModal, type ShareProvider } from "./share-modal";
 import {
   MessageComposer,
   CHAT_MEDIA_BUCKET,
@@ -238,6 +241,14 @@ export function MessageThread({
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Compartilhamento (Notion/Slack) — modal + provedor selecionado.
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareProvider, setShareProvider] = useState<ShareProvider | null>(null);
+  const openShare = useCallback((p: ShareProvider) => {
+    setShareProvider(p);
+    setShareOpen(true);
   }, []);
 
   // 24-hour session timer
@@ -926,6 +937,26 @@ export function MessageThread({
             </button>
           )}
 
+          {/* Compartilhar a conversa (resumo IA) no Notion / Slack */}
+          <button
+            type="button"
+            onClick={() => openShare("notion")}
+            aria-label="Compartilhar no Notion"
+            title="Compartilhar no Notion"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <FileText className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openShare("slack")}
+            aria-label="Compartilhar no Slack"
+            title="Compartilhar no Slack"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Hash className="h-3.5 w-3.5" />
+          </button>
+
           {/* Status dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(
@@ -1102,6 +1133,14 @@ export function MessageThread({
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
+      />
+
+      <ShareModal
+        open={shareOpen}
+        onOpenChange={setShareOpen}
+        provider={shareProvider}
+        conversationId={conversation.id}
+        contactName={contact?.name}
       />
     </div>
   );

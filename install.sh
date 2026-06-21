@@ -94,6 +94,10 @@ collect_and_write_env() {
   ask_optional META_APP_ID         "META_APP_ID (só p/ templates com header de imagem)"
 
   echo
+  info "== OpenRouter (resumo IA p/ compartilhar conversa — opcional) =="
+  ask_optional OPENROUTER_API_KEY  "OPENROUTER_API_KEY (admin pode configurar depois em Settings)"
+
+  echo
   info "== Cloudflare Tunnel (domínio público, sem abrir portas) =="
   warn "Antes: no dashboard Zero Trust → Networks → Tunnels, crie um tunnel,"
   warn "aponte o Public Hostname para  http://app:3000  e copie o token."
@@ -135,6 +139,9 @@ collect_and_write_env() {
     echo "# --- Meta / WhatsApp ---"
     echo "META_APP_SECRET=$META_APP_SECRET"
     if [ -n "${META_APP_ID:-}" ]; then echo "META_APP_ID=$META_APP_ID"; else echo "# META_APP_ID="; fi
+    echo
+    echo "# --- OpenRouter (resumo IA, opcional/fallback) ---"
+    if [ -n "${OPENROUTER_API_KEY:-}" ]; then echo "OPENROUTER_API_KEY=$OPENROUTER_API_KEY"; else echo "# OPENROUTER_API_KEY="; fi
     echo
     echo "# --- Deploy ---"
     if [ -n "${SITE_URL:-}" ]; then echo "NEXT_PUBLIC_SITE_URL=$SITE_URL"; else echo "# NEXT_PUBLIC_SITE_URL="; fi

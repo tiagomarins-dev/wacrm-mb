@@ -159,6 +159,35 @@ export interface ContactNote {
   created_at: string;
 }
 
+/**
+ * Config de integrações exposta ao client — SÓ campos não-secretos.
+ * Tokens nunca saem do servidor; `*_set` indica se cada token já foi salvo.
+ * Migration 027.
+ */
+export interface IntegrationsConfigPublic {
+  openrouter_model: string | null;
+  openrouter_summary_prompt: string | null;
+  notion_database_id: string | null;
+  slack_channel_id: string | null;
+  openrouter_set: boolean;
+  notion_set: boolean;
+  slack_set: boolean;
+}
+
+/** Auditoria de compartilhamento de conversa (migration 028). */
+export interface ConversationShare {
+  id: string;
+  account_id: string;
+  conversation_id?: string | null;
+  user_id: string;
+  provider: 'notion' | 'slack';
+  topic?: string | null;
+  external_url?: string | null;
+  status: 'pending' | 'sent' | 'failed';
+  error_message?: string | null;
+  created_at: string;
+}
+
 export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
