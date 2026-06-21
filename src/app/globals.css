@@ -217,6 +217,15 @@ html[data-theme="rose"] {
   --sidebar-ring: oklch(0.645 0.22 16);
 }
 
+/* Inbox mobile: esconde o header global do app quando um thread está aberto —
+   o thread tem header próprio (voltar + contato), evitando header duplicado.
+   Só em telas < lg; no desktop o header global permanece. */
+@media (max-width: 1023px) {
+  body[data-inbox-thread="open"] [data-app-header] {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

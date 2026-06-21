@@ -134,6 +134,23 @@ export interface ContactCustomValue {
   value?: string;
 }
 
+/**
+ * Resposta rápida (canned response). `scope='account'` é compartilhada
+ * (admin gerencia); `scope='personal'` é privada do `user_id`. O texto
+ * pode conter variáveis {{name}}/{{phone}}/{{email}}/{{company}}
+ * substituídas pelo contato no momento da inserção. Migration 026.
+ */
+export interface QuickReply {
+  id: string;
+  account_id: string;
+  user_id: string;
+  scope: 'account' | 'personal';
+  shortcut: string;
+  message_text: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ContactNote {
   id: string;
   contact_id: string;

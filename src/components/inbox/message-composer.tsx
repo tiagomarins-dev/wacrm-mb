@@ -36,6 +36,9 @@ import {
   MEDIA_MAX_BYTES_BY_KIND,
 } from "@/lib/storage/upload-media";
 import { ReplyQuote } from "./reply-quote";
+import { QuickReplyMenu } from "./quick-reply-menu";
+import { renderQuickReply, filterQuickReplies } from "@/lib/inbox/quick-replies";
+import type { Contact, QuickReply } from "@/types";
 
 /** Media content types an agent can send from the composer. */
 export type ComposerMediaKind = "image" | "video" | "document" | "audio";
@@ -98,6 +101,10 @@ interface MessageComposerProps {
   onOpenTemplates: () => void;
   replyTo?: ReplyDraft | null;
   onClearReply?: () => void;
+  /** Contato da conversa — usado p/ substituir {{name}} etc na quick reply. */
+  contact?: Contact | null;
+  /** Respostas rápidas (account + pessoais), carregadas 1x no thread. */
+  quickReplies?: QuickReply[];
 }
 
 function formatDuration(seconds: number): string {
@@ -119,10 +126,19 @@ export function MessageComposer({
   onOpenTemplates,
   replyTo,
   onClearReply,
+  contact,
+  quickReplies = [],
 }: MessageComposerProps) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Quick replies (menu do "/"). `qrQuery` é o texto após a "/"; `qrIndex`
+  // é o item destacado p/ navegação por teclado.
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrQuery, setQrQuery] = useState("");
+  const [qrIndex, setQrIndex] = useState(0);
+  const qrItems = qrOpen ? filterQuickReplies(quickReplies, qrQuery) : [];
 
   // Media attachment state. `draft` holds an uploaded-but-not-yet-sent
   // attachment; `busy` covers the upload/transcode window.
@@ -197,6 +213,7 @@ export function MessageComposer({
     try {
       onSend(trimmed, replyTo?.id);
       setText("");
+      setQrOpen(false);
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
@@ -205,22 +222,86 @@ export function MessageComposer({
     }
   }, [text, sending, sessionExpired, onSend, replyTo?.id]);
 
+  // Substitui o token "/query" no cursor pela quick reply (com variáveis
+  // do contato resolvidas), reposiciona o cursor e fecha o menu.
+  const insertQuickReply = useCallback(
+    (r: QuickReply) => {
+      const el = textareaRef.current;
+      const cursor = el ? el.selectionStart : text.length;
+      const before = text.slice(0, cursor);
+      const m = before.match(/\/(\w*)$/);
+      const slashStart = m ? before.length - m[0].length : cursor;
+      const rendered = renderQuickReply(r.message_text, contact ?? null);
+      const next = text.slice(0, slashStart) + rendered + text.slice(cursor);
+      setText(next);
+      setQrOpen(false);
+      setQrQuery("");
+      const caret = slashStart + rendered.length;
+      requestAnimationFrame(() => {
+        const e2 = textareaRef.current;
+        if (e2) {
+          e2.focus();
+          e2.selectionStart = e2.selectionEnd = caret;
+          adjustHeight();
+        }
+      });
+    },
+    [text, contact, adjustHeight],
+  );
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Com o menu de quick replies aberto, as setas/Enter/Tab/Esc navegam
+      // o menu em vez de enviar/quebrar linha.
+      if (qrOpen && qrItems.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setQrIndex((i) => (i + 1) % qrItems.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setQrIndex((i) => (i - 1 + qrItems.length) % qrItems.length);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          insertQuickReply(qrItems[qrIndex] ?? qrItems[0]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setQrOpen(false);
+          return;
+        }
+      }
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSend();
       }
     },
-    [handleSend]
+    [qrOpen, qrItems, qrIndex, insertQuickReply, handleSend],
   );
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setText(e.target.value);
+      const value = e.target.value;
+      setText(value);
       adjustHeight();
+      // Detecta "/" no início de palavra (início do texto ou após espaço)
+      // antes do cursor → abre o menu de quick replies com a query.
+      const cursor = e.target.selectionStart ?? value.length;
+      const before = value.slice(0, cursor);
+      const m = before.match(/(^|\s)\/(\w*)$/);
+      if (m) {
+        setQrOpen(true);
+        setQrQuery(m[2] ?? "");
+        setQrIndex(0);
+      } else if (qrOpen) {
+        setQrOpen(false);
+      }
     },
-    [adjustHeight]
+    [adjustHeight, qrOpen],
   );
 
   // Upload a captured file to chat-media and stage it as a draft.
@@ -378,7 +459,16 @@ export function MessageComposer({
   // ---- Render --------------------------------------------------------
 
   return (
-    <div className="border-t border-border bg-card p-3">
+    <div className="relative shrink-0 border-t border-border bg-card p-3">
+      {/* Menu de quick replies — abre acima do composer ao digitar "/". */}
+      {qrOpen && (
+        <QuickReplyMenu
+          items={qrItems}
+          activeIndex={qrIndex}
+          onSelect={insertQuickReply}
+          onHover={setQrIndex}
+        />
+      )}
       {replyTo && (
         <div className="mb-2">
           <ReplyQuote
@@ -560,14 +650,6 @@ export function MessageComposer({
         </div>
       )}
 
-      {/* Hint sits outside the flex row so its height doesn't push
-          `items-end` buttons below the textarea. Indented to line up
-          under the textarea left edge. */}
-      {!draft && !recording && (
-        <p className="mt-1 pl-[5.5rem] text-[10px] text-muted-foreground">
-          Type &apos;/&apos; for quick replies
-        </p>
-      )}
     </div>
   );
 }

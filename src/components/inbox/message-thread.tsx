@@ -12,6 +12,7 @@ import type {
   ConversationStatus,
   MessageTemplate,
   Profile,
+  QuickReply,
 } from "@/types";
 import {
   MessageSquare,
@@ -209,6 +210,30 @@ export function MessageThread({
           return;
         }
         setProfiles((data as Profile[]) ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Quick replies (compartilhadas + pessoais) — carregadas 1x; a RLS já
+  // devolve as da conta + as do próprio usuário. Passadas ao composer p/ o
+  // menu do "/". Carregar aqui (não no composer) evita refetch por conversa.
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("quick_replies")
+      .select("*")
+      .order("shortcut")
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to fetch quick replies:", error);
+          return;
+        }
+        setQuickReplies((data as QuickReply[]) ?? []);
       });
     return () => {
       cancelled = true;
@@ -816,7 +841,7 @@ export function MessageThread({
     <div className={cn("flex min-w-0 flex-1 flex-col", DOODLE_BG_CLASSES)}>
       {/* Header — solid card surface sits on top of the doodle so the
           name/avatar/dropdowns stay legible. */}
-      <div className="flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-3 sm:px-4">
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-card px-3 py-3 sm:px-4">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {/* Back-to-list button — mobile only. Hidden on lg+ where the
               conversation list is always visible next to the thread. */}
@@ -983,8 +1008,12 @@ export function MessageThread({
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4">
+      {/* Messages Area.
+          `min-h-0` é load-bearing: sem ele, este flex item não encolhe
+          abaixo da altura do conteúdo, cresce além do container e empurra
+          o composer pra fora (cortado embaixo). Com min-h-0, ele encolhe
+          e rola internamente, mantendo o composer fixo no fundo. */}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -1065,6 +1094,8 @@ export function MessageThread({
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
+        contact={contact}
+        quickReplies={quickReplies}
       />
 
       <TemplatePicker

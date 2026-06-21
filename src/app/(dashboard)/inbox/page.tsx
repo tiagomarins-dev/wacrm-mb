@@ -544,8 +544,25 @@ export default function InboxPage() {
   // before, unchanged.
   const hasActiveConv = !!activeConversation;
 
+  // Mobile: ao abrir um thread, esconde o header global do app (evita header
+  // duplicado — o thread já tem o seu com voltar). Sinaliza via data-attr no
+  // body; o CSS (globals.css) esconde [data-app-header] em telas < lg.
+  useEffect(() => {
+    if (hasActiveConv) {
+      document.body.dataset.inboxThread = "open";
+    } else {
+      delete document.body.dataset.inboxThread;
+    }
+    return () => {
+      delete document.body.dataset.inboxThread;
+    };
+  }, [hasActiveConv]);
+
   return (
-    <div className="-m-4 flex h-[calc(100vh-3.5rem)] flex-col overflow-hidden sm:-m-6">
+    // h-full preenche o <main> (flex-1, sem padding p/ inbox no shell). Sem
+    // viewport-math nem margens negativas — flex puro, à prova de device:
+    // header global some no thread mobile (CSS) e o main cresce sozinho.
+    <div className="flex h-full flex-col overflow-hidden">
       {/* WhatsApp connection banner — in the flex column, not absolute,
           so it pushes the panels down instead of overlapping them. */}
       {whatsappConnected === false && (
@@ -563,7 +580,7 @@ export default function InboxPage() {
             thread can occupy the full width. Always visible on lg+. */}
         <div
           className={cn(
-            "flex h-full flex-1 lg:flex-none",
+            "flex h-full min-w-0 flex-1 lg:flex-none",
             hasActiveConv ? "hidden lg:flex" : "flex",
           )}
         >
