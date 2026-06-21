@@ -67,6 +67,22 @@ export function validateFlowForActivation(
   // ---- trigger ----
   issues.push(...validateTrigger(flow.trigger_type, flow.trigger_config));
 
+  // ---- requisito de ambiente p/ nó de link ----
+  // O link rastreável é montado como `${NEXT_PUBLIC_SITE_URL}/r/<id>`. Sem a
+  // env, o envio falha em runtime → bloqueia a ativação aqui (NEXT_PUBLIC_* é
+  // inlined, então a checagem vale no client e no server).
+  if (
+    nodes.some((n) => n.node_type === "wait_for_link_click") &&
+    !process.env.NEXT_PUBLIC_SITE_URL
+  ) {
+    issues.push({
+      severity: "error",
+      scope: "flow",
+      message:
+        "Configure NEXT_PUBLIC_SITE_URL no servidor para usar nós de link rastreável — o link enviado é montado a partir dele.",
+    });
+  }
+
   // ---- graph integrity ----
   if (!flow.entry_node_id) {
     issues.push({

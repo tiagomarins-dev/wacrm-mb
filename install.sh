@@ -111,8 +111,11 @@ collect_and_write_env() {
       ok "Tunnel ligado → $SITE_URL"
       ;;
     *)
-      info "Sem tunnel. Defina a URL pública manualmente (opcional)."
+      info "Sem tunnel. Defina a URL pública (necessária p/ links rastreáveis e convites)."
       ask_optional SITE_URL         "NEXT_PUBLIC_SITE_URL (ex: https://crm.seudominio.com)"
+      if [ -z "${SITE_URL:-}" ]; then
+        warn "NEXT_PUBLIC_SITE_URL vazio — links rastreáveis (Flows → nó de link) e links de convite NÃO funcionam até você defini-lo no .env.local e rebuildar."
+      fi
       ;;
   esac
 
