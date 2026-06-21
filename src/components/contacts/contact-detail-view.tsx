@@ -14,6 +14,18 @@ import {
   SheetDescription,
 } from '@/components/ui/sheet';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ClassificationBadge, type LeadClassification } from '@/components/lead-score/classification-badge';
+
+// Resumo de Lead Score do contato (retorno da RPC lead_score_contact).
+interface ContactLeadScore {
+  msg_count: number;
+  button_count: number;
+  link_count: number;
+  sale_count: number;
+  score: number;
+  classification: LeadClassification;
+  last_interaction_at: string | null;
+}
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,6 +94,10 @@ export function ContactDetailView({
   // Deals tab
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loadingDeals, setLoadingDeals] = useState(false);
+
+  // Lead Score (resumo determinístico da jornada).
+  const [leadScore, setLeadScore] = useState<ContactLeadScore | null>(null);
+  const [loadingScore, setLoadingScore] = useState(false);
 
   const fetchContact = useCallback(async () => {
     if (!contactId) return;
@@ -166,6 +182,19 @@ export function ContactDetailView({
     setLoadingDeals(false);
   }, [contactId, supabase]);
 
+  // Busca o Lead Score do contato (janela padrão da config; 30d se vazio).
+  const fetchLeadScore = useCallback(async () => {
+    if (!contactId) return;
+    setLoadingScore(true);
+    const { data } = await supabase.rpc('lead_score_contact', {
+      p_contact_id: contactId,
+      p_window_days: null,
+    });
+    const row = Array.isArray(data) ? (data[0] as ContactLeadScore | undefined) : null;
+    setLeadScore(row ?? null);
+    setLoadingScore(false);
+  }, [contactId, supabase]);
+
   useEffect(() => {
     if (open && contactId) {
       fetchContact();
@@ -173,8 +202,9 @@ export function ContactDetailView({
       fetchNotes();
       fetchCustomFields();
       fetchDeals();
+      fetchLeadScore();
     }
-  }, [open, contactId, fetchContact, fetchTags, fetchNotes, fetchCustomFields, fetchDeals]);
+  }, [open, contactId, fetchContact, fetchTags, fetchNotes, fetchCustomFields, fetchDeals, fetchLeadScore]);
 
   async function copyPhone() {
     if (!contact) return;
@@ -416,6 +446,12 @@ export function ContactDetailView({
                   className="data-active:bg-muted data-active:text-primary text-muted-foreground"
                 >
                   Deals
+                </TabsTrigger>
+                <TabsTrigger
+                  value="lead-score"
+                  className="data-active:bg-muted data-active:text-primary text-muted-foreground"
+                >
+                  Lead Score
                 </TabsTrigger>
               </TabsList>
 
@@ -676,6 +712,44 @@ export function ContactDetailView({
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Lead Score Tab — resumo determinístico da jornada */}
+              <TabsContent value="lead-score" className="flex-1 overflow-y-auto px-4 py-3">
+                {loadingScore ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="size-5 animate-spin text-primary" />
+                  </div>
+                ) : !leadScore ? (
+                  <p className="text-xs text-muted-foreground">
+                    Sem interações na janela.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3">
+                      <span className="text-2xl font-semibold text-foreground">
+                        {leadScore.score}
+                      </span>
+                      <ClassificationBadge value={leadScore.classification} />
+                    </div>
+                    <div className="rounded-lg border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                      <p>{leadScore.msg_count} mensagens</p>
+                      <p>{leadScore.button_count} cliques em botão</p>
+                      <p>
+                        {leadScore.link_count} cliques em link
+                        {leadScore.sale_count > 0
+                          ? ` (${leadScore.sale_count} de venda)`
+                          : ''}
+                      </p>
+                      <p className="mt-1">
+                        Último contato:{' '}
+                        {leadScore.last_interaction_at
+                          ? new Date(leadScore.last_interaction_at).toLocaleDateString()
+                          : '—'}
+                      </p>
+                    </div>
                   </div>
                 )}
               </TabsContent>

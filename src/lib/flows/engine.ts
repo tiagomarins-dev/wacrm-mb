@@ -1249,6 +1249,9 @@ export async function resumeRunOnLinkClick(
     source: "flow",
     target_url: payload.url,
     user_agent: userAgent,
+    // venda = 2x no Lead Score (flag do nó wait_for_link_click)
+    is_sale:
+      (node.config as unknown as WaitForLinkClickNodeConfig).is_sale ?? false,
   });
   await logEvent(db, run.id, "link_clicked", node.node_key, {});
 

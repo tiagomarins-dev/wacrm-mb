@@ -15,6 +15,7 @@ import {
   Radio,
   Settings,
   Shield,
+  TrendingUp,
   User,
   UserCog,
   Users,
@@ -94,6 +95,7 @@ const navItems: NavItem[] = [
   { href: "/broadcasts", label: "Broadcasts", icon: Radio },
   { href: "/automations", label: "Automations", icon: Zap },
   { href: "/flows", label: "Flows", icon: Workflow, beta: true },
+  { href: "/lead-score", label: "Lead Score", icon: TrendingUp },
 ];
 
 const bottomNavItems = [

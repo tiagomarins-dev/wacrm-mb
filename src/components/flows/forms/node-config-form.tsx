@@ -36,6 +36,7 @@ import {
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -843,6 +844,7 @@ interface WaitForLinkClickCfg {
   on_click_next_node_key?: string;
   on_timeout_next_node_key?: string;
   timeout_seconds?: number;
+  is_sale?: boolean;
 }
 
 function WaitForLinkClickForm({
@@ -911,6 +913,20 @@ function WaitForLinkClickForm({
           placeholder="ex: 3600"
           className="bg-muted"
         />
+      </div>
+      {/* Marca o link como "de venda" → vale 2x no Lead Score */}
+      <div className="flex items-center gap-2">
+        <Checkbox
+          id="wfl_is_sale"
+          checked={cfg.is_sale ?? false}
+          onCheckedChange={(v) => onUpdateConfig({ is_sale: v === true })}
+        />
+        <label
+          htmlFor="wfl_is_sale"
+          className="cursor-pointer text-xs text-muted-foreground"
+        >
+          É um link de venda (vale 2x no Lead Score)
+        </label>
       </div>
     </>
   );

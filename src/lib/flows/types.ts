@@ -193,6 +193,8 @@ export interface WaitForLinkClickNodeConfig {
   on_timeout_next_node_key?: string;
   /** Janela de espera em segundos. Default = fallback_policy.on_timeout_hours×3600. */
   timeout_seconds?: number;
+  /** Marca este link como "de venda" → vale 2x no Lead Score (migration 031). */
+  is_sale?: boolean;
 }
 
 // Terminal nodes carry no config — they just stop the run.

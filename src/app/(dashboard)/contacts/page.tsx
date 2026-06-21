@@ -44,6 +44,8 @@ import {
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
+import { ClassificationBadge, type LeadClassification } from '@/components/lead-score/classification-badge';
+import type { LeadScoreRow } from '@/types';
 import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
@@ -73,6 +75,10 @@ export default function ContactsPage() {
   const [editContactTags, setEditContactTags] = useState<ContactTag[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailContactId, setDetailContactId] = useState<string | null>(null);
+  // Lead Score por contato: 1 RPC → mapa (aceitável p/ milhares de contatos).
+  const [scoreMap, setScoreMap] = useState<
+    Map<string, { score: number; classification: LeadClassification }>
+  >(new Map());
   const [importOpen, setImportOpen] = useState(false);
   const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -190,6 +196,18 @@ export default function ContactsPage() {
     setDetailContactId(contactId);
     setDetailOpen(true);
   }
+
+  // Carrega o ranking de lead score 1x e indexa por contato p/ a coluna.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc('lead_scores', { p_window_days: 30 });
+      const m = new Map<string, { score: number; classification: LeadClassification }>();
+      for (const r of ((data ?? []) as LeadScoreRow[])) {
+        m.set(r.contact_id, { score: r.score, classification: r.classification });
+      }
+      setScoreMap(m);
+    })();
+  }, [supabase]);
 
   function confirmDelete(contact: Contact) {
     setDeleteTarget(contact);
@@ -373,6 +391,7 @@ export default function ContactsPage() {
               <TableHead className="text-muted-foreground hidden md:table-cell">Email</TableHead>
               <TableHead className="text-muted-foreground hidden lg:table-cell">Company</TableHead>
               <TableHead className="text-muted-foreground hidden md:table-cell">Tags</TableHead>
+              <TableHead className="text-muted-foreground hidden sm:table-cell">Score</TableHead>
               <TableHead className="text-muted-foreground hidden lg:table-cell">Created</TableHead>
               <TableHead className="text-muted-foreground w-12" />
             </TableRow>
@@ -380,7 +399,7 @@ export default function ContactsPage() {
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">Loading contacts...</p>
@@ -389,7 +408,7 @@ export default function ContactsPage() {
               </TableRow>
             ) : contacts.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={8} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <div className="flex flex-col items-center gap-2">
                     <Users className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -459,6 +478,18 @@ export default function ContactsPage() {
                         </span>
                       )}
                     </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell">
+                    {scoreMap.has(contact.id) ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-sm font-medium text-foreground">
+                          {scoreMap.get(contact.id)!.score}
+                        </span>
+                        <ClassificationBadge value={scoreMap.get(contact.id)!.classification} />
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">-</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs hidden lg:table-cell">
                     {new Date(contact.created_at).toLocaleDateString('en-US', {
