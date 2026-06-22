@@ -175,6 +175,80 @@ export interface IntegrationsConfigPublic {
   millaborges_set: boolean;
 }
 
+// ============================================================
+// Agente de IA no WhatsApp (migration 037).
+// ============================================================
+
+/** Config do agente por conexão. Row completa (uso no servidor/engine). */
+export interface AiAgentConfig {
+  id: string;
+  account_id: string;
+  connection_id: string;
+  enabled: boolean;
+  debounce_seconds: number;
+  model: string;
+  classifier_model: string | null;
+  persona_prompt: string | null;
+  handoff_hours: Record<string, unknown> | null;
+  handoff_routing: Record<string, string> | null;
+  max_bot_turns: number;
+  /** Allowlist de telefones (MODO TESTE). Vazio/null = responde a todos. */
+  allowed_phones: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Config do agente exposta ao client — sem `persona_prompt` cru (anti
+ * prompt-injection / pode conter instrução sensível). Espelha o padrão
+ * `*_set` de IntegrationsConfigPublic.
+ */
+export interface AiAgentConfigPublic {
+  enabled: boolean;
+  debounce_seconds: number;
+  model: string;
+  classifier_model: string | null;
+  handoff_routing: Record<string, string> | null;
+  max_bot_turns: number;
+  persona_set: boolean;
+}
+
+/** Curso (base de VENDAS do agente). Migration 037. */
+export interface AiCourse {
+  id: string;
+  account_id: string;
+  slug: string;
+  nome: string;
+  ativo: boolean;
+  posicionamento: string | null;
+  publico: string | null;
+  entregas: string | null;
+  numeros_claims: string | null;
+  condicao_vigente: string | null;
+  bonus: string | null;
+  garantia: string | null;
+  nao_prometer: string | null;
+  pagina_vendas_url: string | null;
+  link_venda: string | null;
+  atualizado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Artigo de SUPORTE (FAQ/procedimento). Migration 037. */
+export interface AiSupportArticle {
+  id: string;
+  account_id: string;
+  categoria: string;
+  titulo: string;
+  conteudo: string;
+  keywords: string | null;
+  ativo: boolean;
+  atualizado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Auditoria de compartilhamento de conversa (migration 028). */
 export interface ConversationShare {
   id: string;

@@ -7,6 +7,7 @@ import { findExistingContact, isUniqueViolation } from '@/lib/contacts/dedupe'
 import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
+import { dispatchInboundToAiAgent } from '@/lib/ai-agent/dispatch'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
@@ -722,6 +723,21 @@ async function processMessage(
       },
     }).catch((err) => console.error('[automations] dispatch failed:', err))
   }
+
+  // ============================================================
+  // Agente de IA (4º despachante). Fire-and-forget: enfileira a conversa
+  // p/ o agente responder após o debounce (o cron drena). NÃO responde
+  // inline — o webhook precisa do 200 OK rápido. O gate interno decide se
+  // o agente entra; flowConsumed garante a precedência Flow > Agente.
+  // ============================================================
+  dispatchInboundToAiAgent({
+    accountId,
+    connectionId,
+    contactId: contactRecord.id,
+    conversationId: conversation.id,
+    inboundMessageId: message.id,
+    flowConsumed,
+  }).catch((err) => console.error('[ai_agent] dispatch failed:', err))
 }
 
 async function parseMessageContent(
