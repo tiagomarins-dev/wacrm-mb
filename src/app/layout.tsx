@@ -5,8 +5,11 @@ import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { ThemedToaster } from "@/components/themed-toaster";
 import {
+  DEFAULT_FONT_SCALE,
   DEFAULT_MODE,
   DEFAULT_THEME,
+  FONT_SCALE_STORAGE_KEY,
+  FONT_SCALES,
   MODE_STORAGE_KEY,
   MODES,
   STORAGE_KEY,
@@ -68,9 +71,16 @@ const THEME_BOOT_SCRIPT = `
     var MODES = ${JSON.stringify(MODES)};
     var savedMode = localStorage.getItem(MODE_KEY);
     d.dataset.mode = MODES.indexOf(savedMode) !== -1 ? savedMode : MODE_DEFAULT;
+
+    var FS_KEY = ${JSON.stringify(FONT_SCALE_STORAGE_KEY)};
+    var FS_DEFAULT = ${JSON.stringify(DEFAULT_FONT_SCALE)};
+    var FS = ${JSON.stringify(FONT_SCALES)};
+    var savedFs = localStorage.getItem(FS_KEY);
+    d.dataset.fontScale = FS.indexOf(savedFs) !== -1 ? savedFs : FS_DEFAULT;
   } catch (_e) {
     d.dataset.theme = ${JSON.stringify(DEFAULT_THEME)};
     d.dataset.mode = ${JSON.stringify(DEFAULT_MODE)};
+    d.dataset.fontScale = ${JSON.stringify(DEFAULT_FONT_SCALE)};
   }
 })();
 `;
@@ -85,6 +95,7 @@ export default function RootLayout({
       lang="en"
       data-theme={DEFAULT_THEME}
       data-mode={DEFAULT_MODE}
+      data-font-scale={DEFAULT_FONT_SCALE}
       className={`${inter.variable} h-full antialiased`}
       // The `theme-boot` script below rewrites `data-theme` and
       // `data-mode` on <html> from localStorage before React hydrates,

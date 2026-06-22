@@ -105,3 +105,41 @@ export function isThemeId(value: unknown): value is ThemeId {
     (THEME_IDS as ReadonlyArray<string>).includes(value)
   );
 }
+
+/**
+ * FONT SCALE — tamanho da fonte do sistema (acessibilidade), ortogonal
+ * a tema/modo. Aplicado via `data-font-scale` no <html>; como o Tailwind
+ * usa `rem`, escalar o font-size do root faz texto + espaçamentos
+ * crescerem proporcionalmente (zoom). As porcentagens vivem em
+ * globals.css sob `html[data-font-scale="..."]`. Persistido em
+ * localStorage (device-scoped), igual a tema/modo.
+ */
+export const FONT_SCALES = ["normal", "large", "larger"] as const;
+
+export type FontScale = (typeof FONT_SCALES)[number];
+
+export const DEFAULT_FONT_SCALE: FontScale = "normal";
+
+export const FONT_SCALE_STORAGE_KEY = "wacrm.font-scale";
+
+export function isFontScale(value: unknown): value is FontScale {
+  return (
+    typeof value === "string" &&
+    (FONT_SCALES as ReadonlyArray<string>).includes(value)
+  );
+}
+
+export interface FontScaleMeta {
+  id: FontScale;
+  name: string;
+  /** Rótulo da escala mostrado no card (deve refletir o % em globals.css). */
+  hint: string;
+  /** Tamanho de amostra (px) só para o preview visual do card. */
+  sample: number;
+}
+
+export const FONT_SCALES_META: ReadonlyArray<FontScaleMeta> = [
+  { id: "normal", name: "Padrão", hint: "100%", sample: 14 },
+  { id: "large", name: "Grande", hint: "112%", sample: 16 },
+  { id: "larger", name: "Maior", hint: "125%", sample: 18 },
+];

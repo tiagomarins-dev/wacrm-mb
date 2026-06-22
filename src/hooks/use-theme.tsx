@@ -10,12 +10,16 @@ import {
 } from "react";
 
 import {
+  DEFAULT_FONT_SCALE,
   DEFAULT_MODE,
   DEFAULT_THEME,
+  FONT_SCALE_STORAGE_KEY,
   MODE_STORAGE_KEY,
   STORAGE_KEY,
+  isFontScale,
   isMode,
   isThemeId,
+  type FontScale,
   type Mode,
   type ThemeId,
 } from "@/lib/themes";
@@ -43,6 +47,9 @@ interface ThemeContextValue {
   mode: Mode;
   setMode: (next: Mode) => void;
   toggleMode: () => void;
+  /** Tamanho da fonte do sistema (acessibilidade) — `data-font-scale`. */
+  fontScale: FontScale;
+  setFontScale: (next: FontScale) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -76,9 +83,24 @@ function readInitialMode(): Mode {
   return DEFAULT_MODE;
 }
 
+function readInitialFontScale(): FontScale {
+  if (typeof window === "undefined") return DEFAULT_FONT_SCALE;
+  const fromAttr = document.documentElement.dataset.fontScale;
+  if (isFontScale(fromAttr)) return fromAttr;
+  try {
+    const stored = localStorage.getItem(FONT_SCALE_STORAGE_KEY);
+    if (isFontScale(stored)) return stored;
+  } catch {
+    // localStorage pode lançar em private-browsing / sandbox.
+  }
+  return DEFAULT_FONT_SCALE;
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(readInitialTheme);
   const [mode, setModeState] = useState<Mode>(readInitialMode);
+  const [fontScale, setFontScaleState] =
+    useState<FontScale>(readInitialFontScale);
 
   const setTheme = useCallback((next: ThemeId) => {
     setThemeState(next);
@@ -109,6 +131,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setMode(mode === "dark" ? "light" : "dark");
   }, [mode, setMode]);
 
+  const setFontScale = useCallback((next: FontScale) => {
+    setFontScaleState(next);
+    if (typeof document !== "undefined") {
+      document.documentElement.dataset.fontScale = next;
+    }
+    try {
+      localStorage.setItem(FONT_SCALE_STORAGE_KEY, next);
+    } catch {
+      // Mesmo edge case de private-browsing; o estado em memória atualiza.
+    }
+  }, []);
+
   // Sync from other tabs — change theme or mode in tab A, tab B
   // catches up without a refresh.
   useEffect(() => {
@@ -125,14 +159,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
           setModeState(e.newValue);
           document.documentElement.dataset.mode = e.newValue;
         }
+        return;
+      }
+      if (e.key === FONT_SCALE_STORAGE_KEY) {
+        if (isFontScale(e.newValue) && e.newValue !== fontScale) {
+          setFontScaleState(e.newValue);
+          document.documentElement.dataset.fontScale = e.newValue;
+        }
       }
     }
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
-  }, [theme, mode]);
+  }, [theme, mode, fontScale]);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, mode, setMode, toggleMode }}>
+    <ThemeContext.Provider
+      value={{ theme, setTheme, mode, setMode, toggleMode, fontScale, setFontScale }}
+    >
       {children}
     </ThemeContext.Provider>
   );
@@ -150,6 +193,8 @@ export function useTheme(): ThemeContextValue {
       mode: DEFAULT_MODE,
       setMode: () => {},
       toggleMode: () => {},
+      fontScale: DEFAULT_FONT_SCALE,
+      setFontScale: () => {},
     };
   }
   return ctx;
