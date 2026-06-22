@@ -664,6 +664,7 @@ async function processMessage(
   // ============================================================
   const flowResult = await dispatchInboundToFlows({
     accountId,
+    connectionId,
     userId: configOwnerUserId,
     contactId: contactRecord.id,
     conversationId: conversation.id,
@@ -712,6 +713,7 @@ async function processMessage(
   for (const triggerType of automationTriggers) {
     runAutomationsForTrigger({
       accountId,
+      connectionId,
       triggerType,
       contactId: contactRecord.id,
       context: {

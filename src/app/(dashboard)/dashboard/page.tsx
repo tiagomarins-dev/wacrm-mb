@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { useActiveConnection } from '@/hooks/use-active-connection'
 import { useAuth } from '@/hooks/use-auth'
 import { formatCurrency } from '@/lib/currency'
 import {
@@ -61,18 +62,23 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(null)
   const [activityLoading, setActivityLoading] = useState(true)
 
+  // Conexão ativa (multi-número, 033): o dashboard reflete a conexão
+  // selecionada (null = conta toda / sem conexão). Reportes agregam +
+  // filtram por conexão.
+  const { activeConnectionId } = useActiveConnection()
+
   const loadAll = useCallback(() => {
     const db = createClient()
 
     // Kick everything off in parallel. Each block has its own
     // setState + finally so a slow query doesn't hold up faster
     // sections — each widget shows its own skeleton independently.
-    void loadMetrics(db)
+    void loadMetrics(db, activeConnectionId)
       .then((m) => setMetrics(m))
       .catch((err) => console.error('[dashboard] metrics failed:', err))
       .finally(() => setMetricsLoading(false))
 
-    void loadConversationsSeries(db, 30)
+    void loadConversationsSeries(db, 30, activeConnectionId)
       .then((s) => setSeries((prev) => ({ ...prev, 30: s })))
       .catch((err) => console.error('[dashboard] series failed:', err))
       .finally(() => setSeriesLoading(false))
@@ -82,7 +88,7 @@ export default function DashboardPage() {
       .catch((err) => console.error('[dashboard] pipeline failed:', err))
       .finally(() => setPipelineLoading(false))
 
-    void loadResponseTime(db)
+    void loadResponseTime(db, activeConnectionId)
       .then((r) => setResponseTime(r))
       .catch((err) => console.error('[dashboard] response time failed:', err))
       .finally(() => setResponseTimeLoading(false))
@@ -90,11 +96,11 @@ export default function DashboardPage() {
     // Fetch up to 50 so the biggest page-size option in the feed
     // (50 rows) is already in memory — switching sizes then becomes
     // a pure client-side slice with no extra round trip.
-    void loadActivity(db, 50)
+    void loadActivity(db, 50, activeConnectionId)
       .then((a) => setActivity(a))
       .catch((err) => console.error('[dashboard] activity failed:', err))
       .finally(() => setActivityLoading(false))
-  }, [])
+  }, [activeConnectionId])
 
   useEffect(() => {
     loadAll()
@@ -110,12 +116,12 @@ export default function DashboardPage() {
       if (series[r] !== null) return
       setSeriesLoading(true)
       const db = createClient()
-      loadConversationsSeries(db, r)
+      loadConversationsSeries(db, r, activeConnectionId)
         .then((s) => setSeries((prev) => ({ ...prev, [r]: s })))
         .catch((err) => console.error('[dashboard] series failed:', err))
         .finally(() => setSeriesLoading(false))
     },
-    [series],
+    [series, activeConnectionId],
   )
 
   return (

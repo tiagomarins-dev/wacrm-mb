@@ -239,6 +239,9 @@ export async function POST() {
         // route. account_id is NOT NULL on message_templates
         // post-017, so an INSERT without it errors.
         account_id: accountId,
+        // Conexão dona do template (multi-número, 033) = a conexão sincronizada
+        // (a primária, por ora — sync por-WABA multi-conexão é trabalho futuro).
+        connection_id: config.id,
         user_id: user.id,
         name: t.name,
         category: normalizeCategory(t.category),
@@ -256,10 +259,13 @@ export async function POST() {
         updated_at: new Date().toISOString(),
       }
 
+      // Dedup por conexão (033): o índice único agora é
+      // (connection_id, name, language).
       const { data: existing, error: lookupErr } = await supabase
         .from('message_templates')
         .select('id')
         .eq('account_id', accountId)
+        .eq('connection_id', config.id)
         .eq('name', t.name)
         .eq('language', t.language)
         .maybeSingle()

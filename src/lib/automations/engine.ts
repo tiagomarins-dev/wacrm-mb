@@ -41,6 +41,10 @@ export interface DispatchInput {
    *  field; the per-automation user_id is read off each row when
    *  needed (sender identity for outbound messages, log audit). */
   accountId: string
+  /** Conexão da conversa que disparou (multi-número, 033). Quando
+   *  presente, só casa automações desta conexão e carimba os logs.
+   *  Opcional: gatilhos manuais/sem conversa rodam account-wide. */
+  connectionId?: string | null
   triggerType: AutomationTriggerType
   contactId?: string | null
   context?: AutomationContext
@@ -82,12 +86,17 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
       }
     }
 
-    const { data: automations, error } = await db
+    // Filtro por conexão (033): um inbound na conexão A não deve disparar
+    // automações da conexão B. Aplicado só quando o caller informa a conexão.
+    let autoQuery = db
       .from('automations')
       .select('*')
       .eq('account_id', input.accountId)
       .eq('trigger_type', input.triggerType)
       .eq('is_active', true)
+    if (input.connectionId)
+      autoQuery = autoQuery.eq('connection_id', input.connectionId)
+    const { data: automations, error } = await autoQuery
 
     if (error) {
       console.error('[automations] fetch failed:', error)
@@ -172,6 +181,8 @@ async function executeAutomation(automation: Automation, input: DispatchInput) {
       automation_id: automation.id,
       // Tenancy: matches automation.account_id (NOT NULL post-017).
       account_id: automation.account_id,
+      // Conexão (033): a da conversa que disparou (analytics por conexão).
+      connection_id: input.connectionId ?? null,
       // Audit: keeps the historical "author of this automation"
       // pointer so logs still attribute to the right user even
       // after teammates join the account.
@@ -265,6 +276,9 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
         automation_id: args.automation.id,
         // Tenancy: account_id required NOT NULL post-017.
         account_id: args.automation.account_id,
+        // Conexão (033) = a da automação que enfileirou.
+        connection_id:
+          (args.automation as { connection_id?: string | null }).connection_id ?? null,
         user_id: args.automation.user_id,
         contact_id: args.contactId,
         log_id: args.logId,

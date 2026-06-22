@@ -105,13 +105,18 @@ export async function drainBroadcast(
   }
 
   // ── Template row (1x) ──────────────────────────────────────────
-  const { data: rawTemplate } = await admin
+  // Multi-número (033): o template pertence ao WABA da conexão. Filtra por
+  // connection_id quando a broadcast tem uma (evita casar o template de
+  // mesmo nome de OUTRA conexão).
+  let tplQuery = admin
     .from('message_templates')
     .select('*')
     .eq('account_id', broadcast.account_id)
     .eq('name', broadcast.template_name)
     .eq('language', language)
-    .maybeSingle()
+  if (broadcast.connection_id)
+    tplQuery = tplQuery.eq('connection_id', broadcast.connection_id)
+  const { data: rawTemplate } = await tplQuery.maybeSingle()
   const templateRow = rawTemplate && isMessageTemplate(rawTemplate) ? rawTemplate : null
 
   // ── Resolve variáveis por contato ──────────────────────────────
