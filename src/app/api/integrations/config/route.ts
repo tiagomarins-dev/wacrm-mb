@@ -17,6 +17,7 @@ interface ConfigRow {
   notion_database_id: string | null
   slack_bot_token: string | null
   slack_channel_id: string | null
+  millaborges_api_key: string | null
 }
 
 function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
@@ -28,6 +29,7 @@ function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
     openrouter_set: !!row?.openrouter_api_key,
     notion_set: !!row?.notion_api_key,
     slack_set: !!row?.slack_bot_token,
+    millaborges_set: !!row?.millaborges_api_key,
   }
 }
 
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
       notion_database_id: str(body.notion_database_id),
       slack_bot_token: tokenField(body.slack_bot_token, cur?.slack_bot_token ?? null),
       slack_channel_id: str(body.slack_channel_id),
+      millaborges_api_key: tokenField(body.millaborges_api_key, cur?.millaborges_api_key ?? null),
     }
 
     // Validação leve: token sem o campo-companheiro não adianta.

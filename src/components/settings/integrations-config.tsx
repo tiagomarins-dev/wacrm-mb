@@ -33,8 +33,9 @@ export function IntegrationsConfig() {
   const [openrouterKey, setOpenrouterKey] = useState('');
   const [notionKey, setNotionKey] = useState('');
   const [slackToken, setSlackToken] = useState('');
+  const [millaborgesKey, setMillaborgesKey] = useState('');
   // Flags de "já configurado".
-  const [sets, setSets] = useState({ openrouter: false, notion: false, slack: false });
+  const [sets, setSets] = useState({ openrouter: false, notion: false, slack: false, millaborges: false });
 
   useEffect(() => {
     (async () => {
@@ -50,6 +51,7 @@ export function IntegrationsConfig() {
           openrouter: c.openrouter_set,
           notion: c.notion_set,
           slack: c.slack_set,
+          millaborges: c.millaborges_set,
         });
       } catch {
         toast.error('Failed to load integrations');
@@ -74,6 +76,7 @@ export function IntegrationsConfig() {
           openrouter_api_key: openrouterKey || undefined,
           notion_api_key: notionKey || undefined,
           slack_bot_token: slackToken || undefined,
+          millaborges_api_key: millaborgesKey || undefined,
         }),
       });
       const data = await res.json();
@@ -84,10 +87,12 @@ export function IntegrationsConfig() {
         openrouter: s.openrouter || !!openrouterKey,
         notion: s.notion || !!notionKey,
         slack: s.slack || !!slackToken,
+        millaborges: s.millaborges || !!millaborgesKey,
       }));
       setOpenrouterKey('');
       setNotionKey('');
       setSlackToken('');
+      setMillaborgesKey('');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save');
     } finally {
@@ -188,6 +193,19 @@ export function IntegrationsConfig() {
               value={slackChannel}
               onChange={(e) => setSlackChannel(e.target.value)}
               placeholder="ex: C0123456789"
+              className="border-border bg-background text-foreground"
+            />
+          </Field>
+        </Section>
+
+        {/* Plataforma do Aluno (Millaborges) — busca dados do aluno no painel da conversa */}
+        <Section title="Plataforma do Aluno (Millaborges)" connected={sets.millaborges}>
+          <Field label="API key">
+            <Input
+              type="password"
+              value={millaborgesKey}
+              onChange={(e) => setMillaborgesKey(e.target.value)}
+              placeholder={tokenPlaceholder(sets.millaborges)}
               className="border-border bg-background text-foreground"
             />
           </Field>

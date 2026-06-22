@@ -631,7 +631,9 @@ export default function InboxPage() {
             On mobile it's always hidden (the `lg:block` below), so the
             toggle — which is itself desktop-only — never affects it. */}
         {contactPanelOpen && (
-          <div className="hidden lg:block">
+          // h-full + min-h-0: limita a altura do painel ao row → o ScrollArea
+          // interno rola (senão o conteúdo, ex. muitos cursos, fica cortado).
+          <div className="hidden h-full min-h-0 lg:block">
             <ContactSidebar contact={activeContact} />
           </div>
         )}
