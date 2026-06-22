@@ -32,12 +32,16 @@ export interface Connection {
   is_primary: boolean;
 }
 
+export const CONNECTIONS_CHANGED_EVENT = "wacrm:connections-changed";
+
 interface ActiveConnectionContextValue {
   connections: Connection[];
   activeConnectionId: string | null;
   activeConnection: Connection | null;
   /** Troca a conexão ativa: grava o cookie e atualiza o estado. */
   setActiveConnection: (id: string) => void;
+  /** Re-busca a lista de conexões da conta (ex.: após conectar um número). */
+  refresh: () => void;
   loading: boolean;
 }
 
@@ -70,31 +74,43 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
   const [loading, setLoading] = useState(true);
 
   // Carrega as conexões da conta (RLS já confina à conta do usuário).
-  useEffect(() => {
+  // Reutilizável: chamado no mount e quando uma conexão é criada/alterada
+  // (evento CONNECTIONS_CHANGED_EVENT, disparado pela tela de Settings).
+  const refresh = useCallback(async () => {
     if (!accountId) return;
-    let cancelled = false;
-    (async () => {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("whatsapp_config")
-        .select("id, phone_number_id, status, is_primary")
-        .eq("account_id", accountId);
-      if (cancelled) return;
-      const list = (data ?? []) as Connection[];
-      setConnections(list);
-      // Conexão ativa = cookie (se ainda existir na lista) → primária → 1ª.
+    const supabase = createClient();
+    const { data } = await supabase
+      .from("whatsapp_config")
+      .select("id, phone_number_id, status, is_primary")
+      .eq("account_id", accountId);
+    const list = (data ?? []) as Connection[];
+    setConnections(list);
+    // Conexão ativa = cookie (se ainda na lista) → atual (se ainda na lista)
+    // → primária → 1ª.
+    setActiveConnectionId((prev) => {
       const fromCookie = readCookie();
-      const valid = fromCookie && list.some((c) => c.id === fromCookie);
-      const primary = list.find((c) => c.is_primary);
-      setActiveConnectionId(
-        valid ? fromCookie : (primary?.id ?? list[0]?.id ?? null),
-      );
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+      if (fromCookie && list.some((c) => c.id === fromCookie)) return fromCookie;
+      if (prev && list.some((c) => c.id === prev)) return prev;
+      return list.find((c) => c.is_primary)?.id ?? list[0]?.id ?? null;
+    });
+    setLoading(false);
   }, [accountId]);
+
+  useEffect(() => {
+    // refresh() só faz setState DEPOIS do await (não-síncrono) — o aviso de
+    // cascading render não se aplica.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+  }, [refresh]);
+
+  // Re-busca quando a tela de Settings conecta/remove um número, para o
+  // dropdown aparecer/atualizar SEM precisar recarregar a página.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handler = () => void refresh();
+    window.addEventListener(CONNECTIONS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(CONNECTIONS_CHANGED_EVENT, handler);
+  }, [refresh]);
 
   const setActiveConnection = useCallback((id: string) => {
     writeCookie(id);
@@ -109,9 +125,10 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
       activeConnectionId,
       activeConnection,
       setActiveConnection,
+      refresh: () => void refresh(),
       loading,
     };
-  }, [connections, activeConnectionId, setActiveConnection, loading]);
+  }, [connections, activeConnectionId, setActiveConnection, refresh, loading]);
 
   return (
     <ActiveConnectionContext.Provider value={value}>
@@ -133,6 +150,7 @@ export function useActiveConnection(): ActiveConnectionContextValue {
     activeConnectionId: null,
     activeConnection: null,
     setActiveConnection: () => {},
+    refresh: () => {},
     loading: false,
   };
 }
