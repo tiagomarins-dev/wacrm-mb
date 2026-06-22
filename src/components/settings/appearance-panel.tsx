@@ -1,9 +1,16 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun } from "lucide-react";
+import { Check, Moon, Palette, SunMoon, Sun, Type } from "lucide-react";
 
 import { useTheme } from "@/hooks/use-theme";
-import { MODES, THEMES, type Mode, type ThemeId } from "@/lib/themes";
+import {
+  FONT_SCALES_META,
+  MODES,
+  THEMES,
+  type FontScale,
+  type Mode,
+  type ThemeId,
+} from "@/lib/themes";
 import { cn } from "@/lib/utils";
 import { SettingsPanelHead } from "./settings-panel-head";
 
@@ -20,7 +27,7 @@ import { SettingsPanelHead } from "./settings-panel-head";
  * loads.
  */
 export function AppearancePanel() {
-  const { theme, setTheme, mode, setMode } = useTheme();
+  const { theme, setTheme, mode, setMode, fontScale, setFontScale } = useTheme();
   return (
     <section className="max-w-3xl animate-in fade-in-50 duration-200">
       <SettingsPanelHead
@@ -45,6 +52,34 @@ export function AppearancePanel() {
               mode={m}
               isActive={m === mode}
               onPick={() => setMode(m)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Type className="size-4 text-muted-foreground" />
+          Tamanho da fonte
+        </h3>
+        <p className="-mt-2 text-xs text-muted-foreground">
+          Aumenta o tamanho do texto e da interface toda, proporcionalmente.
+        </p>
+
+        <div
+          role="radiogroup"
+          aria-label="Tamanho da fonte"
+          className="grid max-w-md grid-cols-3 gap-3"
+        >
+          {FONT_SCALES_META.map((f) => (
+            <FontScaleCard
+              key={f.id}
+              id={f.id}
+              name={f.name}
+              hint={f.hint}
+              sample={f.sample}
+              isActive={f.id === fontScale}
+              onPick={() => setFontScale(f.id)}
             />
           ))}
         </div>
@@ -114,6 +149,57 @@ function ModeCard({
           Active
         </span>
       )}
+    </button>
+  );
+}
+
+function FontScaleCard({
+  id,
+  name,
+  hint,
+  sample,
+  isActive,
+  onPick,
+}: {
+  id: FontScale;
+  name: string;
+  hint: string;
+  sample: number;
+  isActive: boolean;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      onClick={onPick}
+      aria-checked={isActive}
+      aria-label={`Tamanho da fonte ${name}`}
+      className={cn(
+        "flex flex-col items-center gap-1.5 rounded-lg border bg-card p-4 text-center transition-colors",
+        isActive
+          ? "border-primary/60 ring-2 ring-primary/40"
+          : "border-border hover:border-border hover:bg-muted/40",
+      )}
+    >
+      {/* Amostra em px fixo só para o preview — não usa rem, então não
+          escala junto com o resto da UI; mostra a diferença relativa. */}
+      <span
+        aria-hidden
+        className="font-semibold leading-none text-foreground"
+        style={{ fontSize: `${sample}px` }}
+      >
+        Aa
+      </span>
+      <span className="text-sm font-medium text-foreground">{name}</span>
+      <span className="text-[11px] text-muted-foreground">{hint}</span>
+      {isActive && (
+        <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+          <Check className="h-3 w-3" />
+          Ativo
+        </span>
+      )}
+      <span className="sr-only">Escala: {id}</span>
     </button>
   );
 }

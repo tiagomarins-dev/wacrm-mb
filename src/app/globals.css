@@ -237,3 +237,17 @@ html[data-theme="rose"] {
     @apply font-sans;
   }
 }
+
+/* Escala de fonte do sistema (acessibilidade). Escala o font-size do
+   root — como o Tailwind usa rem, texto + espaçamentos crescem juntos
+   (zoom). `data-font-scale` é setado no <html> pelo boot script
+   (layout.tsx) antes da hidratação e pelo use-theme em runtime. */
+html {
+  font-size: 100%;
+}
+html[data-font-scale="large"] {
+  font-size: 112.5%;
+}
+html[data-font-scale="larger"] {
+  font-size: 125%;
+}
