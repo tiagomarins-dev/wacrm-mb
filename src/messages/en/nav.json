@@ -1,0 +1,23 @@
+{
+  "dashboard": "Dashboard",
+  "inbox": "Inbox",
+  "contacts": "Contacts",
+  "pipelines": "Pipelines",
+  "broadcasts": "Broadcasts",
+  "automations": "Automations",
+  "flows": "Flows",
+  "leadScore": "Lead Score",
+  "settings": "Settings",
+  "beta": "Beta",
+  "betaFeature": "Beta feature",
+  "profile": "Profile",
+  "signOut": "Sign out",
+  "closeMenu": "Close menu",
+  "appBrand": "CRM Template for WhatsApp",
+  "unreadAria_one": "{{count}} unread conversation",
+  "unreadAria_other": "{{count}} unread conversations",
+  "roleOwner": "Owner",
+  "roleAdmin": "Admin",
+  "roleAgent": "Agent",
+  "roleViewer": "Viewer"
+}

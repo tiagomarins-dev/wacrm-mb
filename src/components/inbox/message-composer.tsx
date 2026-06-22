@@ -19,6 +19,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
 import {
@@ -675,6 +676,7 @@ function MediaDraftPreview({
   onDiscard: () => void;
   onSend: () => void;
 }) {
+  const { t } = useTranslation("inbox");
   return (
     <div className="rounded-xl border border-border bg-muted/40 p-3">
       <div className="flex items-start gap-3">
@@ -703,7 +705,7 @@ function MediaDraftPreview({
         <button
           type="button"
           onClick={onDiscard}
-          aria-label="Remove attachment"
+          aria-label={t("removeAttachment")}
           className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" />
@@ -722,7 +724,7 @@ function MediaDraftPreview({
                 onSend();
               }
             }}
-            placeholder="Add a caption…"
+            placeholder={t("addCaption")}
             className="flex-1 rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-primary/50"
           />
         )}

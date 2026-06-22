@@ -1,0 +1,18 @@
+{
+  "title": "Appearance",
+  "description": "Set the language, mode and accent colour used across the app. Saved to this device — try it, it changes live.",
+  "language": "Language",
+  "languageAria": "Language",
+  "mode": "Mode",
+  "modeAria": "Color mode",
+  "modeLight": "Light",
+  "modeDark": "Dark",
+  "useModeAria": "Use {{mode}} mode",
+  "fontSize": "Font size",
+  "fontSizeDesc": "Increases the text and the whole interface size, proportionally.",
+  "fontSizeAria": "Font size {{name}}",
+  "fontScale_normal": "Default",
+  "fontScale_large": "Large",
+  "fontScale_larger": "Larger",
+  "accentColor": "Accent color"
+}

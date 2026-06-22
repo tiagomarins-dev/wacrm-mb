@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -167,6 +168,7 @@ export function MessageThread({
   onToggleContactPanel,
 }: MessageThreadProps) {
   const { user } = useAuth();
+  const { t } = useTranslation("inbox");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
@@ -820,10 +822,10 @@ export function MessageThread({
           <MessageSquare className="h-8 w-8 text-muted-foreground" />
         </div>
         <h3 className="mt-4 text-sm font-medium text-muted-foreground">
-          Select a conversation
+          {t("selectConversation")}
         </h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Choose a conversation from the left to start messaging
+          {t("selectConversationHint")}
         </p>
       </div>
     );
@@ -860,7 +862,7 @@ export function MessageThread({
             <button
               type="button"
               onClick={onBack}
-              aria-label="Back to conversations"
+              aria-label={t("backToConversations")}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -925,7 +927,7 @@ export function MessageThread({
               type="button"
               onClick={handleRefreshClick}
               disabled={isRefreshing}
-              aria-label="Refresh conversation"
+              aria-label={t("refreshConversation")}
               title="Refresh"
               className={cn(
                 "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60",
@@ -1051,7 +1053,7 @@ export function MessageThread({
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <p className="text-sm text-muted-foreground">No messages yet</p>
+            <p className="text-sm text-muted-foreground">{t("noMessages")}</p>
             <p className="text-xs text-muted-foreground">
               Send a template to start the conversation
             </p>

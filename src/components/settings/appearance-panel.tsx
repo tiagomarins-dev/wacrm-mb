@@ -1,8 +1,10 @@
 "use client";
 
-import { Check, Moon, Palette, SunMoon, Sun, Type } from "lucide-react";
+import { Check, Languages, Moon, Palette, SunMoon, Sun, Type } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { useTheme } from "@/hooks/use-theme";
+import { useLanguage } from "@/hooks/use-language";
 import {
   FONT_SCALES_META,
   MODES,
@@ -11,6 +13,7 @@ import {
   type Mode,
   type ThemeId,
 } from "@/lib/themes";
+import { LANGUAGES_META, type Language } from "@/lib/languages";
 import { cn } from "@/lib/utils";
 import { SettingsPanelHead } from "./settings-panel-head";
 
@@ -28,22 +31,45 @@ import { SettingsPanelHead } from "./settings-panel-head";
  */
 export function AppearancePanel() {
   const { theme, setTheme, mode, setMode, fontScale, setFontScale } = useTheme();
+  const { language, setLanguage } = useLanguage();
+  const { t } = useTranslation(["settings", "common"]);
   return (
     <section className="max-w-3xl animate-in fade-in-50 duration-200">
-      <SettingsPanelHead
-        title="Appearance"
-        description="Set the mode and accent colour used across the app. Saved to this device — try it, it changes live."
-      />
+      <SettingsPanelHead title={t("title")} description={t("description")} />
 
+      {/* Idioma — primeiro controle: define o idioma de toda a UI. */}
       <div className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <SunMoon className="size-4 text-muted-foreground" />
-          Mode
+          <Languages className="size-4 text-muted-foreground" />
+          {t("language")}
         </h3>
 
         <div
           role="radiogroup"
-          aria-label="Color mode"
+          aria-label={t("languageAria")}
+          className="grid max-w-md grid-cols-2 gap-3"
+        >
+          {LANGUAGES_META.map((l) => (
+            <LanguageCard
+              key={l.id}
+              id={l.id}
+              name={l.name}
+              isActive={l.id === language}
+              onPick={() => setLanguage(l.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-8 space-y-4">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <SunMoon className="size-4 text-muted-foreground" />
+          {t("mode")}
+        </h3>
+
+        <div
+          role="radiogroup"
+          aria-label={t("modeAria")}
           className="grid max-w-md grid-cols-2 gap-3"
         >
           {MODES.map((m) => (
@@ -60,22 +86,22 @@ export function AppearancePanel() {
       <div className="mt-8 space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Type className="size-4 text-muted-foreground" />
-          Tamanho da fonte
+          {t("fontSize")}
         </h3>
         <p className="-mt-2 text-xs text-muted-foreground">
-          Aumenta o tamanho do texto e da interface toda, proporcionalmente.
+          {t("fontSizeDesc")}
         </p>
 
         <div
           role="radiogroup"
-          aria-label="Tamanho da fonte"
+          aria-label={t("fontSize")}
           className="grid max-w-md grid-cols-3 gap-3"
         >
           {FONT_SCALES_META.map((f) => (
             <FontScaleCard
               key={f.id}
               id={f.id}
-              name={f.name}
+              name={t(`fontScale_${f.id}`, { defaultValue: f.name })}
               hint={f.hint}
               sample={f.sample}
               isActive={f.id === fontScale}
@@ -88,19 +114,19 @@ export function AppearancePanel() {
       <div className="mt-8 space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Palette className="size-4 text-muted-foreground" />
-          Accent color
+          {t("accentColor")}
         </h3>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {THEMES.map((t) => (
+          {THEMES.map((th) => (
             <ThemeCard
-              key={t.id}
-              id={t.id}
-              name={t.name}
-              tagline={t.tagline}
-              swatch={t.swatch}
-              isActive={t.id === theme}
-              onPick={() => setTheme(t.id)}
+              key={th.id}
+              id={th.id}
+              name={th.name}
+              tagline={th.tagline}
+              swatch={th.swatch}
+              isActive={th.id === theme}
+              onPick={() => setTheme(th.id)}
             />
           ))}
         </div>
@@ -118,15 +144,17 @@ function ModeCard({
   isActive: boolean;
   onPick: () => void;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   const isLight = mode === "light";
   const Icon = isLight ? Sun : Moon;
+  const label = t(isLight ? "modeLight" : "modeDark");
   return (
     <button
       type="button"
       role="radio"
       onClick={onPick}
       aria-checked={isActive}
-      aria-label={`Use ${mode} mode`}
+      aria-label={t("useModeAria", { mode: label })}
       className={cn(
         "flex items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors",
         isActive
@@ -140,15 +168,56 @@ function ModeCard({
       >
         <Icon className="h-4 w-4" />
       </span>
-      <span className="flex-1 text-sm font-semibold capitalize text-foreground">
-        {mode}
+      <span className="flex-1 text-sm font-semibold text-foreground">
+        {label}
       </span>
       {isActive && (
         <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
           <Check className="h-3 w-3" />
-          Active
+          {t("common:active")}
         </span>
       )}
+    </button>
+  );
+}
+
+// Card do picker de idioma — espelha o ModeCard (radio, ring no ativo, chip).
+function LanguageCard({
+  id,
+  name,
+  isActive,
+  onPick,
+}: {
+  id: Language;
+  name: string;
+  isActive: boolean;
+  onPick: () => void;
+}) {
+  const { t } = useTranslation("common");
+  return (
+    <button
+      type="button"
+      role="radio"
+      onClick={onPick}
+      aria-checked={isActive}
+      aria-label={name}
+      className={cn(
+        "flex items-center gap-3 rounded-lg border bg-card p-4 text-left transition-colors",
+        isActive
+          ? "border-primary/60 ring-2 ring-primary/40"
+          : "border-border hover:border-border hover:bg-muted/40",
+      )}
+    >
+      <span className="flex-1 text-sm font-semibold text-foreground">
+        {name}
+      </span>
+      {isActive && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
+          <Check className="h-3 w-3" />
+          {t("active")}
+        </span>
+      )}
+      <span className="sr-only">{id}</span>
     </button>
   );
 }
@@ -168,13 +237,14 @@ function FontScaleCard({
   isActive: boolean;
   onPick: () => void;
 }) {
+  const { t } = useTranslation(["settings", "common"]);
   return (
     <button
       type="button"
       role="radio"
       onClick={onPick}
       aria-checked={isActive}
-      aria-label={`Tamanho da fonte ${name}`}
+      aria-label={t("fontSizeAria", { name })}
       className={cn(
         "flex flex-col items-center gap-1.5 rounded-lg border bg-card p-4 text-center transition-colors",
         isActive
@@ -196,10 +266,10 @@ function FontScaleCard({
       {isActive && (
         <span className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
           <Check className="h-3 w-3" />
-          Ativo
+          {t("common:active")}
         </span>
       )}
-      <span className="sr-only">Escala: {id}</span>
+      <span className="sr-only">{id}</span>
     </button>
   );
 }
@@ -219,6 +289,7 @@ function ThemeCard({
   isActive: boolean;
   onPick: () => void;
 }) {
+  const { t } = useTranslation("common");
   return (
     <button
       type="button"
@@ -244,7 +315,7 @@ function ThemeCard({
         {isActive && (
           <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-medium text-primary">
             <Check className="h-3 w-3" />
-            Active
+            {t("active")}
           </span>
         )}
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,6 +23,7 @@ import type { FlowRow, FlowNodeRow } from "@/lib/flows/types";
  */
 export default function FlowEditorPage() {
   const router = useRouter();
+  const { t } = useTranslation(["flows", "common"]);
   const params = useParams<{ id: string }>();
 
   const [flow, setFlow] = useState<FlowRow | null>(null);
@@ -51,7 +53,7 @@ export default function FlowEditorPage() {
       } catch (err) {
         if (!cancelled) {
           console.error(err);
-          toast.error("Couldn't load flow.");
+          toast.error(t("editorLoadError"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -60,6 +62,7 @@ export default function FlowEditorPage() {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recarrega só quando muda o id; `t` só aparece no toast de erro
   }, [params.id]);
 
   if (loading) {
@@ -72,13 +75,13 @@ export default function FlowEditorPage() {
   if (notFound || !flow) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
-        <p className="text-sm text-muted-foreground">Flow not found.</p>
+        <p className="text-sm text-muted-foreground">{t("flowNotFound")}</p>
         <button
           type="button"
           onClick={() => router.push("/flows")}
           className="text-sm text-primary hover:opacity-80"
         >
-          ← Back to flows
+          {t("backToFlows")}
         </button>
       </div>
     );

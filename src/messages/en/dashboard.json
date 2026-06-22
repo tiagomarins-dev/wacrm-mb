@@ -1,0 +1,13 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Live analytics across conversations, contacts, deals, broadcasts, and automations.",
+  "activeConversations": "Active Conversations",
+  "newContactsToday": "New Contacts Today",
+  "openDealsValue": "Open Deals Value",
+  "messagesSentToday": "Messages Sent Today",
+  "openDeals_one": "{{count}} open deal",
+  "openDeals_other": "{{count}} open deals",
+  "newTodayVsYesterday": "new today vs yesterday",
+  "vsYesterday": "vs yesterday",
+  "noChange": "No change {{suffix}}"
+}

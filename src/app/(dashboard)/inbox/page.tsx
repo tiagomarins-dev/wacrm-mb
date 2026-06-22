@@ -9,6 +9,7 @@ import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -60,6 +61,9 @@ export default function InboxPage() {
       // localStorage can throw in private-browsing / sandboxed contexts.
     }
   }, []);
+
+  // Traduções da inbox (namespace dedicado do react-i18next).
+  const { t } = useTranslation("inbox");
 
   const handleToggleContactPanel = useCallback(() => {
     setContactPanelOpen((prev) => {
@@ -573,7 +577,7 @@ export default function InboxPage() {
         <div className="flex shrink-0 items-center justify-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2">
           <WifiOff className="h-4 w-4 text-amber-400" />
           <p className="text-xs text-amber-400">
-            WhatsApp® is not connected. Go to Settings to connect your account.
+            {t("notConnected")}
           </p>
         </div>
       )}

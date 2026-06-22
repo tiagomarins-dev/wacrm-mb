@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveConnection } from "@/hooks/use-active-connection";
+import { useTranslation } from "react-i18next";
 
 interface ConversationListProps {
   activeConversationId: string | null;
@@ -39,12 +40,13 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
 
 type InboxFilter = ConversationStatus | "all" | "unread";
 
-const FILTER_OPTIONS: { label: string; value: InboxFilter }[] = [
-  { label: "All", value: "all" },
-  { label: "Unread", value: "unread" },
-  { label: "Open", value: "open" },
-  { label: "Pending", value: "pending" },
-  { label: "Closed", value: "closed" },
+// labelKey = chave de tradução (namespace inbox), resolvida no render.
+const FILTER_OPTIONS: { labelKey: string; value: InboxFilter }[] = [
+  { labelKey: "filterAll", value: "all" },
+  { labelKey: "filterUnread", value: "unread" },
+  { labelKey: "filterOpen", value: "open" },
+  { labelKey: "filterPending", value: "pending" },
+  { labelKey: "filterClosed", value: "closed" },
 ];
 
 export function ConversationList({
@@ -54,6 +56,7 @@ export function ConversationList({
   onConversationsLoaded,
   resyncToken = 0,
 }: ConversationListProps) {
+  const { t } = useTranslation("inbox");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [loading, setLoading] = useState(true);
@@ -166,14 +169,14 @@ export function ConversationList({
           <Input
             value={search}
             onChange={handleSearchChange}
-            placeholder="Search conversations..."
+            placeholder={t('searchConversations')}
             className="border-border bg-muted pl-9 text-sm text-foreground placeholder-muted-foreground focus:border-primary/50"
           />
         </div>
 
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted">
-              {activeFilter?.label ?? "All"}
+              {activeFilter ? t(activeFilter.labelKey, { defaultValue: activeFilter.labelKey }) : t('filterAll')}
               <ChevronDown className="h-3 w-3" />
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -191,7 +194,7 @@ export function ConversationList({
                     : "text-popover-foreground"
                 )}
               >
-                {opt.label}
+                {t(opt.labelKey, { defaultValue: opt.labelKey })}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -211,7 +214,7 @@ export function ConversationList({
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">No conversations found</p>
+            <p className="text-sm text-muted-foreground">{t('noConversations')}</p>
           </div>
         ) : (
           <div className="flex flex-col">
