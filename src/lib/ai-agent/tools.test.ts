@@ -123,21 +123,20 @@ describe('buscar_suporte', () => {
 })
 
 describe('transferir_humano', () => {
-  it('espelha assign_conversation: seta assigned_agent_id do routing, scoped por account/id', async () => {
+  it('sinaliza handoff p/ o humano roteado (NÃO escreve DB — engine aplica pós-envio)', async () => {
     const { db, captured } = makeDb({})
     const ctx = makeCtx(db, { handoffRouting: { suporte: 'agent-9', vendas: 'agent-7' } })
     const r = await execTool(ctx, call('transferir_humano', { assunto: 'suporte', motivo: 'pediu atendente' }))
     expect(r.detectedTopic).toBe('suporte')
-    const upd = captured.updates.find((u) => u.table === 'conversations')
-    expect(upd.payload.assigned_agent_id).toBe('agent-9')
-    expect(upd.payload.ai_topic).toBe('suporte')
-    expect(captured.eqs).toContainEqual(['account_id', 'acc-1'])
+    expect(r.handoff).toEqual({ to: 'agent-9' })
+    // tool não toca o banco — quem reatribui é o engine, depois de enviar a despedida
+    expect(captured.updates).toHaveLength(0)
   })
 
-  it('sem agente no routing → não transfere mas não quebra', async () => {
+  it('sem agente no routing → handoff com to=null (desatribui)', async () => {
     const { db, captured } = makeDb({})
     const r = await execTool(makeCtx(db), call('transferir_humano', { assunto: 'vendas' }))
-    expect((r.output as { transferido: boolean }).transferido).toBe(false)
+    expect(r.handoff).toEqual({ to: null })
     expect(captured.updates).toHaveLength(0)
   })
 })

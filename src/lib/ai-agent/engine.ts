@@ -8,7 +8,7 @@
 // ============================================================
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { engineSendText } from '@/lib/automations/meta-send'
-import { humanRecentlyReplied, phoneAllowed } from './dispatch'
+import { isAssignedToAi, phoneAllowed } from './dispatch'
 import { buildSystemPrompt, serializeRecentMessages } from './prompt'
 import { listCursos, listSupportCategories } from './knowledge'
 import { runAgentLoop } from './llm'
@@ -62,7 +62,11 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   })
 
   // Loop LLM com tool-calling. O LLM roteia o assunto via a tool que escolhe.
-  let result: { reply: string | null; topic: 'vendas' | 'suporte' | null }
+  let result: {
+    reply: string | null
+    topic: 'vendas' | 'suporte' | null
+    handoff: { to: string | null } | null
+  }
   try {
     result = await runAgentLoop({
       db,
@@ -82,53 +86,62 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
     return
   }
 
-  // RECHECK humano: se um atendente assumiu enquanto o LLM pensava, NÃO envia
-  // (evita bot e humano falando junto).
-  if (await humanRecentlyReplied(db, row.conversation_id)) return
+  // RECHECK: a IA ainda é a responsável? Se um humano reatribuiu a conversa
+  // enquanto o LLM pensava, o bot para — não envia nem aplica handoff.
+  if (!(await isAssignedToAi(db, row.conversation_id))) return
 
-  // Grava o assunto detectado (analytics + roteamento já feito pela tool).
+  // Grava o assunto detectado (analytics + roteamento de handoff).
   if (result.topic) {
     await db.from('conversations').update({ ai_topic: result.topic }).eq('id', row.conversation_id)
   }
 
-  // A tool transferir_humano/encerrar pode ter agido sem texto a enviar.
-  if (!result.reply?.trim()) return
-
-  // MODO TESTE (defesa dupla): mesmo que algo tenha entrado na fila fora da
-  // allowlist (insert manual / bug), NÃO envia a quem não está na lista.
-  const { data: contact } = await db
-    .from('contacts')
-    .select('phone')
-    .eq('id', row.contact_id)
-    .eq('account_id', row.account_id)
-    .maybeSingle()
-  if (!phoneAllowed((contact as { phone: string | null } | null)?.phone, cfg.allowed_phones)) {
-    console.warn('[ai_agent] contato fora da allowlist — envio bloqueado:', row.conversation_id)
-    return
+  // Envia a resposta (se houver texto). transferir_humano/encerrar podem
+  // não ter texto — nesse caso só aplica o handoff abaixo.
+  if (result.reply?.trim()) {
+    // Allowlist opcional (defesa dupla): se setada, não envia fora da lista.
+    const { data: contact } = await db
+      .from('contacts')
+      .select('phone')
+      .eq('id', row.contact_id)
+      .eq('account_id', row.account_id)
+      .maybeSingle()
+    if (phoneAllowed((contact as { phone: string | null } | null)?.phone, cfg.allowed_phones)) {
+      // Pós-filtro de marca (obrigatório) antes do envio.
+      const safe = applyGuardrail(result.reply)
+      // userId p/ auditoria do engineSendText (não é consultado p/ tenancy —
+      // meta-send.ts:32). Usa o dono da conexão; cai pro account_id se faltar.
+      const { data: conn } = await db
+        .from('whatsapp_config')
+        .select('user_id')
+        .eq('id', row.connection_id)
+        .eq('account_id', row.account_id)
+        .maybeSingle()
+      const userId = (conn as { user_id: string } | null)?.user_id ?? row.account_id
+      try {
+        await engineSendText({
+          accountId: row.account_id,
+          userId,
+          conversationId: row.conversation_id,
+          contactId: row.contact_id,
+          text: safe,
+        })
+      } catch (err) {
+        console.error('[ai_agent] send failed:', err instanceof Error ? err.message : err)
+      }
+    } else {
+      console.warn('[ai_agent] contato fora da allowlist — envio bloqueado:', row.conversation_id)
+    }
   }
 
-  // Pós-filtro de marca (obrigatório) antes do envio.
-  const safe = applyGuardrail(result.reply)
-
-  // userId p/ auditoria do engineSendText (não é consultado p/ tenancy —
-  // meta-send.ts:32). Usa o dono da conexão; cai pro account_id se faltar.
-  const { data: conn } = await db
-    .from('whatsapp_config')
-    .select('user_id')
-    .eq('id', row.connection_id)
-    .eq('account_id', row.account_id)
-    .maybeSingle()
-  const userId = (conn as { user_id: string } | null)?.user_id ?? row.account_id
-
-  try {
-    await engineSendText({
-      accountId: row.account_id,
-      userId,
-      conversationId: row.conversation_id,
-      contactId: row.contact_id,
-      text: safe,
-    })
-  } catch (err) {
-    console.error('[ai_agent] send failed:', err instanceof Error ? err.message : err)
+  // HANDOFF pós-envio: a IA pediu transferência → reatribui a conversa ao
+  // humano roteado (ou desatribui, se sem rota). Feito DEPOIS do envio para
+  // a mensagem de "vou te transferir" sair antes de o bot deixar de ser o
+  // responsável. A partir daqui, isAssignedToAi() falha → bot não atua mais.
+  if (result.handoff) {
+    await db
+      .from('conversations')
+      .update({ assigned_agent_id: result.handoff.to })
+      .eq('id', row.conversation_id)
+      .eq('account_id', row.account_id)
   }
 }

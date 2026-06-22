@@ -36,6 +36,7 @@ import {
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { AI_AGENT_USER_ID, AI_AGENT_LABEL } from "@/lib/ai-agent/constants"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -410,14 +411,17 @@ function AgentSelect({
 }) {
   const { t } = useTranslation(["automationBuilder", "common"])
   const { members } = useResources()
+  // Sem membros carregados ainda: oferece pelo menos a IA + entrada manual de id.
   if (members.length === 0) {
     return (
-      <Input
-        placeholder={t("agentIdPlaceholder")}
-        value={value}
+      <select
+        value={value === AI_AGENT_USER_ID ? AI_AGENT_USER_ID : ""}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-muted text-foreground"
-      />
+        className={SELECT_CLASS}
+      >
+        <option value="">{t("selectAgent")}</option>
+        <option value={AI_AGENT_USER_ID}>🤖 {AI_AGENT_LABEL}</option>
+      </select>
     )
   }
   const selected = members.find((m) => m.user_id === value)
@@ -428,12 +432,15 @@ function AgentSelect({
       className={SELECT_CLASS}
     >
       <option value="">{t("selectAgent")}</option>
+      {/* Responsável virtual: a IA. Atribuir a conversa a ela faz o agente de
+          IA assumir (ex: gatilho "AJUDA" → atribuir à IA). */}
+      <option value={AI_AGENT_USER_ID}>🤖 {AI_AGENT_LABEL}</option>
       {members.map((m) => (
         <option key={m.user_id} value={m.user_id}>
           {m.full_name || m.email || m.user_id}
         </option>
       ))}
-      {value && !selected && (
+      {value && !selected && value !== AI_AGENT_USER_ID && (
         <option value={value}>{t("unknownAgentOption", { value })}</option>
       )}
     </select>

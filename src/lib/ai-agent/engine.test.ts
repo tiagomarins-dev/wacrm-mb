@@ -1,24 +1,22 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
 
-// Holder do db ativo + mocks de boundary (sender, loop LLM, recheck humano).
+// Holder do db ativo + mocks de boundary (sender, loop LLM, gate de atribuição).
 const holder: { db: unknown } = { db: null }
 vi.mock('@/lib/automations/admin-client', () => ({ supabaseAdmin: () => holder.db }))
 vi.mock('@/lib/automations/meta-send', () => ({ engineSendText: vi.fn(async () => ({ whatsapp_message_id: 'm1' })) }))
 vi.mock('./llm', () => ({ runAgentLoop: vi.fn() }))
-// Mantém o phoneAllowed REAL (a allowlist é exercitada de verdade); só
-// mocka o recheck humano.
+// Mantém o phoneAllowed REAL; só mocka o recheck de atribuição (isAssignedToAi).
 vi.mock('./dispatch', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./dispatch')>()
-  return { ...actual, humanRecentlyReplied: vi.fn(async () => false) }
+  return { ...actual, isAssignedToAi: vi.fn(async () => true) }
 })
 
 import { runAiAgentForConversation } from './engine'
 import { engineSendText } from '@/lib/automations/meta-send'
 import { runAgentLoop } from './llm'
-import { humanRecentlyReplied } from './dispatch'
+import { isAssignedToAi } from './dispatch'
 
 // Fake db: `b` é thenable (await direto) E tem maybeSingle/update.
-// limit() devolve b (serve p/ `.limit().maybeSingle()` e p/ `await .limit()`).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeDb(byTable: Record<string, any>) {
   const updates: { table: string; payload: unknown }[] = []
@@ -49,7 +47,6 @@ function makeDb(byTable: Record<string, any>) {
 
 const row = { id: 'p1', account_id: 'acc-1', connection_id: 'conn-1', conversation_id: 'conv-1', contact_id: 'ct-1' }
 
-// Tabelas do cenário-base (agente ligado, 1 msg do cliente, catálogo vazio).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function baseTables(): Record<string, any> {
   return {
@@ -66,7 +63,7 @@ function baseTables(): Record<string, any> {
 beforeEach(() => {
   holder.db = null
   vi.clearAllMocks()
-  vi.mocked(humanRecentlyReplied).mockResolvedValue(false)
+  vi.mocked(isAssignedToAi).mockResolvedValue(true)
 })
 
 describe('runAiAgentForConversation', () => {
@@ -89,37 +86,58 @@ describe('runAiAgentForConversation', () => {
   it('caminho feliz → aplica guardrail e envia via engineSendText; grava ai_topic', async () => {
     const { db, updates } = makeDb(baseTables())
     holder.db = db
-    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'Você pode comprar agora', topic: 'vendas' })
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'Você pode comprar agora', topic: 'vendas', handoff: null })
     await runAiAgentForConversation(row)
-    // guardrail trocou "comprar" → "garantir"
     expect(engineSendText).toHaveBeenCalledTimes(1)
     expect(vi.mocked(engineSendText).mock.calls[0][0].text).toBe('Você pode garantir agora')
-    // ai_topic gravado
     const upd = updates.find((u) => u.table === 'conversations')
     expect((upd?.payload as { ai_topic: string }).ai_topic).toBe('vendas')
   })
 
-  it('humano assumiu no meio do turno → NÃO envia', async () => {
+  it('humano reatribuiu no meio do turno (não é mais da IA) → NÃO envia', async () => {
     holder.db = makeDb(baseTables()).db
-    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null })
-    vi.mocked(humanRecentlyReplied).mockResolvedValue(true)
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null })
+    vi.mocked(isAssignedToAi).mockResolvedValue(false)
     await runAiAgentForConversation(row)
     expect(engineSendText).not.toHaveBeenCalled()
   })
 
-  it('reply null (tool agiu, ex. transferir) → não envia texto', async () => {
-    holder.db = makeDb(baseTables()).db
-    vi.mocked(runAgentLoop).mockResolvedValue({ reply: null, topic: 'suporte' })
+  it('transferir_humano: envia a msg de despedida E reatribui ao humano (handoff pós-envio)', async () => {
+    const { db, updates } = makeDb(baseTables())
+    holder.db = db
+    vi.mocked(runAgentLoop).mockResolvedValue({
+      reply: 'Vou te transferir para um atendente. Um momento!',
+      topic: 'suporte',
+      handoff: { to: 'humano-9' },
+    })
     await runAiAgentForConversation(row)
-    expect(engineSendText).not.toHaveBeenCalled()
+    // mandou a despedida (a IA ainda era responsável no recheck)
+    expect(engineSendText).toHaveBeenCalledTimes(1)
+    // e reatribuiu a conversa ao humano roteado
+    const reassign = updates.find(
+      (u) => u.table === 'conversations' && (u.payload as { assigned_agent_id?: string }).assigned_agent_id !== undefined,
+    )
+    expect((reassign?.payload as { assigned_agent_id: string }).assigned_agent_id).toBe('humano-9')
   })
 
-  it('MODO TESTE: contato fora da allowlist → NÃO envia (defesa dupla)', async () => {
+  it('reply null sem handoff → não envia nem reatribui', async () => {
+    const { db, updates } = makeDb(baseTables())
+    holder.db = db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: null, topic: 'suporte', handoff: null })
+    await runAiAgentForConversation(row)
+    expect(engineSendText).not.toHaveBeenCalled()
+    const reassign = updates.find(
+      (u) => u.table === 'conversations' && (u.payload as { assigned_agent_id?: string }).assigned_agent_id !== undefined,
+    )
+    expect(reassign).toBeUndefined()
+  })
+
+  it('allowlist opcional: contato fora da lista → NÃO envia', async () => {
     const t = baseTables()
     t.ai_agent_config = { ...t.ai_agent_config, allowed_phones: ['21987868395'] }
-    t.contacts = { phone: '+5511999990000' } // fora da lista
+    t.contacts = { phone: '+5511999990000' }
     holder.db = makeDb(t).db
-    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: 'vendas' })
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: 'vendas', handoff: null })
     await runAiAgentForConversation(row)
     expect(engineSendText).not.toHaveBeenCalled()
   })

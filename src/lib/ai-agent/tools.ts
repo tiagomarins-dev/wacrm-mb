@@ -25,6 +25,10 @@ interface ToolCall {
 interface ToolResult {
   output: unknown
   detectedTopic?: AgentTopic
+  // Sinal de transferência: o engine reatribui a conversa DEPOIS de enviar a
+  // resposta (p/ a msg de "vou te transferir" sair antes do bot sair de cena).
+  // `to` = user_id do humano roteado, ou null p/ desatribuir.
+  handoff?: { to: string | null }
 }
 
 // Definições das ferramentas no formato OpenAI (tools[]).
@@ -164,18 +168,16 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
     }
 
     case 'transferir_humano': {
-      // Espelha o case assign_conversation (automations/engine.ts:437):
-      // update conversations.assigned_agent_id, scoped por account_id.
+      // NÃO reatribui aqui — só sinaliza. O engine reatribui DEPOIS de enviar
+      // a resposta (assim a msg de "vou te transferir" sai antes de o bot
+      // deixar de ser o responsável). `to` = humano roteado ou null (desatribui).
       const assunto = (args.assunto === 'suporte' ? 'suporte' : 'vendas') as 'vendas' | 'suporte'
       const agentId = ctx.handoffRouting?.[assunto] ?? null
-      if (agentId) {
-        await ctx.db
-          .from('conversations')
-          .update({ assigned_agent_id: agentId, ai_topic: assunto })
-          .eq('account_id', ctx.accountId)
-          .eq('id', ctx.conversationId)
+      return {
+        output: { ok: true, assunto, encaminhado_para: agentId ? 'time' : 'fila' },
+        detectedTopic: assunto,
+        handoff: { to: agentId },
       }
-      return { output: { ok: true, transferido: !!agentId, assunto }, detectedTopic: assunto }
     }
 
     case 'encerrar':

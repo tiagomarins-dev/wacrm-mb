@@ -46,12 +46,21 @@ services:
     environment:
       - AUTOMATION_CRON_SECRET=${AUTOMATION_CRON_SECRET:-}
       - CRON_INTERVAL=${CRON_INTERVAL:-60}
+      # Cadência dedicada do agente de IA: bem mais curta que os demais crons
+      # para a resposta sair quase em tempo real (latência ≈ debounce + isto).
+      - AI_AGENT_CRON_INTERVAL=${AI_AGENT_CRON_INTERVAL:-8}
     entrypoint:
       - /bin/sh
       - -c
       - |
+        # Loop RÁPIDO dedicado ao agente de IA (resposta quase em tempo real).
+        ( while true; do
+            curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/ai-agent/cron" >/dev/null 2>&1 || true
+            sleep "$$AI_AGENT_CRON_INTERVAL"
+          done ) &
+        # Loop PADRÃO para os demais crons (broadcasts, automations, flows).
         while true; do
-          for p in broadcasts automations flows ai-agent; do
+          for p in broadcasts automations flows; do
             curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/$$p/cron" >/dev/null 2>&1 || true
           done
           sleep "$$CRON_INTERVAL"

@@ -8,6 +8,7 @@
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
+import { AI_AGENT_USER_ID } from './constants'
 
 // MODO TESTE (allowlist): se `allowed` está preenchida, o agente SÓ atende
 // contatos cujo telefone (só dígitos) casa com a lista — por igualdade ou
@@ -56,6 +57,10 @@ export async function dispatchInboundToAiAgent(input: DispatchAiInput): Promise<
       .maybeSingle()
     if (!cfg?.enabled) return
 
+    // CONTROLE PRINCIPAL: a IA só atua se for a RESPONSÁVEL da conversa
+    // (assigned_agent_id == IA). Humano "assume" reatribuindo → bot para.
+    if (!(await isAssignedToAi(db, input.conversationId))) return
+
     // Contato pediu pra não falar com bot? (e pega o phone p/ a allowlist)
     const { data: contact } = await db
       .from('contacts')
@@ -65,11 +70,8 @@ export async function dispatchInboundToAiAgent(input: DispatchAiInput): Promise<
       .maybeSingle()
     if (!contact || contact.ai_opt_out) return
 
-    // MODO TESTE: fora da allowlist → não enfileira (trava de segurança).
+    // Allowlist opcional (trava extra de teste). Vazia = sem restrição.
     if (!phoneAllowed(contact.phone, cfg.allowed_phones)) return
-
-    // Humano no controle? (atendente respondeu por último nesta conversa.)
-    if (await humanRecentlyReplied(db, input.conversationId)) return
 
     // Upsert na fila: empurra run_at a cada nova msg (debounce real). O
     // UNIQUE(conversation_id) garante 1 pendência por conversa.
@@ -92,31 +94,17 @@ export async function dispatchInboundToAiAgent(input: DispatchAiInput): Promise<
   }
 }
 
-// Janela (min) em que um atendente humano é considerado "no controle" após
-// responder. Passada a janela, o bot pode reengajar um NOVO inbound — senão
-// qualquer conversa que um humano tocou uma vez ficaria morta pro bot pra
-// sempre. (Sem coluna nova — decisão de escopo da reauditoria.)
-export const HUMAN_CONTROL_WINDOW_MIN = 30
-
-// True se um atendente humano respondeu RECENTEMENTE (dentro da janela) e
-// é a última msg agent/bot — ou seja, está conduzindo a conversa agora.
-// Usado no gate do dispatch e no recheck do engine.
-export async function humanRecentlyReplied(
+// True se a IA é a responsável atual da conversa (assigned_agent_id == IA).
+// É o gate central do modelo: usado no dispatch (enfileirar) e no engine
+// (rechecar antes de enviar — se um humano reatribuiu no meio, o bot para).
+export async function isAssignedToAi(
   db: SupabaseClient,
   conversationId: string,
-  withinMinutes: number = HUMAN_CONTROL_WINDOW_MIN,
 ): Promise<boolean> {
   const { data } = await db
-    .from('messages')
-    .select('sender_type, created_at')
-    .eq('conversation_id', conversationId)
-    .in('sender_type', ['agent', 'bot'])
-    .order('created_at', { ascending: false })
-    .limit(1)
+    .from('conversations')
+    .select('assigned_agent_id')
+    .eq('id', conversationId)
     .maybeSingle()
-  const row = data as { sender_type: string; created_at: string } | null
-  if (row?.sender_type !== 'agent') return false
-  // Só "no controle" se a resposta humana foi recente.
-  const ageMs = Date.now() - new Date(row.created_at).getTime()
-  return Number.isFinite(ageMs) && ageMs <= withinMinutes * 60_000
+  return (data as { assigned_agent_id: string | null } | null)?.assigned_agent_id === AI_AGENT_USER_ID
 }

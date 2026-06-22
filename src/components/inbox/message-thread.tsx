@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { AI_AGENT_USER_ID, AI_AGENT_LABEL } from "@/lib/ai-agent/constants";
 import type {
   Conversation,
   Message,
@@ -838,9 +839,14 @@ export function MessageThread({
   );
   const assignedAgentId = conversation.assigned_agent_id ?? null;
   const currentAssignee = profiles.find((p) => p.user_id === assignedAgentId);
-  const assignLabel = assignedAgentId
-    ? (currentAssignee?.full_name ?? "Assigned")
-    : "Assign";
+  // A IA é um responsável "virtual" (id sintético, sem profile) — resolve o
+  // label próprio quando a conversa está atribuída a ela.
+  const assignedToAi = assignedAgentId === AI_AGENT_USER_ID;
+  const assignLabel = assignedToAi
+    ? AI_AGENT_LABEL
+    : assignedAgentId
+      ? (currentAssignee?.full_name ?? "Assigned")
+      : "Assign";
 
   return (
     // `min-w-0` is load-bearing: the page already puts min-w-0 on the
@@ -1000,6 +1006,20 @@ export function MessageThread({
               align="end"
               className="border-border bg-popover"
             >
+              {/* Responsável virtual: a IA. Atribuir = bot assume; reatribuir
+                  a um humano = bot para. */}
+              <DropdownMenuItem
+                key="ai-agent"
+                onClick={() => handleAssignChange(AI_AGENT_USER_ID)}
+                className={cn(
+                  "text-sm",
+                  assignedToAi ? "text-primary" : "text-popover-foreground"
+                )}
+              >
+                <span className="flex-1">🤖 {AI_AGENT_LABEL}</span>
+                {assignedToAi && <Check className="ml-2 h-3 w-3" />}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-border" />
               {profiles.length === 0 ? (
                 <DropdownMenuItem disabled className="text-sm text-muted-foreground">
                   No teammates available

@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
+import { AI_AGENT_USER_ID } from './constants'
 
 // Holder do db ativo (a factory do vi.mock fecha sobre ele); trocado por teste.
 const holder: { db: unknown } = { db: null }
@@ -6,8 +7,7 @@ vi.mock('@/lib/automations/admin-client', () => ({ supabaseAdmin: () => holder.d
 
 import { dispatchInboundToAiAgent, phoneAllowed } from './dispatch'
 
-// Fake db por tabela + captura de upserts. Suporta as cadeias usadas:
-// select/eq/in/order/limit/maybeSingle/upsert.
+// Fake db por tabela + captura de upserts. Cadeias usadas: select/eq/maybeSingle/upsert.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeDb(byTable: Record<string, any>) {
   const upserts: { table: string; payload: unknown }[] = []
@@ -23,9 +23,6 @@ function makeDb(byTable: Record<string, any>) {
     const b: Record<string, unknown> = {
       select: () => b,
       eq: () => b,
-      in: () => b,
-      order: () => b,
-      limit: () => b,
       upsert: (p: unknown) => ((op.type = 'upsert'), (op.payload = p), Promise.resolve(result())),
       maybeSingle: () => Promise.resolve(result()),
       then: (f: (v: unknown) => unknown) => Promise.resolve(result()).then(f),
@@ -45,17 +42,17 @@ const input = {
   flowConsumed: false,
 }
 
-// Cenário-base: agente ligado, contato sem opt-out, último msg do bot (não humano).
+// Cenário-base: agente ligado, conversa ATRIBUÍDA À IA, contato sem opt-out.
 // Tipos frouxos p/ os testes poderem reatribuir cada tabela.
 function happyTables(): {
   ai_agent_config: { enabled: boolean; debounce_seconds: number; allowed_phones?: string[] | null } | null
+  conversations: { assigned_agent_id: string | null }
   contacts: { ai_opt_out: boolean; phone?: string | null }
-  messages: { sender_type: string; created_at?: string }
 } {
   return {
     ai_agent_config: { enabled: true, debounce_seconds: 10, allowed_phones: null },
+    conversations: { assigned_agent_id: AI_AGENT_USER_ID },
     contacts: { ai_opt_out: false, phone: '+5521987868395' },
-    messages: { sender_type: 'bot' },
   }
 }
 
@@ -80,7 +77,25 @@ describe('dispatchInboundToAiAgent', () => {
 
   it('sem config → não enfileira', async () => {
     const t = happyTables()
-    t.ai_agent_config = null // simulando ausência de config
+    t.ai_agent_config = null
+    const { db, upserts } = makeDb(t)
+    holder.db = db
+    await dispatchInboundToAiAgent(input)
+    expect(upserts).toHaveLength(0)
+  })
+
+  it('conversa NÃO atribuída à IA → não enfileira', async () => {
+    const t = happyTables()
+    t.conversations = { assigned_agent_id: 'humano-123' }
+    const { db, upserts } = makeDb(t)
+    holder.db = db
+    await dispatchInboundToAiAgent(input)
+    expect(upserts).toHaveLength(0)
+  })
+
+  it('conversa sem responsável (null) → não enfileira', async () => {
+    const t = happyTables()
+    t.conversations = { assigned_agent_id: null }
     const { db, upserts } = makeDb(t)
     holder.db = db
     await dispatchInboundToAiAgent(input)
@@ -96,26 +111,7 @@ describe('dispatchInboundToAiAgent', () => {
     expect(upserts).toHaveLength(0)
   })
 
-  it('humano respondeu RECENTEMENTE (dentro da janela) → não enfileira', async () => {
-    const t = happyTables()
-    t.messages = { sender_type: 'agent', created_at: new Date().toISOString() }
-    const { db, upserts } = makeDb(t)
-    holder.db = db
-    await dispatchInboundToAiAgent(input)
-    expect(upserts).toHaveLength(0)
-  })
-
-  it('humano respondeu HÁ MUITO (fora da janela) → reengaja (enfileira)', async () => {
-    const t = happyTables()
-    // 8h atrás — fora da janela de 30 min.
-    t.messages = { sender_type: 'agent', created_at: new Date(Date.now() - 8 * 3600_000).toISOString() }
-    const { db, upserts } = makeDb(t)
-    holder.db = db
-    await dispatchInboundToAiAgent(input)
-    expect(upserts).toHaveLength(1)
-  })
-
-  it('caminho feliz → upsert com status pending e run_at futuro', async () => {
+  it('atribuída à IA + tudo ok → upsert pending com run_at futuro', async () => {
     const { db, upserts } = makeDb(happyTables())
     holder.db = db
     const before = Date.now()
@@ -127,24 +123,14 @@ describe('dispatchInboundToAiAgent', () => {
     expect(new Date(p.run_at).getTime()).toBeGreaterThanOrEqual(before)
   })
 
-  it('MODO TESTE: contato FORA da allowlist → não enfileira', async () => {
+  it('allowlist opcional: fora da lista → não enfileira (mesmo atribuída à IA)', async () => {
     const t = happyTables()
     t.ai_agent_config = { enabled: true, debounce_seconds: 10, allowed_phones: ['21987868395'] }
-    t.contacts = { ai_opt_out: false, phone: '+5511999990000' } // outro número
+    t.contacts = { ai_opt_out: false, phone: '+5511999990000' }
     const { db, upserts } = makeDb(t)
     holder.db = db
     await dispatchInboundToAiAgent(input)
     expect(upserts).toHaveLength(0)
-  })
-
-  it('MODO TESTE: contato NA allowlist → enfileira', async () => {
-    const t = happyTables()
-    t.ai_agent_config = { enabled: true, debounce_seconds: 10, allowed_phones: ['21987868395'] }
-    t.contacts = { ai_opt_out: false, phone: '+5521987868395' }
-    const { db, upserts } = makeDb(t)
-    holder.db = db
-    await dispatchInboundToAiAgent(input)
-    expect(upserts).toHaveLength(1)
   })
 })
 
@@ -154,9 +140,9 @@ describe('phoneAllowed', () => {
     expect(phoneAllowed('+5521987868395', [])).toBe(true)
   })
   it('casa por sufixo (tolera prefixo 55) e por igualdade', () => {
-    expect(phoneAllowed('+5521987868395', ['21987868395'])).toBe(true) // sufixo
-    expect(phoneAllowed('5521987868395', ['5521987868395'])).toBe(true) // igualdade
-    expect(phoneAllowed('(21) 98786-8395', ['21987868395'])).toBe(true) // normaliza dígitos
+    expect(phoneAllowed('+5521987868395', ['21987868395'])).toBe(true)
+    expect(phoneAllowed('5521987868395', ['5521987868395'])).toBe(true)
+    expect(phoneAllowed('(21) 98786-8395', ['21987868395'])).toBe(true)
   })
   it('número diferente → bloqueia', () => {
     expect(phoneAllowed('+5511999990000', ['21987868395'])).toBe(false)

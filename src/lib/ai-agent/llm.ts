@@ -49,11 +49,14 @@ export async function resolveOpenRouterKey(
 
 // Roda o loop: chama o modelo, executa as tools pedidas, realimenta os
 // resultados, até uma resposta final (sem tool_calls) ou estourar maxTurns.
-export async function runAgentLoop(ctx: AgentCtx): Promise<{ reply: string | null; topic: AgentTopic }> {
+export async function runAgentLoop(
+  ctx: AgentCtx,
+): Promise<{ reply: string | null; topic: AgentTopic; handoff: { to: string | null } | null }> {
   const apiKey = await resolveOpenRouterKey(ctx.db, ctx.accountId)
   const toolDefs = buildToolDefs()
   const msgs: ChatMsg[] = [{ role: 'system', content: ctx.system }, ...ctx.messages]
   let topic: AgentTopic = null
+  let handoff: { to: string | null } | null = null
 
   for (let turn = 0; turn < ctx.maxTurns; turn++) {
     const controller = new AbortController()
@@ -94,16 +97,17 @@ export async function runAgentLoop(ctx: AgentCtx): Promise<{ reply: string | nul
 
     const calls = choice.tool_calls ?? []
     // Sem tool_calls → resposta final do modelo.
-    if (calls.length === 0) return { reply: choice.content ?? null, topic }
+    if (calls.length === 0) return { reply: choice.content ?? null, topic, handoff }
 
     // Executa cada tool pedida e realimenta o resultado (role:'tool').
     for (const call of calls) {
-      const { output, detectedTopic } = await execTool(ctx, call)
+      const { output, detectedTopic, handoff: h } = await execTool(ctx, call)
       if (detectedTopic) topic = detectedTopic
+      if (h) handoff = h // transferir_humano sinaliza; o engine aplica pós-envio
       msgs.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) })
     }
   }
 
   // Estourou maxTurns sem resposta final (trava anti-loop).
-  return { reply: null, topic }
+  return { reply: null, topic, handoff }
 }
