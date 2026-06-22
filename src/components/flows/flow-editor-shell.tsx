@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { LayoutGrid, ListTree } from "lucide-react";
 
 import { FlowBuilder } from "./flow-builder";
@@ -45,6 +46,8 @@ interface Props {
 }
 
 export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
+  // i18n: namespace do editor de flows.
+  const { t } = useTranslation(["flowEditor", "common"]);
   // Read the persisted choice in the useState initializer. Safe even
   // though this is a client component because the parent page only
   // mounts us AFTER a client-side fetch resolves — there's no SSR
@@ -84,20 +87,20 @@ export function FlowEditorShell({ initialFlow, initialNodes }: Props) {
           <div className="flex items-center justify-end">
             <div
               role="group"
-              aria-label="Editor view"
+              aria-label={t("editorViewGroup")}
               className="inline-flex items-center gap-1 rounded-md border border-border bg-card p-0.5 text-xs"
             >
               <ToggleButton
                 active={effectiveView === "canvas"}
                 onClick={() => choose("canvas")}
                 icon={<LayoutGrid className="h-3 w-3" />}
-                label="Canvas"
+                label={t("viewCanvas")}
               />
               <ToggleButton
                 active={effectiveView === "list"}
                 onClick={() => choose("list")}
                 icon={<ListTree className="h-3 w-3" />}
-                label="List"
+                label={t("viewList")}
               />
             </div>
           </div>
