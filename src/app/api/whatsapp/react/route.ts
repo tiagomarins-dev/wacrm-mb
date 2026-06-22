@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
 import { decrypt } from '@/lib/whatsapp/encryption';
+import { resolveOutboundConfig } from '@/lib/connections/resolve';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
 import {
   checkRateLimit,
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
 
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('id, account_id, contact:contacts(phone)')
+      .select('id, account_id, connection_id, contact:contacts(phone)')
       .eq('id', targetMessage.conversation_id)
       .eq('account_id', accountId)
       .maybeSingle();
@@ -108,14 +109,15 @@ export async function POST(request: Request) {
       );
     }
 
-    // WhatsApp config + access token. Account-scoped post-multi-user.
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('phone_number_id, access_token')
-      .eq('account_id', accountId)
-      .single();
+    // Conexão de envio = a da CONVERSA (multi-número, 033): a reação sai
+    // pelo número que recebeu a mensagem reagida, não pela "ativa" (H2).
+    const config = await resolveOutboundConfig(
+      supabase,
+      accountId,
+      conversation.connection_id,
+    ).catch(() => null);
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         { error: 'WhatsApp not configured.' },
         { status: 400 },

@@ -95,3 +95,56 @@ describe("findExistingContact", () => {
     expect(await findExistingContact(db, "acct", "   ")).toBeNull();
   });
 });
+
+describe("findExistingContact (connection-scoped, 033)", () => {
+  // Stub que respeita o filtro .eq('connection_id', ...): só devolve os
+  // candidatos da conexão pedida (quando informada).
+  function stubDbConn(
+    rows: Array<{ id: string; phone: string; connection_id: string }>,
+  ): SupabaseClient {
+    const filters: Record<string, unknown> = {};
+    const builder = {
+      select: () => builder,
+      eq: (col: string, val: unknown) => {
+        filters[col] = val;
+        return builder;
+      },
+      like: () =>
+        Promise.resolve({
+          data: rows.filter(
+            (r) =>
+              filters.connection_id === undefined ||
+              r.connection_id === filters.connection_id,
+          ),
+          error: null,
+        }),
+    };
+    return { from: () => builder } as unknown as SupabaseClient;
+  }
+
+  // Mesmo número cadastrado em duas conexões da conta.
+  const ROWS = [
+    { id: "c-A", phone: "15551234567", connection_id: "conn-A" },
+    { id: "c-B", phone: "15551234567", connection_id: "conn-B" },
+  ];
+
+  it("casa o contato da conexão pedida (não vaza da outra)", async () => {
+    const hit = await findExistingContact(
+      stubDbConn(ROWS),
+      "acct",
+      "+1 555-123-4567",
+      "conn-B",
+    );
+    expect(hit?.id).toBe("c-B");
+  });
+
+  it("conexão sem o número → null (gera contato novo, sem mistura)", async () => {
+    const hit = await findExistingContact(
+      stubDbConn([ROWS[0]]), // só existe na conn-A
+      "acct",
+      "+1 555-123-4567",
+      "conn-B",
+    );
+    expect(hit).toBeNull();
+  });
+});

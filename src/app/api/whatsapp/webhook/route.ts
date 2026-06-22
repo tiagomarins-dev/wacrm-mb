@@ -275,6 +275,9 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
           // inserts that need it for NOT NULL FK compliance. Always
           // the admin who saved the WhatsApp config.
           config.user_id,
+          // Conexão (multi-número, 033) — id da whatsapp_config casada
+          // pelo phone_number_id. Carimba contato/conversa p/ isolar.
+          config.id,
           decryptedAccessToken
         )
       }
@@ -509,6 +512,8 @@ async function processMessage(
   // (contacts, conversations). Always the admin who saved the
   // WhatsApp config; the choice is arbitrary post-017 but stable.
   configOwnerUserId: string,
+  // Conexão (multi-número, 033). Isola contato/conversa por número.
+  connectionId: string,
   accessToken: string
 ) {
   const senderPhone = normalizePhone(message.from)
@@ -518,6 +523,7 @@ async function processMessage(
   const contactOutcome = await findOrCreateContact(
     accountId,
     configOwnerUserId,
+    connectionId,
     senderPhone,
     contactName
   )
@@ -528,6 +534,7 @@ async function processMessage(
   const conversation = await findOrCreateConversation(
     accountId,
     configOwnerUserId,
+    connectionId,
     contactRecord.id
   )
   if (!conversation) return
@@ -873,6 +880,7 @@ interface ContactOutcome {
 async function findOrCreateContact(
   accountId: string,
   configOwnerUserId: string,
+  connectionId: string,
   phone: string,
   name: string
 ): Promise<ContactOutcome | null> {
@@ -882,10 +890,13 @@ async function findOrCreateContact(
   // strict `phonesMatch` in JS on the small candidate set. The same
   // helper backs the manual contact form and CSV import, so all three
   // paths agree on what "same number" means (issue #212).
+  // Dedup é por-conexão (033): o mesmo número em duas conexões da conta
+  // gera dois contatos (sem isso, casaria o contato da outra conexão).
   const existingContact = await findExistingContact(
     supabaseAdmin(),
     accountId,
     phone,
+    connectionId,
   )
 
   if (existingContact) {
@@ -908,6 +919,7 @@ async function findOrCreateContact(
     .insert({
       account_id: accountId,
       user_id: configOwnerUserId,
+      connection_id: connectionId,
       phone,
       name: name || phone,
     })
@@ -920,7 +932,7 @@ async function findOrCreateContact(
     // unique index (migration 022) rejected the duplicate. Re-resolve
     // the existing row instead of dropping the message.
     if (isUniqueViolation(createError)) {
-      const raced = await findExistingContact(supabaseAdmin(), accountId, phone)
+      const raced = await findExistingContact(supabaseAdmin(), accountId, phone, connectionId)
       if (raced) return { contact: raced, wasCreated: false }
     }
     console.error('Error creating contact:', createError)
@@ -933,17 +945,22 @@ async function findOrCreateContact(
 async function findOrCreateConversation(
   accountId: string,
   configOwnerUserId: string,
+  connectionId: string,
   contactId: string,
 ) {
-  // Look for existing conversation in this account
-  const { data: existing, error: findError } = await supabaseAdmin()
+  // Busca a conversa existente DESTE contato NESTA conexão (033). Sem o
+  // filtro por connection_id, o mesmo contato em duas conexões colidiria
+  // — e o `.single()` antigo lançaria PGRST116 com 2 linhas. `.maybeSingle()`
+  // trata 0 linhas como caso normal (cai na criação).
+  const { data: existing } = await supabaseAdmin()
     .from('conversations')
     .select('*')
     .eq('account_id', accountId)
+    .eq('connection_id', connectionId)
     .eq('contact_id', contactId)
-    .single()
+    .maybeSingle()
 
-  if (!findError && existing) {
+  if (existing) {
     return existing
   }
 
@@ -954,6 +971,7 @@ async function findOrCreateConversation(
     .insert({
       account_id: accountId,
       user_id: configOwnerUserId,
+      connection_id: connectionId,
       contact_id: contactId,
     })
     .select()

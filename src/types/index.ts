@@ -299,7 +299,20 @@ export interface MessageReaction {
 
 export interface WhatsAppConfig {
   id: string;
+  /**
+   * Conta dona da conexão. A coluna existe no banco desde a 017
+   * (tenancy), mas nunca tinha entrado no tipo — drift DB↔TS quitado
+   * na 033. É sempre carregada junto com `.eq('account_id')` no
+   * outbound (não vazar token entre contas).
+   */
+  account_id: string;
   user_id: string;
+  /**
+   * Conexão primária da conta (033). Usada como número de envio
+   * default e como fallback do seletor de "conexão ativa". No máximo
+   * uma por conta (índice parcial único `idx_whatsapp_config_one_primary`).
+   */
+  is_primary: boolean;
   phone_number_id: string;
   waba_id?: string;
   access_token: string;

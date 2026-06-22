@@ -5,6 +5,7 @@ import {
   getSubscribedApps,
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 
 /**
  * GET /api/whatsapp/config/verify-registration
@@ -55,11 +56,12 @@ export async function GET() {
     })
   }
 
-  const { data: config } = await supabase
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', accountId)
-    .maybeSingle()
+  // Multi-número (033): checa a registração da conexão PRIMÁRIA. (A UI
+  // passará connection_id por conexão no lote de filtros.) Usa
+  // resolveOutboundConfig p/ não quebrar com 2+ conexões.
+  const config = await resolveOutboundConfig(supabase, accountId).catch(
+    () => null,
+  )
 
   if (!config) {
     return NextResponse.json({

@@ -8,6 +8,7 @@ import {
 } from '@/lib/whatsapp/meta-api'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -165,14 +166,15 @@ export async function POST(request: Request) {
       )
     }
 
-    // Fetch and decrypt WhatsApp config
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    // Conexão de envio = a da CONVERSA (multi-número, 033): responde pelo
+    // número que recebeu, não por uma conexão "ativa" do agente (H2).
+    const config = await resolveOutboundConfig(
+      supabase,
+      accountId,
+      conversation.connection_id,
+    ).catch(() => null)
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         { error: 'WhatsApp not configured. Please set up your WhatsApp integration first.' },
         { status: 400 }

@@ -15,6 +15,7 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
+import { resolveOutboundConfigForConversation } from '@/lib/connections/resolve'
 
 // ------------------------------------------------------------
 // Flows-side Meta sender (interactive variants).
@@ -77,14 +78,13 @@ export async function engineSendText(
     throw new Error(`contact phone invalid: ${contact.phone}`)
   }
 
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', args.accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error('WhatsApp not configured for this account')
-  }
+  // Conexão de envio = a da CONVERSA (multi-número, 033): o flow responde
+  // pelo número que recebeu a mensagem, não por uma conexão "ativa".
+  const config = await resolveOutboundConfigForConversation(
+    db,
+    args.accountId,
+    args.conversationId,
+  )
 
   const accessToken = decrypt(config.access_token)
 
@@ -186,14 +186,13 @@ export async function engineSendMedia(
     throw new Error(`contact phone invalid: ${contact.phone}`)
   }
 
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', args.accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error('WhatsApp not configured for this account')
-  }
+  // Conexão de envio = a da CONVERSA (multi-número, 033): o flow responde
+  // pelo número que recebeu a mensagem, não por uma conexão "ativa".
+  const config = await resolveOutboundConfigForConversation(
+    db,
+    args.accountId,
+    args.conversationId,
+  )
 
   const accessToken = decrypt(config.access_token)
 
@@ -338,14 +337,12 @@ async function sendInteractiveViaMeta(
     throw new Error(`contact phone invalid: ${contact.phone}`)
   }
 
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', input.accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error('WhatsApp not configured for this account')
-  }
+  // Conexão de envio = a da CONVERSA (multi-número, 033).
+  const config = await resolveOutboundConfigForConversation(
+    db,
+    input.accountId,
+    input.conversationId,
+  )
 
   const accessToken = decrypt(config.access_token)
 

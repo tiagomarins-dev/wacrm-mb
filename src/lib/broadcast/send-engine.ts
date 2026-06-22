@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import { sendRecipients, type BroadcastRecipientInput } from './send-batch'
 import {
@@ -12,6 +13,9 @@ import {
 export interface ScheduledBroadcastRow {
   id: string
   account_id: string
+  /** Conexão de envio (multi-número, 033). Null em broadcasts criadas
+   *  antes do threading do create-path → cai na primária da conta. */
+  connection_id: string | null
   template_name: string
   template_language: string | null
   template_variables: Record<string, VariableMapping> | null
@@ -43,12 +47,14 @@ export async function drainBroadcast(
 ): Promise<DrainResult> {
   const language = broadcast.template_language || 'en_US'
 
-  // ── Config do tenant (isolamento) ──────────────────────────────
-  const { data: config } = await admin
-    .from('whatsapp_config')
-    .select('phone_number_id, access_token')
-    .eq('account_id', broadcast.account_id)
-    .maybeSingle()
+  // ── Config de envio (multi-número, 033) ────────────────────────
+  // Conexão gravada na broadcast; fallback p/ primária. H1 (escopo de
+  // conta) garantido em resolveOutboundConfig.
+  const config = await resolveOutboundConfig(
+    admin,
+    broadcast.account_id,
+    broadcast.connection_id,
+  ).catch(() => null)
 
   // ── Carrega até `limit` recipients pendentes (+ contato) ───────
   const { data: pending, error: pendErr } = await admin

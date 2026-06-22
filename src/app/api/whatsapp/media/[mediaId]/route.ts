@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 
 export async function GET(
   request: Request,
@@ -48,14 +49,15 @@ export async function GET(
       )
     }
 
-    // Fetch and decrypt WhatsApp config
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    // Multi-número (033): busca a mídia com o token da conexão PRIMÁRIA.
+    // (Mídia de conexões não-primárias exigirá o conversation_id na
+    // chamada — wiring no lote de filtros/UI.) Usa resolveOutboundConfig
+    // p/ não quebrar com 2+ conexões (o `.single()` antigo dava PGRST116).
+    const config = await resolveOutboundConfig(supabase, accountId).catch(
+      () => null,
+    )
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         { error: 'WhatsApp not configured' },
         { status: 400 }

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 import type { TemplateButton, TemplateSampleValues } from '@/types'
 
@@ -150,13 +151,14 @@ export async function POST() {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    // Multi-número (033): sincroniza os templates da conexão PRIMÁRIA (WABA).
+    // Sync por-conexão (multi-WABA) virá no lote de templates. Evita o crash
+    // de .single() com 2+ conexões na conta.
+    const config = await resolveOutboundConfig(supabase, accountId).catch(
+      () => null,
+    )
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         {
           error:

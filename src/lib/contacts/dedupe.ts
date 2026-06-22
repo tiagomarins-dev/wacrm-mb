@@ -31,22 +31,32 @@ export interface ExistingContact {
  * or null. Pre-filters in SQL by the last-8-digit suffix (so we don't
  * pull every contact), then applies the strict `phonesMatch` in JS on
  * the small candidate set — the exact approach the webhook has used.
+ *
+ * `connectionId` (multi-número, 033): quando informado, o dedup é
+ * por-conexão — o mesmo número falando com duas conexões da conta gera
+ * dois contatos distintos (sem isso, o segundo INSERT casaria o contato
+ * da OUTRA conexão e misturaria os dados). Opcional durante o rollout
+ * em estágios: os callers ainda não-threados (form manual, import CSV)
+ * caem no comportamento account-scoped até serem migrados.
  */
 export async function findExistingContact(
   db: SupabaseClient,
   accountId: string,
   phone: string,
+  connectionId?: string,
 ): Promise<ExistingContact | null> {
   const normalized = normalizePhone(phone);
   if (!normalized) return null;
 
   const suffix = normalized.length >= 8 ? normalized.slice(-8) : normalized;
 
-  const { data, error } = await db
+  let query = db
     .from("contacts")
     .select("*")
-    .eq("account_id", accountId)
-    .like("phone", `%${suffix}`);
+    .eq("account_id", accountId);
+  if (connectionId) query = query.eq("connection_id", connectionId);
+
+  const { data, error } = await query.like("phone", `%${suffix}`);
 
   if (error || !data) return null;
 

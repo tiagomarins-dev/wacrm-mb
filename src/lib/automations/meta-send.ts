@@ -7,6 +7,7 @@ import {
   isRecipientNotAllowedError,
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
+import { resolveOutboundConfigForConversation } from '@/lib/connections/resolve'
 
 // ------------------------------------------------------------
 // Automation-side Meta sender.
@@ -83,14 +84,13 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     throw new Error(`contact phone invalid: ${contact.phone}`)
   }
 
-  const { data: config, error: configErr } = await db
-    .from('whatsapp_config')
-    .select('*')
-    .eq('account_id', input.accountId)
-    .single()
-  if (configErr || !config) {
-    throw new Error('WhatsApp not configured for this account')
-  }
+  // Conexão de envio = a da CONVERSA (multi-número, 033): a automação
+  // envia pelo número da conversa-alvo, não por uma conexão "ativa".
+  const config = await resolveOutboundConfigForConversation(
+    db,
+    input.accountId,
+    input.conversationId,
+  )
 
   const accessToken = decrypt(config.access_token)
 
