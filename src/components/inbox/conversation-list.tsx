@@ -6,6 +6,8 @@ import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
 import { Search, ChevronDown } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+// Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
+import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
@@ -244,6 +246,9 @@ function ConversationItem({
   isActive,
   onSelect,
 }: ConversationItemProps) {
+  // Idioma ativo da UI: 'pt-BR' usa o locale ptBR; 'en' usa o default (en-US).
+  const { i18n } = useTranslation("inbox");
+  const dateLocale = i18n.language === "pt-BR" ? ptBR : undefined;
   const contact = conversation.contact;
   const displayName = contact?.name || contact?.phone || "Unknown";
   const initials = displayName.charAt(0).toUpperCase();
@@ -255,6 +260,7 @@ function ConversationItem({
   const timeAgo = conversation.last_message_at
     ? formatDistanceToNow(new Date(conversation.last_message_at), {
         addSuffix: false,
+        locale: dateLocale,
       })
     : "";
 

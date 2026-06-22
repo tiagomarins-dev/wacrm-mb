@@ -296,7 +296,7 @@ export default function BroadcastDetailPage() {
               <span
                 className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${status.classes}`}
               >
-                {status.label}
+                {t(status.labelKey, { defaultValue: status.label })}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
@@ -426,7 +426,9 @@ export default function BroadcastDetailPage() {
                 <Filter className="h-3.5 w-3.5" />
                 {statusFilter === 'all'
                   ? t('detail.allStatuses')
-                  : getRecipientStatus(statusFilter).label}
+                  : t(getRecipientStatus(statusFilter).labelKey, {
+                      defaultValue: getRecipientStatus(statusFilter).label,
+                    })}
                 <ChevronDown className="h-3 w-3" />
               </DropdownMenuTrigger>
               <DropdownMenuContent className="border-border bg-popover">
@@ -448,7 +450,9 @@ export default function BroadcastDetailPage() {
                         : 'text-popover-foreground'
                     }
                   >
-                    {getRecipientStatus(s).label}
+                    {t(getRecipientStatus(s).labelKey, {
+                      defaultValue: getRecipientStatus(s).label,
+                    })}
                   </DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
@@ -504,7 +508,7 @@ export default function BroadcastDetailPage() {
                         <span
                           className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${rStatus.classes}`}
                         >
-                          {rStatus.label}
+                          {t(rStatus.labelKey, { defaultValue: rStatus.label })}
                         </span>
                       </TableCell>
                       <TableCell className="text-muted-foreground">

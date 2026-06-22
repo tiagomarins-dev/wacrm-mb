@@ -15,6 +15,12 @@ import type { BroadcastStatus, RecipientStatus } from "@/types";
 
 export interface StatusDisplay {
   label: string;
+  /**
+   * Chave i18n no namespace `broadcasts` (ex.: `statusDraft`). Usada
+   * pelos consumidores com t(labelKey, { defaultValue: label }) para
+   * traduzir o rótulo; `label` em inglês permanece como fallback.
+   */
+  labelKey: string;
   classes: string;
   /**
    * Set true for statuses that should pulse in the UI to convey
@@ -26,23 +32,28 @@ export interface StatusDisplay {
 export const broadcastStatusConfig: Record<BroadcastStatus, StatusDisplay> = {
   draft: {
     label: "Draft",
+    labelKey: "statusDraft",
     classes: "bg-slate-500/10 text-muted-foreground border-slate-500/20",
   },
   scheduled: {
     label: "Scheduled",
+    labelKey: "statusScheduled",
     classes: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   },
   sending: {
     label: "Sending",
+    labelKey: "statusSending",
     classes: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
     pulse: true,
   },
   sent: {
     label: "Sent",
+    labelKey: "statusSent",
     classes: "bg-primary/10 text-primary border-primary/20",
   },
   failed: {
     label: "Failed",
+    labelKey: "statusFailed",
     classes: "bg-red-500/10 text-red-400 border-red-500/20",
   },
 };
@@ -50,26 +61,32 @@ export const broadcastStatusConfig: Record<BroadcastStatus, StatusDisplay> = {
 export const recipientStatusConfig: Record<RecipientStatus, StatusDisplay> = {
   pending: {
     label: "Pending",
+    labelKey: "statusPending",
     classes: "bg-slate-500/10 text-muted-foreground border-slate-500/20",
   },
   sent: {
     label: "Sent",
+    labelKey: "statusSent",
     classes: "bg-blue-500/10 text-blue-400 border-blue-500/20",
   },
   delivered: {
     label: "Delivered",
+    labelKey: "statusDelivered",
     classes: "bg-primary/10 text-primary border-primary/20",
   },
   read: {
     label: "Read",
+    labelKey: "statusRead",
     classes: "bg-primary/10 text-primary border-primary/20",
   },
   replied: {
     label: "Replied",
+    labelKey: "statusReplied",
     classes: "bg-purple-500/10 text-purple-400 border-purple-500/20",
   },
   failed: {
     label: "Failed",
+    labelKey: "statusFailed",
     classes: "bg-red-500/10 text-red-400 border-red-500/20",
   },
 };
