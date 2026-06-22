@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import { toast } from 'sonner';
 import type { Contact, Tag, ContactTag } from '@/types';
 import {
@@ -46,6 +47,9 @@ export function ContactForm({
 }: ContactFormProps) {
   const supabase = createClient();
   const { accountId } = useAuth();
+  // Conexão ativa (multi-número, 033): novo contato nasce nela e o dedup
+  // é por-conexão (mesmo número em 2 conexões = 2 contatos).
+  const { activeConnectionId } = useActiveConnection();
   const isEdit = !!contact;
 
   const [name, setName] = useState('');
@@ -90,7 +94,12 @@ export function ContactForm({
     }
     setCheckingDup(true);
     try {
-      const existing = await findExistingContact(supabase, accountId, value);
+      const existing = await findExistingContact(
+        supabase,
+        accountId,
+        value,
+        activeConnectionId ?? undefined,
+      );
       setDupMatch(
         existing
           ? { contact: existing, exact: isExactMatch(existing, value) }
@@ -164,6 +173,7 @@ export function ContactForm({
           .insert({
             user_id: user.id,
             account_id: accountId,
+            connection_id: activeConnectionId ?? null,
             name: name.trim() || null,
             phone: phone.trim(),
             email: email.trim() || null,
@@ -209,6 +219,7 @@ export function ContactForm({
             supabase,
             accountId,
             phone.trim(),
+            activeConnectionId ?? undefined,
           );
           if (existing) setDupMatch({ contact: existing, exact: true });
         }

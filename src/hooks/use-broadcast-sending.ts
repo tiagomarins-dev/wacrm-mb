@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import { Contact, MessageTemplate } from '@/types';
 import {
   resolveVariables,
@@ -79,6 +80,8 @@ interface BroadcastApiResult {
 
 export function useBroadcastSending(): UseBroadcastSendingReturn {
   const { accountId } = useAuth();
+  // Conexão ativa (multi-número, 033): o broadcast nasce nela.
+  const { activeConnectionId } = useActiveConnection();
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
@@ -301,6 +304,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
         .insert({
           user_id: user.id,
           account_id: accountId,
+          connection_id: activeConnectionId ?? null,
           name: payload.name,
           template_name: payload.template.name,
           template_language: payload.template.language ?? 'en_US',

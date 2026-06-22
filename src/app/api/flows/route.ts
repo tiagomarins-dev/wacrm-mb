@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { getFlowTemplate } from '@/lib/flows/templates'
+import { getActiveConnection } from '@/lib/connections/active'
 
 /**
  * GET /api/flows — list the caller's flows.
@@ -32,12 +33,28 @@ export async function GET() {
   if (!guard.ok) {
     return NextResponse.json(guard.body, { status: guard.status })
   }
-  const { supabase } = guard
+  const { supabase, userId } = guard
 
-  const { data, error } = await supabase
+  // Multi-número (033): lista os flows da CONEXÃO ATIVA. Resolve a conta
+  // p/ o getActiveConnection (que lê o cookie + valida ownership). Sem
+  // conexão resolvida, cai no escopo de conta (RLS), sem filtro.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('account_id')
+    .eq('user_id', userId)
+    .single()
+  const accountId = profile?.account_id as string | undefined
+  const active = accountId
+    ? await getActiveConnection(supabase, accountId).catch(() => null)
+    : null
+
+  let query = supabase
     .from('flows')
     .select('*')
     .order('created_at', { ascending: false })
+  if (active) query = query.eq('connection_id', active.id)
+
+  const { data, error } = await query
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
@@ -66,6 +83,9 @@ export async function POST(request: Request) {
       { status: 403 },
     )
   }
+
+  // Multi-número (033): o flow novo nasce na CONEXÃO ATIVA.
+  const active = await getActiveConnection(supabase, accountId).catch(() => null)
 
   const body = (await request.json().catch(() => null)) as
     | {
@@ -102,6 +122,7 @@ export async function POST(request: Request) {
       .insert({
         user_id: userId,
         account_id: accountId,
+        connection_id: active?.id ?? null,
         name: body.name?.trim() || template.name,
         description: template.description,
         status: 'draft',
@@ -151,6 +172,7 @@ export async function POST(request: Request) {
     .insert({
       user_id: userId,
       account_id: accountId,
+      connection_id: active?.id ?? null,
       name: body.name.trim(),
       description: body.description ?? null,
       status: 'draft',

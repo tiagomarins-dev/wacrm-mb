@@ -7,6 +7,7 @@ import {
   validateStepsForActivation,
   validateTriggerForActivation,
 } from '@/lib/automations/validate'
+import { getActiveConnection } from '@/lib/connections/active'
 
 export async function GET() {
   const supabase = await createClient()
@@ -15,10 +16,24 @@ export async function GET() {
   } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabase
+  // Multi-número (033): lista as automações da CONEXÃO ATIVA.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('account_id')
+    .eq('user_id', user.id)
+    .single()
+  const accountId = profile?.account_id as string | undefined
+  const active = accountId
+    ? await getActiveConnection(supabase, accountId).catch(() => null)
+    : null
+
+  let query = supabase
     .from('automations')
     .select('*')
     .order('created_at', { ascending: false })
+  if (active) query = query.eq('connection_id', active.id)
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ automations: data ?? [] })
 }
@@ -94,12 +109,16 @@ export async function POST(request: Request) {
     }
   }
 
+  // Multi-número (033): a automação nasce na CONEXÃO ATIVA.
+  const active = await getActiveConnection(supabase, accountId).catch(() => null)
+
   const admin = supabaseAdmin()
   const { data: automation, error: insertErr } = await admin
     .from('automations')
     .insert({
       user_id: user.id,
       account_id: accountId,
+      connection_id: active?.id ?? null,
       name: effectiveName,
       description: effectiveDescription ?? null,
       trigger_type: effectiveTriggerType,

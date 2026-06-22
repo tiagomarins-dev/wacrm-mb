@@ -183,10 +183,14 @@ export default function InboxPage() {
         return;
       }
 
+      // Multi-número (033): a conta pode ter várias conexões; o banner usa
+      // o status da PRIMÁRIA (`.eq('is_primary')`). Sem o filtro, `.maybeSingle()`
+      // quebraria com 2+ conexões.
       const { data } = await supabase
         .from("whatsapp_config")
         .select("status")
         .eq("account_id", accountId)
+        .eq("is_primary", true)
         .maybeSingle();
 
       setWhatsappConnected(data?.status === "connected");

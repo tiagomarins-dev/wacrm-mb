@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useActiveConnection } from "@/hooks/use-active-connection";
 
 interface ConversationListProps {
   activeConversationId: string | null;
@@ -56,6 +57,8 @@ export function ConversationList({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<InboxFilter>("all");
   const [loading, setLoading] = useState(true);
+  // Conexão ativa (multi-número, 033): só as conversas desta conexão.
+  const { activeConnectionId } = useActiveConnection();
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -79,10 +82,13 @@ export function ConversationList({
     let cancelled = false;
 
     (async () => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("conversations")
         .select("*, contact:contacts(*)")
         .order("last_message_at", { ascending: false });
+      // Multi-número (033): filtra pela conexão ativa.
+      if (activeConnectionId) q = q.eq("connection_id", activeConnectionId);
+      const { data, error } = await q;
 
       if (cancelled) return;
 
@@ -108,7 +114,7 @@ export function ConversationList({
     // `resyncToken` is included so the parent can force a refetch when
     // the realtime channel reconnects or the tab regains focus — catches
     // up on any events sent while the WS was disconnected or throttled.
-  }, [resyncToken]);
+  }, [resyncToken, activeConnectionId]);
 
   const filtered = useMemo(() => {
     let result = conversations;
