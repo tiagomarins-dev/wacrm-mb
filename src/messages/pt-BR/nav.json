@@ -1,0 +1,23 @@
+{
+  "dashboard": "Painel",
+  "inbox": "Caixa de entrada",
+  "contacts": "Contatos",
+  "pipelines": "Funis",
+  "broadcasts": "Disparos",
+  "automations": "Automações",
+  "flows": "Fluxos",
+  "leadScore": "Lead Score",
+  "settings": "Configurações",
+  "beta": "Beta",
+  "betaFeature": "Recurso beta",
+  "profile": "Perfil",
+  "signOut": "Sair",
+  "closeMenu": "Fechar menu",
+  "appBrand": "CRM Template para WhatsApp",
+  "unreadAria_one": "{{count}} conversa não lida",
+  "unreadAria_other": "{{count}} conversas não lidas",
+  "roleOwner": "Proprietário",
+  "roleAdmin": "Administrador",
+  "roleAgent": "Atendente",
+  "roleViewer": "Visualizador"
+}

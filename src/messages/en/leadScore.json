@@ -1,0 +1,20 @@
+{
+  "title": "Lead Score",
+  "subtitle": "Ranking of leads by engagement in the selected window.",
+  "windowDays_one": "{{count}} day",
+  "windowDays_other": "{{count}} days",
+  "colLead": "Lead",
+  "colScore": "Score",
+  "colClassification": "Classification",
+  "colMessages": "Msgs",
+  "colButtons": "Buttons",
+  "colClicks": "Clicks",
+  "colLastContact": "Last contact",
+  "empty": "No leads with interaction in this window.",
+  "unnamed": "Unnamed",
+  "saleSuffix_one": "({{count}} sale)",
+  "saleSuffix_other": "({{count}} sales)",
+  "classificationHot": "Hot",
+  "classificationWarm": "Warm",
+  "classificationCold": "Cold"
+}

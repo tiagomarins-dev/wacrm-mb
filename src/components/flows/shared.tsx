@@ -30,6 +30,7 @@ import {
   UserPlus,
   Workflow,
 } from "lucide-react";
+import type { TFunction } from "i18next";
 
 // ============================================================
 // Node-type union — single source of truth for every place the UI
@@ -65,60 +66,94 @@ export interface BuilderNode {
 // ============================================================
 // Per-node-type metadata used to render icons + labels everywhere
 // the user sees a node summary.
+//
+// i18n: `label` continua sendo o rótulo EN — é a fonte do slug em
+// `addNode` (o node_key é identificador interno e precisa ser estável
+// independente do idioma). `labelKey` é a chave de tradução resolvida
+// no render via `t(labelKey, { defaultValue: label })`.
 // ============================================================
 
 export const NODE_META: Record<
   NodeType,
-  { label: string; icon: typeof Workflow; color: string }
+  { label: string; labelKey: string; icon: typeof Workflow; color: string }
 > = {
-  start: { label: "Start", icon: PlayCircle, color: "text-emerald-400" },
+  start: {
+    label: "Start",
+    labelKey: "nodeStart",
+    icon: PlayCircle,
+    color: "text-emerald-400",
+  },
   send_message: {
     label: "Send message",
+    labelKey: "nodeSendMessage",
     icon: MessageCircle,
     color: "text-sky-400",
   },
   send_buttons: {
     label: "Send buttons",
+    labelKey: "nodeSendButtons",
     icon: ListChecks,
     color: "text-primary",
   },
   send_list: {
     label: "Send list",
+    labelKey: "nodeSendList",
     icon: ListPlus,
     color: "text-indigo-400",
   },
   send_media: {
     label: "Send media",
+    labelKey: "nodeSendMedia",
     icon: Paperclip,
     color: "text-cyan-400",
   },
   collect_input: {
     label: "Collect input",
+    labelKey: "nodeCollectInput",
     icon: Inbox,
     color: "text-teal-400",
   },
   condition: {
     label: "If / else",
+    labelKey: "nodeCondition",
     icon: GitFork,
     color: "text-fuchsia-400",
   },
   set_tag: {
     label: "Tag contact",
+    labelKey: "nodeSetTag",
     icon: Tag,
     color: "text-pink-400",
   },
   wait_for_link_click: {
     label: "Wait for link click",
+    labelKey: "nodeWaitForLinkClick",
     icon: MousePointerClick,
     color: "text-blue-400",
   },
   handoff: {
     label: "Handoff to agent",
+    labelKey: "nodeHandoff",
     icon: UserPlus,
     color: "text-amber-400",
   },
-  end: { label: "End", icon: Flag, color: "text-muted-foreground" },
+  end: {
+    label: "End",
+    labelKey: "nodeEnd",
+    icon: Flag,
+    color: "text-muted-foreground",
+  },
 };
+
+/**
+ * Resolve o rótulo traduzido de um tipo de nó. Centraliza o
+ * `t(labelKey, { defaultValue: label })` para os 4 pontos que renderizam
+ * o nome do nó (lista, canvas, side-sheet, dropdown).
+ */
+export function nodeLabel(type: NodeType, t: TFunction): string {
+  const meta = NODE_META[type];
+  return t(meta.labelKey, { defaultValue: meta.label });
+}
 
 // ============================================================
 // Pure editing helpers — used by forms in both views.
@@ -152,7 +187,10 @@ export function truncate(s: string, max = 80): string {
   return clean.slice(0, max - 1) + "…";
 }
 
-export function summarizeNode(node: BuilderNode): string | null {
+// i18n: recebe `t` (namespace flowEditor) para resolver as strings
+// visíveis nos resumos. Conteúdo do usuário (texto, títulos, URLs,
+// var_key) permanece intacto — só os rótulos fixos são traduzidos.
+export function summarizeNode(node: BuilderNode, t: TFunction): string | null {
   const cfg = node.config;
   switch (node.node_type) {
     case "start":
@@ -185,13 +223,19 @@ export function summarizeNode(node: BuilderNode): string | null {
         const rows = Array.isArray(s.rows) ? s.rows : [];
         return sum + rows.length;
       }, 0);
+      // Plural via _one/_other; o i18next escolhe pela `count`.
+      const optionsStr = t("summaryOptions", { count: rowCount });
       if (text.length > 0) {
         return rowCount > 0
-          ? `${truncate(text, 50)} · ${rowCount} option${rowCount === 1 ? "" : "s"}`
+          ? `${truncate(text, 50)} · ${optionsStr}`
           : truncate(text);
       }
       return rowCount > 0
-        ? `${rowCount} option${rowCount === 1 ? "" : "s"} across ${sections.length} section${sections.length === 1 ? "" : "s"}`
+        ? t("summaryOptionsAcross", {
+            count: rowCount,
+            options: optionsStr,
+            sections: t("summarySections", { count: sections.length }),
+          })
         : null;
     }
     case "send_media": {
@@ -202,12 +246,16 @@ export function summarizeNode(node: BuilderNode): string | null {
       const caption = typeof cfg.caption === "string" ? cfg.caption : "";
       const label = mediaType
         ? mediaType.charAt(0).toUpperCase() + mediaType.slice(1)
-        : "Media";
-      if (!url) return `${label} (no file uploaded)`;
+        : t("summaryMedia");
+      if (!url) return t("summaryMediaNoFile", { label });
       const name = filename || url.split("/").pop() || "file";
       return caption
-        ? `${label}: ${truncate(name, 30)} · ${truncate(caption, 40)}`
-        : `${label}: ${truncate(name, 60)}`;
+        ? t("summaryMediaFileCaption", {
+            label,
+            name: truncate(name, 30),
+            caption: truncate(caption, 40),
+          })
+        : t("summaryMediaFile", { label, name: truncate(name, 60) });
     }
     case "collect_input": {
       const prompt = typeof cfg.prompt_text === "string" ? cfg.prompt_text : "";
@@ -228,7 +276,9 @@ export function summarizeNode(node: BuilderNode): string | null {
             ? "field"
             : "var";
       const subjectStr =
-        subject === "tag" ? `has tag ${truncate(subjectKey, 24)}` : `${subject}.${subjectKey}`;
+        subject === "tag"
+          ? t("summaryHasTag", { tag: truncate(subjectKey, 24) })
+          : `${subject}.${subjectKey}`;
       const op =
         cfg.operator === "equals"
           ? "=="
@@ -247,12 +297,15 @@ export function summarizeNode(node: BuilderNode): string | null {
       return subject === "tag" ? subjectStr : `${subjectStr} ${op}${valStr}`;
     }
     case "set_tag": {
-      const mode = cfg.mode === "remove" ? "Remove" : "Add";
+      const mode =
+        cfg.mode === "remove" ? t("summaryRemoveTag") : t("summaryAddTag");
       const tagId = typeof cfg.tag_id === "string" ? cfg.tag_id : "";
       // No tag name available without an async lookup here; show a
       // short prefix of the UUID so users can disambiguate between
       // multiple set_tag nodes at a glance.
-      return tagId ? `${mode} tag ${tagId.slice(0, 8)}…` : `${mode} tag (none picked)`;
+      return tagId
+        ? t("summaryTagWithId", { mode, id: tagId.slice(0, 8) })
+        : t("summaryTagNone", { mode });
     }
     case "wait_for_link_click": {
       const url = typeof cfg.link_url === "string" ? cfg.link_url : "";

@@ -1,0 +1,19 @@
+{
+  "title": "Settings",
+  "description": "Everything in one place — your account and your workspace. Pick a section to manage it.",
+  "sectionsAria": "Settings sections",
+  "groupAccount": "Account",
+  "groupWorkspace": "Workspace",
+  "overview": "Overview",
+  "profile": "Your profile",
+  "security": "Login & security",
+  "appearance": "Appearance",
+  "whatsapp": "WhatsApp",
+  "templates": "Templates",
+  "quickReplies": "Quick replies",
+  "integrations": "Integrations",
+  "leadScore": "Lead Score",
+  "fields": "Fields & tags",
+  "deals": "Deals & currency",
+  "members": "Team members"
+}

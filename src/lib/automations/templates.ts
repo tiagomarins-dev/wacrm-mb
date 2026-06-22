@@ -21,8 +21,12 @@ export interface TemplateStepSeed {
 
 export interface AutomationTemplateDefinition {
   slug: TemplateSlug
+  /** name/description: inglês (fallback + seed do nome ao criar). */
   name: string
   description: string
+  /** Chaves i18n (namespace automations) para exibir o card traduzido. */
+  nameKey: string
+  descKey: string
   trigger_type: AutomationTriggerType
   trigger_config: AutomationTriggerConfig
   steps: TemplateStepSeed[]
@@ -33,6 +37,8 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
     slug: 'welcome_message',
     name: 'Welcome Message',
     description: 'Auto-reply to first-time contacts with a greeting.',
+    nameKey: 'tplWelcomeName',
+    descKey: 'tplWelcomeDesc',
     // first_inbound_message (added in PR #33) catches both brand-new
     // contacts AND manually-added/imported contacts on their first-ever
     // reply, which is what a user setting up a "welcome" automation
@@ -57,6 +63,8 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
     slug: 'out_of_office',
     name: 'Out of Office',
     description: 'Auto-reply during off-hours so nobody is left waiting.',
+    nameKey: 'tplOutOfOfficeName',
+    descKey: 'tplOutOfOfficeDesc',
     trigger_type: 'new_message_received',
     trigger_config: {},
     steps: [
@@ -82,6 +90,8 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
     slug: 'lead_qualifier',
     name: 'Lead Qualifier',
     description: 'Ask qualification questions to filter inbound leads.',
+    nameKey: 'tplLeadQualifierName',
+    descKey: 'tplLeadQualifierDesc',
     trigger_type: 'keyword_match',
     trigger_config: {
       keywords: ['pricing', 'quote', 'buy'],
@@ -109,6 +119,8 @@ export const AUTOMATION_TEMPLATES: Record<TemplateSlug, AutomationTemplateDefini
     slug: 'follow_up_reminder',
     name: 'Follow-up Reminder',
     description: 'Send a nudge if a contact has not replied within 24 hours.',
+    nameKey: 'tplFollowUpName',
+    descKey: 'tplFollowUpDesc',
     trigger_type: 'new_message_received',
     trigger_config: {},
     steps: [

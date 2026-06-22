@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Loader2, Plus, Pencil, Trash2, MessageSquare, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -38,6 +39,7 @@ const MESSAGE_MAX = 1000;
  * No inbox, digitar `/` abre o menu com essas respostas.
  */
 export function QuickRepliesManager() {
+  const { t } = useTranslation(['settingsQuickReplies', 'common']);
   const supabase = createClient();
   const { user, accountId, loading: authLoading } = useAuth();
   const canEditShared = useCan('edit-settings');
@@ -64,13 +66,13 @@ export function QuickRepliesManager() {
       .select('*')
       .order('shortcut', { ascending: true });
     if (error) {
-      toast.error('Failed to load quick replies');
+      toast.error(t('loadError'));
       setLoading(false);
       return;
     }
     setReplies(data ?? []);
     setLoading(false);
-  }, [supabase]);
+  }, [supabase, t]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -96,11 +98,11 @@ export function QuickRepliesManager() {
     const sc = shortcut.trim();
     const msg = message.trim();
     if (!sc || !msg) {
-      toast.error('Shortcut and message are required');
+      toast.error(t('requiredError'));
       return;
     }
     if (!user || !accountId) {
-      toast.error('Not authenticated');
+      toast.error(t('notAuthenticated'));
       return;
     }
     setSaving(true);
@@ -112,7 +114,7 @@ export function QuickRepliesManager() {
           .update({ shortcut: sc, message_text: msg })
           .eq('id', editingId);
         if (error) throw error;
-        toast.success('Quick reply updated');
+        toast.success(t('updatedToast'));
       } else {
         const { error } = await supabase.from('quick_replies').insert({
           account_id: accountId,
@@ -122,18 +124,18 @@ export function QuickRepliesManager() {
           message_text: msg,
         });
         if (error) throw error;
-        toast.success('Quick reply created');
+        toast.success(t('createdToast'));
       }
       resetForm();
       await fetchReplies();
     } catch (err) {
       const code = (err as { code?: string })?.code;
       if (code === '42501') {
-        toast.error('Only admins can manage shared quick replies.');
+        toast.error(t('adminOnlyManage'));
       } else if (code === '23505') {
-        toast.error('That shortcut already exists in this scope.');
+        toast.error(t('duplicateShortcut'));
       } else {
-        toast.error('Failed to save quick reply');
+        toast.error(t('saveError'));
       }
     } finally {
       setSaving(false);
@@ -150,11 +152,11 @@ export function QuickRepliesManager() {
     if (error) {
       toast.error(
         (error as { code?: string })?.code === '42501'
-          ? 'Only admins can delete shared quick replies.'
-          : 'Failed to delete quick reply',
+          ? t('adminOnlyDelete')
+          : t('deleteError'),
       );
     } else {
-      toast.success('Quick reply deleted');
+      toast.success(t('deletedToast'));
       if (editingId === deleteTarget.id) resetForm();
       await fetchReplies();
     }
@@ -173,13 +175,13 @@ export function QuickRepliesManager() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-foreground">
           <MessageSquare className="size-5 text-primary" />
-          Quick replies
+          {t('title')}
         </CardTitle>
         <CardDescription>
-          Canned responses agents insert by typing{' '}
-          <code className="rounded bg-muted px-1">/</code> in the inbox. Use{' '}
-          {QUICK_REPLY_VARS.map((v) => `{{${v}}}`).join(', ')} to auto-fill the
-          contact&apos;s details.
+          {t('descriptionPrefix')}{' '}
+          <code className="rounded bg-muted px-1">/</code> {t('descriptionMiddle')}{' '}
+          {QUICK_REPLY_VARS.map((v) => `{{${v}}}`).join(', ')}{' '}
+          {t('descriptionSuffix')}
         </CardDescription>
       </CardHeader>
 
@@ -189,20 +191,20 @@ export function QuickRepliesManager() {
           <div className="flex flex-col gap-3 sm:flex-row">
             <div className="sm:w-48">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Shortcut
+                {t('shortcutLabel')}
               </label>
               <Input
                 value={shortcut}
                 maxLength={SHORTCUT_MAX}
                 onChange={(e) => setShortcut(e.target.value)}
-                placeholder="ola"
+                placeholder={t('shortcutPlaceholder')}
                 className="border-border bg-background text-foreground"
               />
             </div>
             {/* Escopo: admin escolhe; na edição fica travado. */}
             <div className="flex-1">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">
-                Scope
+                {t('scopeLabel')}
               </label>
               <div className="flex gap-2">
                 {(canEditShared
@@ -222,7 +224,7 @@ export function QuickRepliesManager() {
                         : 'border-border text-muted-foreground',
                     )}
                   >
-                    {s === 'account' ? 'Shared (team)' : 'Personal'}
+                    {s === 'account' ? t('scopeShared') : t('scopePersonal')}
                   </Button>
                 ))}
               </div>
@@ -230,13 +232,13 @@ export function QuickRepliesManager() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">
-              Message
+              {t('messageLabel')}
             </label>
             <Textarea
               value={message}
               maxLength={MESSAGE_MAX}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder="Oi {{name}}, tudo bem? Como posso ajudar?"
+              placeholder={t('messagePlaceholder')}
               rows={3}
               className="border-border bg-background text-foreground"
             />
@@ -254,7 +256,7 @@ export function QuickRepliesManager() {
               ) : (
                 <Plus className="size-4" />
               )}
-              {editingId ? 'Save changes' : 'Add quick reply'}
+              {editingId ? t('saveChanges') : t('addReply')}
             </Button>
             {editingId && (
               <Button
@@ -263,7 +265,7 @@ export function QuickRepliesManager() {
                 className="border-border text-muted-foreground"
               >
                 <X className="size-4" />
-                Cancel
+                {t('cancel', { ns: 'common' })}
               </Button>
             )}
           </div>
@@ -277,16 +279,16 @@ export function QuickRepliesManager() {
         ) : (
           <div className="space-y-6">
             <QuickReplyList
-              title="Shared (team)"
-              empty="No shared quick replies yet."
+              title={t('sharedListTitle')}
+              empty={t('sharedListEmpty')}
               items={shared}
               canModify={canModify}
               onEdit={startEdit}
               onDelete={setDeleteTarget}
             />
             <QuickReplyList
-              title="My quick replies"
-              empty="No personal quick replies yet."
+              title={t('personalListTitle')}
+              empty={t('personalListEmpty')}
               items={personal}
               canModify={canModify}
               onEdit={startEdit}
@@ -304,14 +306,14 @@ export function QuickRepliesManager() {
         <DialogContent className="border-border bg-popover sm:max-w-sm">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">
-              Delete quick reply
+              {t('deleteTitle')}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
-              Delete{' '}
+              {t('deleteConfirmPrefix')}{' '}
               <span className="font-medium text-popover-foreground">
                 /{deleteTarget?.shortcut}
               </span>
-              ? This can&apos;t be undone.
+              {t('deleteConfirmSuffix')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -320,7 +322,7 @@ export function QuickRepliesManager() {
               onClick={() => setDeleteTarget(null)}
               className="border-border text-muted-foreground"
             >
-              Cancel
+              {t('cancel', { ns: 'common' })}
             </Button>
             <Button
               variant="destructive"
@@ -328,7 +330,7 @@ export function QuickRepliesManager() {
               disabled={deleting}
             >
               {deleting && <Loader2 className="size-4 animate-spin" />}
-              Delete
+              {t('delete', { ns: 'common' })}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -352,6 +354,7 @@ function QuickReplyList({
   onEdit: (r: QuickReply) => void;
   onDelete: (r: QuickReply) => void;
 }) {
+  const { t } = useTranslation(['settingsQuickReplies', 'common']);
   return (
     <div>
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -375,7 +378,7 @@ function QuickReplyList({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => onEdit(r)}
-                    aria-label="Edit quick reply"
+                    aria-label={t('editAria')}
                     className="text-muted-foreground hover:text-foreground"
                   >
                     <Pencil className="size-4" />
@@ -384,7 +387,7 @@ function QuickReplyList({
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => onDelete(r)}
-                    aria-label="Delete quick reply"
+                    aria-label={t('deleteAria')}
                     className="text-muted-foreground hover:text-red-400"
                   >
                     <Trash2 className="size-4" />

@@ -37,6 +37,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   applyNodeChanges,
   Background,
@@ -76,6 +77,7 @@ import {
 import { autoLayout, shouldAutoLayout } from "@/lib/flows/layout";
 import {
   NODE_META,
+  nodeLabel,
   summarizeNode,
   type BuilderNode,
   type NodeType,
@@ -110,9 +112,11 @@ const NODE_HEIGHT = 90;
 // ============================================================
 
 function FlowNodeCard({ data, selected }: NodeProps) {
+  // i18n: namespace do editor de flows.
+  const { t } = useTranslation(["flowEditor"]);
   const { node, isEntry, isFlashed } = data as NodeData;
   const meta = NODE_META[node.node_type];
-  const summary = summarizeNode(node);
+  const summary = summarizeNode(node, t);
   const Icon = meta.icon;
   const slots = outgoingSlots(node);
   // Start nodes are entry-only; nothing ever targets them, so they
@@ -149,11 +153,11 @@ function FlowNodeCard({ data, selected }: NodeProps) {
       <div className="flex items-center gap-2">
         <Icon className={cn("h-3.5 w-3.5 shrink-0", meta.color)} />
         <span className="truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          {meta.label}
+          {nodeLabel(node.node_type, t)}
         </span>
         {isEntry && (
           <span className="ml-auto rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-emerald-300">
-            Entry
+            {t("entry")}
           </span>
         )}
       </div>
@@ -224,6 +228,8 @@ export function FlowCanvas() {
 }
 
 function FlowCanvasInner() {
+  // i18n: namespace do editor de flows.
+  const { t } = useTranslation(["flowEditor"]);
   const {
     state,
     setState,
@@ -458,7 +464,7 @@ function FlowCanvasInner() {
   if (rfNodes.length === 0) {
     return (
       <div className="flex h-[60vh] flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-background text-sm text-muted-foreground">
-        <p>No nodes yet.</p>
+        <p>{t("noNodesYet")}</p>
         <CanvasAddNodeButton />
       </div>
     );
@@ -546,6 +552,8 @@ function NodeEditSheet({
   onDelete: () => void;
   onSetEntry: () => void;
 }) {
+  // i18n: namespace do editor de flows.
+  const { t } = useTranslation(["flowEditor", "common"]);
   // Sheet is controlled — opens when a node is selected, closes via
   // Esc / overlay / close button (all delegated to onClose).
   const open = node !== null;
@@ -567,10 +575,10 @@ function NodeEditSheet({
         <SheetHeader className="border-b border-border px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-popover-foreground">
             <Icon className={cn("h-4 w-4 shrink-0", meta.color)} />
-            <span>{meta.label}</span>
+            <span>{nodeLabel(node.node_type, t)}</span>
             {isEntry && (
               <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-emerald-300">
-                Entry
+                {t("entry")}
               </span>
             )}
           </SheetTitle>
@@ -591,7 +599,7 @@ function NodeEditSheet({
         <SheetFooter className="border-t border-border px-5 py-3 sm:flex-row sm:justify-between">
           {!isEntry ? (
             <Button variant="ghost" size="sm" onClick={onSetEntry}>
-              Set as entry
+              {t("setAsEntry")}
             </Button>
           ) : (
             <span />
@@ -603,7 +611,7 @@ function NodeEditSheet({
             className="text-red-400 hover:bg-red-500/10 hover:text-red-300"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Delete node
+            {t("deleteNode")}
           </Button>
         </SheetFooter>
       </SheetContent>
@@ -633,6 +641,8 @@ const ADD_NODE_TYPES: NodeType[] = [
 ];
 
 function CanvasAddNodeButton() {
+  // i18n: namespace do editor de flows.
+  const { t } = useTranslation(["flowEditor"]);
   const reactFlow = useReactFlow();
   const { addNode, updateNodePosition } = useFlowEditor();
 
@@ -660,19 +670,20 @@ function CanvasAddNodeButton() {
     <DropdownMenu>
       <DropdownMenuTrigger
         className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-lg transition-colors hover:bg-muted"
-        aria-label="Add node"
+        aria-label={t("addNode")}
       >
         <Plus className="h-3.5 w-3.5" />
-        Add node
+        {t("addNode")}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="border-border bg-popover">
-        {ADD_NODE_TYPES.map((t) => {
-          const meta = NODE_META[t];
+        {/* `.map((type) => …)` — param renomeado para não sombrear o `t` do i18n. */}
+        {ADD_NODE_TYPES.map((type) => {
+          const meta = NODE_META[type];
           const Icon = meta.icon;
           return (
-            <DropdownMenuItem key={t} onClick={() => handleAdd(t)}>
+            <DropdownMenuItem key={type} onClick={() => handleAdd(type)}>
               <Icon className={cn("h-3.5 w-3.5", meta.color)} />
-              {meta.label}
+              {nodeLabel(type, t)}
             </DropdownMenuItem>
           );
         })}

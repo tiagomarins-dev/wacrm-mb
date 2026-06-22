@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 import { ThemeProvider } from "@/hooks/use-theme";
+import { LanguageProvider } from "@/hooks/use-language";
+import { resolveLanguageFromCookie } from "@/lib/i18n/server";
 import { ThemedToaster } from "@/components/themed-toaster";
 import {
   DEFAULT_FONT_SCALE,
@@ -85,14 +87,17 @@ const THEME_BOOT_SCRIPT = `
 })();
 `;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Idioma vem do cookie (legível no server) → o 1º paint já sai no idioma
+  // certo, sem flash, e o client hidrata no mesmo idioma (zero mismatch).
+  const lang = await resolveLanguageFromCookie();
   return (
     <html
-      lang="en"
+      lang={lang}
       data-theme={DEFAULT_THEME}
       data-mode={DEFAULT_MODE}
       data-font-scale={DEFAULT_FONT_SCALE}
@@ -114,10 +119,12 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full bg-background text-foreground font-sans">
-        <ThemeProvider>
-          {children}
-          <ThemedToaster />
-        </ThemeProvider>
+        <LanguageProvider initialLanguage={lang}>
+          <ThemeProvider>
+            {children}
+            <ThemedToaster />
+          </ThemeProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

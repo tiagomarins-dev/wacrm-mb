@@ -2,6 +2,7 @@
 
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import { useTranslation } from "react-i18next"
 import { Loader2 } from "lucide-react"
 
 import {
@@ -18,6 +19,7 @@ export default function EditAutomationPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = use(params)
+  const { t } = useTranslation(["automations", "common"])
   const router = useRouter()
   const [initial, setInitial] = useState<BuilderInitial | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -27,7 +29,7 @@ export default function EditAutomationPage({
     async function load() {
       const res = await fetch(`/api/automations/${id}`)
       if (!res.ok) {
-        if (!cancelled) setError(`Failed to load (${res.status})`)
+        if (!cancelled) setError(t("editLoadFailed", { status: res.status }))
         return
       }
       const body = await res.json()
@@ -46,7 +48,7 @@ export default function EditAutomationPage({
     return () => {
       cancelled = true
     }
-  }, [id])
+  }, [id, t])
 
   if (error) {
     return (
@@ -56,7 +58,7 @@ export default function EditAutomationPage({
           onClick={() => router.push("/automations")}
           className="text-sm text-primary hover:text-primary/80"
         >
-          Back to Automations
+          {t("backToAutomations")}
         </button>
       </div>
     )

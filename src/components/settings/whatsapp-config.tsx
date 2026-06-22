@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   Eye,
@@ -29,6 +30,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from '@/components/ui/accordion';
+import { useFormat } from '@/lib/i18n/format';
 import type { WhatsAppConfig as WhatsAppConfigType } from '@/types';
 
 const MASKED_TOKEN = '••••••••••••••••';
@@ -37,6 +39,10 @@ type ConnectionStatus = 'connected' | 'disconnected' | 'unknown';
 type ResetReason = 'token_corrupted' | 'meta_api_error' | null;
 
 export function WhatsAppConfig() {
+  // i18n: strings da tela vêm de `settingsWhatsapp`; rótulos genéricos de `common`.
+  const { t } = useTranslation(['settingsWhatsapp', 'common']);
+  // Formatação de data/hora pelo idioma ativo (substitui o toLocaleString hardcoded).
+  const { formatDateTime } = useFormat();
   const supabase = createClient();
   // After multi-user, whatsapp_config is one-row-per-account, not
   // one-row-per-user. We pull `accountId` straight off the auth
@@ -167,12 +173,12 @@ export function WhatsAppConfig() {
         }
       } catch (err) {
         console.error('loadConnections error:', err);
-        toast.error('Failed to load WhatsApp configuration');
+        toast.error(t('loadConfigError'));
       } finally {
         setLoading(false);
       }
     },
-    [supabase, selectedId, populateForm],
+    [supabase, selectedId, populateForm, t],
   );
 
   // Seleciona uma conexão existente para edição, ou null para "adicionar nova".
@@ -201,11 +207,11 @@ export function WhatsAppConfig() {
 
   async function handleSave() {
     if (!phoneNumberId.trim()) {
-      toast.error('Phone Number ID is required');
+      toast.error(t('toasts.phoneNumberIdRequired'));
       return;
     }
     if (!config && (!accessToken.trim() || !tokenEdited)) {
-      toast.error('Access Token is required for initial setup');
+      toast.error(t('toasts.accessTokenRequiredInitial'));
       return;
     }
 
@@ -236,7 +242,7 @@ export function WhatsAppConfig() {
         // server. But our POST handler requires an access_token to verify
         // with Meta. If the user didn't change the token, we need to signal
         // that. Simplest: require token re-entry if they're updating.
-        toast.error('Please re-enter the Access Token to save changes');
+        toast.error(t('toasts.reenterTokenToSave'));
         setSaving(false);
         return;
       }
@@ -250,7 +256,7 @@ export function WhatsAppConfig() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to save configuration');
+        toast.error(data.error || t('toasts.saveConfigError'));
         setSaving(false);
         return;
       }
@@ -263,7 +269,7 @@ export function WhatsAppConfig() {
       //                         is human-readable from Meta.
       if (data.registered === false && data.registration_error) {
         toast.error(
-          `Saved, but Meta couldn't register the number: ${data.registration_error}`,
+          t('toasts.savedButNotRegistered', { error: data.registration_error }),
           { duration: 12000 },
         );
       } else if (data.registration_skipped) {
@@ -271,16 +277,13 @@ export function WhatsAppConfig() {
         // because no PIN was supplied (e.g. a Meta test number).
         // Don't claim the number is "Live" — point at the
         // Registration status banner instead.
-        toast.success(
-          'Credentials saved and verified. Inbound registration was skipped (no PIN) — see Registration status below.',
-          { duration: 10000 },
-        );
+        toast.success(t('toasts.savedRegistrationSkipped'), { duration: 10000 });
         setPin('');
       } else {
         toast.success(
           data.phone_info?.verified_name
-            ? `Live — ${data.phone_info.verified_name} can now receive events.`
-            : 'WhatsApp connected. Events will start flowing within a minute.',
+            ? t('toasts.connectedLive', { name: data.phone_info.verified_name })
+            : t('toasts.connectedGeneric'),
         );
         // Clear the PIN so subsequent saves don't accidentally
         // re-register (which would void the active subscription if
@@ -294,7 +297,7 @@ export function WhatsAppConfig() {
       window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
     } catch (err) {
       console.error('Save error:', err);
-      toast.error('Failed to save configuration');
+      toast.error(t('toasts.saveConfigError'));
     } finally {
       setSaving(false);
     }
@@ -312,19 +315,19 @@ export function WhatsAppConfig() {
         setStatusMessage('');
         toast.success(
           payload.phone_info?.verified_name
-            ? `Connected to ${payload.phone_info.verified_name}`
-            : 'API connection successful'
+            ? t('toasts.connectedToName', { name: payload.phone_info.verified_name })
+            : t('toasts.apiConnectionSuccess')
         );
       } else {
         setConnectionStatus('disconnected');
         setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
         setStatusMessage(payload.message || '');
-        toast.error(payload.message || 'API connection failed');
+        toast.error(payload.message || t('toasts.apiConnectionFailed'));
       }
     } catch (err) {
       console.error('Test connection error:', err);
       setConnectionStatus('disconnected');
-      toast.error('Connection test failed. Check network and try again.');
+      toast.error(t('toasts.connectionTestFailed'));
     } finally {
       setTesting(false);
     }
@@ -340,24 +343,21 @@ export function WhatsAppConfig() {
       const data = (await res.json()) as RegistrationProbe;
       setRegistrationProbe(data);
       if (data.live) {
-        toast.success('Number is fully wired — Meta is delivering events.');
+        toast.success(t('toasts.registrationLive'));
       } else {
-        toast.error(
-          'Number is not fully registered. See the checks below for which step failed.',
-          { duration: 8000 },
-        );
+        toast.error(t('toasts.registrationNotComplete'), { duration: 8000 });
       }
       if (accountId) await loadConnections(accountId);
     } catch (err) {
       console.error('verify-registration failed:', err);
-      toast.error('Could not reach the verification endpoint.');
+      toast.error(t('toasts.verificationEndpointError'));
     } finally {
       setVerifyingRegistration(false);
     }
   }
 
   async function handleReset() {
-    if (!confirm('This will disconnect this WhatsApp connection so you can re-enter it. Continue?')) {
+    if (!confirm(t('resetConfirm'))) {
       return;
     }
 
@@ -372,16 +372,16 @@ export function WhatsAppConfig() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to reset configuration');
+        toast.error(data.error || t('toasts.resetConfigError'));
         return;
       }
 
-      toast.success('Connection reset. You can now re-enter the credentials.');
+      toast.success(t('toasts.connectionReset'));
       if (accountId) await loadConnections(accountId);
       window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
     } catch (err) {
       console.error('Reset error:', err);
-      toast.error('Failed to reset configuration');
+      toast.error(t('toasts.resetConfigError'));
     } finally {
       setResetting(false);
     }
@@ -389,15 +389,15 @@ export function WhatsAppConfig() {
 
   function handleCopyWebhookUrl() {
     navigator.clipboard.writeText(webhookUrl);
-    toast.success('Webhook URL copied to clipboard');
+    toast.success(t('toasts.webhookUrlCopied'));
   }
 
   if (loading) {
     return (
       <section className="animate-in fade-in-50 duration-200">
         <SettingsPanelHead
-          title="WhatsApp connection"
-          description="Connect your Meta WhatsApp Business API. Credentials, webhook, and setup steps all live here."
+          title={t('panelTitle')}
+          description={t('panelDescription')}
         />
         <div className="flex items-center justify-center py-12">
           <Loader2 className="size-6 animate-spin text-primary" />
@@ -411,8 +411,8 @@ export function WhatsAppConfig() {
   return (
     <section className="animate-in fade-in-50 duration-200">
       <SettingsPanelHead
-        title="WhatsApp connection"
-        description="Connect your Meta WhatsApp Business API. Credentials, webhook, and setup steps all live here."
+        title={t('panelTitle')}
+        description={t('panelDescription')}
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
       {/* Main config form */}
@@ -424,7 +424,7 @@ export function WhatsAppConfig() {
               <AlertTriangle className="size-5 text-amber-400 mt-0.5 shrink-0" />
               <div className="flex-1">
                 <AlertTitle className="text-amber-200 mb-1">
-                  Stored token can&apos;t be decrypted
+                  {t('resetBanner.title')}
                 </AlertTitle>
                 <AlertDescription className="text-amber-100/80 text-sm">
                   {statusMessage}
@@ -438,12 +438,12 @@ export function WhatsAppConfig() {
                   {resetting ? (
                     <>
                       <Loader2 className="size-4 animate-spin" />
-                      Resetting...
+                      {t('resetBanner.resetting')}
                     </>
                   ) : (
                     <>
                       <RotateCcw className="size-4" />
-                      Reset Configuration
+                      {t('resetBanner.resetConfiguration')}
                     </>
                   )}
                 </Button>
@@ -461,14 +461,13 @@ export function WhatsAppConfig() {
               <XCircle className="size-4 text-red-500" />
             )}
             <AlertTitle className="text-foreground mb-0">
-              {connectionStatus === 'connected' ? 'Credentials valid' : 'Not Connected'}
+              {connectionStatus === 'connected' ? t('status.credentialsValid') : t('status.notConnected')}
             </AlertTitle>
           </div>
           <AlertDescription className="text-muted-foreground">
             {connectionStatus === 'connected'
-              ? 'Your access token authenticates with Meta. See Registration status below for whether webhooks are actually wired.'
-              : statusMessage ||
-                'Configure your Meta API credentials below to connect your WhatsApp Business account.'}
+              ? t('status.credentialsValidDesc')
+              : statusMessage || t('status.configurePrompt')}
           </AlertDescription>
         </Alert>
 
@@ -498,8 +497,8 @@ export function WhatsAppConfig() {
                   }
                 >
                   {isRegistered
-                    ? 'Registered — Meta will deliver events to wacrm'
-                    : 'Not registered — Meta will not deliver events'}
+                    ? t('registration.registeredTitle')
+                    : t('registration.notRegisteredTitle')}
                 </AlertTitle>
               </div>
               <Button
@@ -514,44 +513,40 @@ export function WhatsAppConfig() {
                 ) : (
                   <Zap className="size-3.5" />
                 )}
-                Verify with Meta
+                {t('registration.verifyWithMeta')}
               </Button>
             </div>
             <AlertDescription className="text-muted-foreground mt-2 text-xs leading-relaxed">
               {isRegistered ? (
                 <>
-                  Subscribed since{' '}
-                  {config.registered_at
-                    ? new Date(config.registered_at).toLocaleString()
-                    : 'unknown'}
-                  . Click <strong>Verify with Meta</strong> if events
-                  stop arriving.
+                  {t('registration.subscribedSince', {
+                    date: config.registered_at
+                      ? formatDateTime(config.registered_at)
+                      : t('registration.subscribedSinceUnknown'),
+                  })}
+                  {t('registration.clickVerifyPrefix')}
+                  <strong>{t('registration.verifyWithMeta')}</strong>
+                  {t('registration.clickVerifySuffix')}
                 </>
               ) : lastRegistrationError ? (
                 <>
-                  Last attempt failed with:{' '}
+                  {t('registration.lastAttemptPrefix')}
                   <span className="text-red-300">
                     &quot;{lastRegistrationError}&quot;
                   </span>
-                  . Enter (or correct) the 2-step PIN below and click
-                  Save Configuration to retry.
+                  {t('registration.lastAttemptSuffix')}
                 </>
               ) : (
-                <>
-                  This number was saved before registration tracking
-                  existed, or registration was skipped. Enter the
-                  2-step PIN below and click Save Configuration to
-                  subscribe it.
-                </>
+                <>{t('registration.savedBeforeTracking')}</>
               )}
             </AlertDescription>
 
             {registrationProbe && (
               <div className="mt-3 rounded border border-border bg-card/60 px-3 py-2 space-y-1.5 text-[11px]">
                 <p className="font-medium text-foreground">
-                  Diagnostic — last run: {' '}
+                  {t('registration.diagnosticLastRun')} {' '}
                   <span className={registrationProbe.live ? 'text-emerald-400' : 'text-amber-400'}>
-                    {registrationProbe.live ? 'live' : 'not live'}
+                    {registrationProbe.live ? t('registration.diagnosticLive') : t('registration.diagnosticNotLive')}
                   </span>
                 </p>
                 <ul className="space-y-0.5 text-muted-foreground">
@@ -586,10 +581,9 @@ export function WhatsAppConfig() {
         {connections.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-foreground">Connected numbers</CardTitle>
+              <CardTitle className="text-foreground">{t('connections.title')}</CardTitle>
               <CardDescription className="text-muted-foreground">
-                Select a number to edit, or add another. The header switcher
-                changes which number the app is viewing.
+                {t('connections.description')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -609,7 +603,7 @@ export function WhatsAppConfig() {
                     <span className="font-mono">{c.phone_number_id}</span>
                     {c.is_primary && (
                       <span className="rounded bg-primary/20 px-1 text-[10px] uppercase text-primary">
-                        primary
+                        {t('connections.primary')}
                       </span>
                     )}
                     {c.status === 'disconnected' && (
@@ -627,7 +621,7 @@ export function WhatsAppConfig() {
                       : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40')
                   }
                 >
-                  + Add number
+                  {t('connections.addNumber')}
                 </button>
               </div>
             </CardContent>
@@ -638,17 +632,17 @@ export function WhatsAppConfig() {
         <Card>
           <CardHeader>
             <CardTitle className="text-foreground">
-              {selectedId ? 'Edit connection' : 'API Credentials'}
+              {selectedId ? t('credentials.editTitle') : t('credentials.title')}
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              Enter your Meta WhatsApp Business API credentials.
+              {t('credentials.description')}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Phone Number ID</Label>
+              <Label className="text-muted-foreground">{t('credentials.phoneNumberIdLabel')}</Label>
               <Input
-                placeholder="e.g. 100234567890123"
+                placeholder={t('credentials.phoneNumberIdPlaceholder')}
                 value={phoneNumberId}
                 onChange={(e) => setPhoneNumberId(e.target.value)}
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
@@ -656,9 +650,9 @@ export function WhatsAppConfig() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">WhatsApp Business Account ID</Label>
+              <Label className="text-muted-foreground">{t('credentials.wabaIdLabel')}</Label>
               <Input
-                placeholder="e.g. 100234567890456"
+                placeholder={t('credentials.wabaIdPlaceholder')}
                 value={wabaId}
                 onChange={(e) => setWabaId(e.target.value)}
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
@@ -666,11 +660,11 @@ export function WhatsAppConfig() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Permanent Access Token</Label>
+              <Label className="text-muted-foreground">{t('credentials.accessTokenLabel')}</Label>
               <div className="relative">
                 <Input
                   type={showToken ? 'text' : 'password'}
-                  placeholder="Enter your access token"
+                  placeholder={t('credentials.accessTokenPlaceholder')}
                   value={accessToken}
                   onChange={(e) => {
                     setAccessToken(e.target.value);
@@ -694,34 +688,34 @@ export function WhatsAppConfig() {
               </div>
               {config && !tokenEdited && (
                 <p className="text-xs text-muted-foreground">
-                  Token is hidden for security. Re-enter it to update configuration.
+                  {t('credentials.tokenHiddenHint')}
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Webhook Verify Token</Label>
+              <Label className="text-muted-foreground">{t('credentials.verifyTokenLabel')}</Label>
               <Input
-                placeholder="Create a custom verify token"
+                placeholder={t('credentials.verifyTokenPlaceholder')}
                 value={verifyToken}
                 onChange={(e) => setVerifyToken(e.target.value)}
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
               />
               <p className="text-xs text-muted-foreground">
-                A custom string you create. Must match the token you set in Meta webhook settings.
+                {t('credentials.verifyTokenHint')}
               </p>
             </div>
 
             <div className="space-y-2">
               <Label className="text-muted-foreground">
-                Two-step verification PIN
-                <span className="ml-1 text-muted-foreground">(optional)</span>
+                {t('credentials.pinLabel')}
+                <span className="ml-1 text-muted-foreground">{t('credentials.pinOptional')}</span>
               </Label>
               <Input
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
-                placeholder="6-digit PIN from Meta WhatsApp Manager"
+                placeholder={t('credentials.pinPlaceholder')}
                 value={pin}
                 onChange={(e) =>
                   setPin(e.target.value.replace(/\D/g, '').slice(0, 6))
@@ -729,20 +723,17 @@ export function WhatsAppConfig() {
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground tracking-widest"
               />
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Needed only to wire <strong className="text-muted-foreground">inbound</strong> messages
-                for a <strong className="text-muted-foreground">production</strong> number. Set it in{' '}
+                {t('credentials.pinHintPart1')}
+                <strong className="text-muted-foreground">{t('credentials.pinHintInbound')}</strong>
+                {t('credentials.pinHintPart2')}
+                <strong className="text-muted-foreground">{t('credentials.pinHintProduction')}</strong>
+                {t('credentials.pinHintPart3')}
                 <strong className="text-muted-foreground">
-                  Meta Business Manager → WhatsApp Accounts → Phone
-                  Numbers → Two-step verification
+                  {t('credentials.pinHintMetaPath')}
                 </strong>
-                , then paste it here so wacrm can subscribe the number —
-                otherwise Meta routes inbound events to whichever app
-                last claimed it (the symptom that hits second numbers
-                under a shared WABA).{' '}
-                <strong className="text-muted-foreground">Meta test numbers</strong> have no
-                PIN and are pre-registered — leave this blank for them.
-                Leaving it blank also keeps an existing registration
-                untouched.
+                {t('credentials.pinHintPart4')}
+                <strong className="text-muted-foreground">{t('credentials.pinHintMetaTestNumbers')}</strong>
+                {t('credentials.pinHintPart5')}
               </p>
             </div>
           </CardContent>
@@ -751,14 +742,14 @@ export function WhatsAppConfig() {
         {/* Webhook URL */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">Webhook Configuration</CardTitle>
+            <CardTitle className="text-foreground">{t('webhook.title')}</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Use this URL as your webhook callback in the Meta App Dashboard.
+              {t('webhook.description')}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Webhook Callback URL</Label>
+              <Label className="text-muted-foreground">{t('webhook.callbackUrlLabel')}</Label>
               <div className="flex gap-2">
                 <Input
                   readOnly
@@ -788,10 +779,10 @@ export function WhatsAppConfig() {
             {saving ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Saving...
+                {t('actions.saving')}
               </>
             ) : (
-              'Save Configuration'
+              t('actions.saveConfiguration')
             )}
           </Button>
           <Button
@@ -803,12 +794,12 @@ export function WhatsAppConfig() {
             {testing ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Testing...
+                {t('actions.testing')}
               </>
             ) : (
               <>
                 <Zap className="size-4" />
-                Test API Connection
+                {t('actions.testApiConnection')}
               </>
             )}
           </Button>
@@ -822,12 +813,12 @@ export function WhatsAppConfig() {
               {resetting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Resetting...
+                  {t('resetBanner.resetting')}
                 </>
               ) : (
                 <>
                   <RotateCcw className="size-4" />
-                  Reset Configuration
+                  {t('resetBanner.resetConfiguration')}
                 </>
               )}
             </Button>
@@ -839,9 +830,9 @@ export function WhatsAppConfig() {
       <div>
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground text-base">Setup Instructions</CardTitle>
+            <CardTitle className="text-foreground text-base">{t('setup.title')}</CardTitle>
             <CardDescription className="text-muted-foreground">
-              Follow these steps to connect your WhatsApp Business API.
+              {t('setup.description')}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -850,15 +841,15 @@ export function WhatsAppConfig() {
                 <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
                   <span className="flex items-center gap-2">
                     <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
-                    Create a Meta App
+                    {t('setup.step1Title')}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>Go to <span className="text-primary">developers.facebook.com</span></li>
-                    <li>Click &quot;My Apps&quot; and then &quot;Create App&quot;</li>
-                    <li>Select &quot;Business&quot; as the app type</li>
-                    <li>Fill in app details and create</li>
+                    <li>{t('setup.step1Item1Prefix')}<span className="text-primary">{t('setup.step1Item1Link')}</span></li>
+                    <li>{t('setup.step1Item2')}</li>
+                    <li>{t('setup.step1Item3')}</li>
+                    <li>{t('setup.step1Item4')}</li>
                   </ol>
                 </AccordionContent>
               </AccordionItem>
@@ -867,14 +858,14 @@ export function WhatsAppConfig() {
                 <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
                   <span className="flex items-center gap-2">
                     <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">2</span>
-                    Add WhatsApp Product
+                    {t('setup.step2Title')}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>In your app dashboard, click &quot;Add Product&quot;</li>
-                    <li>Find &quot;WhatsApp&quot; and click &quot;Set Up&quot;</li>
-                    <li>Follow the setup wizard to link your business</li>
+                    <li>{t('setup.step2Item1')}</li>
+                    <li>{t('setup.step2Item2')}</li>
+                    <li>{t('setup.step2Item3')}</li>
                   </ol>
                 </AccordionContent>
               </AccordionItem>
@@ -883,15 +874,15 @@ export function WhatsAppConfig() {
                 <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
                   <span className="flex items-center gap-2">
                     <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">3</span>
-                    Get API Credentials
+                    {t('setup.step3Title')}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>Go to WhatsApp &gt; API Setup</li>
-                    <li>Copy your <strong className="text-foreground">Phone Number ID</strong></li>
-                    <li>Copy your <strong className="text-foreground">WhatsApp Business Account ID</strong></li>
-                    <li>Generate a <strong className="text-foreground">Permanent Access Token</strong> from Business Settings &gt; System Users</li>
+                    <li>{t('setup.step3Item1')}</li>
+                    <li>{t('setup.step3Item2Prefix')}<strong className="text-foreground">{t('setup.step3Item2Strong')}</strong></li>
+                    <li>{t('setup.step3Item3Prefix')}<strong className="text-foreground">{t('setup.step3Item3Strong')}</strong></li>
+                    <li>{t('setup.step3Item4Prefix')}<strong className="text-foreground">{t('setup.step3Item4Strong')}</strong>{t('setup.step3Item4Suffix')}</li>
                   </ol>
                 </AccordionContent>
               </AccordionItem>
@@ -900,16 +891,16 @@ export function WhatsAppConfig() {
                 <AccordionTrigger className="text-muted-foreground hover:text-foreground hover:no-underline">
                   <span className="flex items-center gap-2">
                     <span className="flex size-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">4</span>
-                    Configure Webhooks
+                    {t('setup.step4Title')}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
                   <ol className="list-decimal list-inside space-y-1 text-sm">
-                    <li>Go to WhatsApp &gt; Configuration</li>
-                    <li>Click &quot;Edit&quot; on the Webhook section</li>
-                    <li>Paste the <strong className="text-foreground">Webhook Callback URL</strong> from above</li>
-                    <li>Enter the same <strong className="text-foreground">Verify Token</strong> you set here</li>
-                    <li>Subscribe to &quot;messages&quot; webhook field</li>
+                    <li>{t('setup.step4Item1')}</li>
+                    <li>{t('setup.step4Item2')}</li>
+                    <li>{t('setup.step4Item3Prefix')}<strong className="text-foreground">{t('setup.step4Item3Strong')}</strong>{t('setup.step4Item3Suffix')}</li>
+                    <li>{t('setup.step4Item4Prefix')}<strong className="text-foreground">{t('setup.step4Item4Strong')}</strong>{t('setup.step4Item4Suffix')}</li>
+                    <li>{t('setup.step4Item5')}</li>
                   </ol>
                 </AccordionContent>
               </AccordionItem>
@@ -923,7 +914,7 @@ export function WhatsAppConfig() {
                 className="inline-flex items-center gap-1.5 text-sm text-primary hover:text-primary/80 transition-colors"
               >
                 <ExternalLink className="size-3.5" />
-                Meta WhatsApp API Documentation
+                {t('setup.docsLink')}
               </a>
             </div>
           </CardContent>

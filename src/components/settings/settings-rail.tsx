@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
@@ -34,6 +35,8 @@ export function SettingsRail({
   const activeRef = useRef<HTMLButtonElement>(null);
   // Seções adminOnly (ex: Integrations) só aparecem para admin+.
   const { canEditSettings } = useAuth();
+  // Rótulos das abas e cabeçalhos de grupo via i18n (namespace settingsNav).
+  const { t } = useTranslation(['settingsNav', 'common']);
 
   // When horizontal (mobile), keep the active chip in view. On desktop
   // the rail is a static column, so skip.
@@ -49,14 +52,14 @@ export function SettingsRail({
 
   return (
     <nav
-      aria-label="Settings sections"
+      aria-label={t('sectionsAria')}
       className={cn(
         'flex gap-1 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
         'border-b border-border',
         'lg:sticky lg:top-0 lg:flex-col lg:overflow-visible lg:border-b-0 lg:pb-0',
       )}
     >
-      {RAIL_GROUPS.map(({ label, group }) => {
+      {RAIL_GROUPS.map(({ labelKey, group }) => {
         const items = SETTINGS_SECTIONS.filter(
           (s) =>
             SECTION_META[s].group === group &&
@@ -67,9 +70,9 @@ export function SettingsRail({
             key={group}
             className="flex shrink-0 gap-1 lg:flex-col lg:gap-0.5"
           >
-            {label ? (
+            {labelKey ? (
               <div className="hidden px-3 pt-3.5 pb-1.5 text-[11px] font-semibold tracking-[0.09em] text-muted-foreground uppercase lg:block">
-                {label}
+                {t(labelKey, { defaultValue: labelKey })}
               </div>
             ) : null}
             {items.map((s) => {
@@ -92,7 +95,9 @@ export function SettingsRail({
                   )}
                 >
                   <Icon className="size-4 shrink-0" />
-                  <span className="flex-1">{meta.label}</span>
+                  <span className="flex-1">
+                    {t(meta.labelKey, { defaultValue: meta.labelKey })}
+                  </span>
                   {hints?.[s] != null ? (
                     <span
                       className={cn(

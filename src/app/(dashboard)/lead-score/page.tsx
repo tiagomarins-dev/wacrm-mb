@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useRouter } from "next/navigation";
 import { Loader2, TrendingUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { useFormat } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import {
   Table,
@@ -19,18 +21,34 @@ import type { LeadScoreRow } from "@/types";
 
 const WINDOWS = [7, 14, 30] as const;
 
-// Formata o "último contato" de forma curta (data local) ou "—".
-function fmtLast(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
-}
-
 // Página de ranking de leads por pontuação de engajamento. Lê a RPC
 // `lead_scores` (calcula ao vivo na janela escolhida) e lista desc.
 export default function LeadScorePage() {
+  const { t } = useTranslation(["leadScore", "common"]);
+  const { formatDate } = useFormat();
   const supabase = createClient();
   const router = useRouter();
+
+  // Mapeia a classificação (valor pt-BR vindo da RPC) para a chave i18n
+  // correspondente, traduzindo o rótulo da pílula sem mexer nas cores.
+  const classificationLabel = (value: string): string => {
+    const keys: Record<string, string> = {
+      quente: "leadScore:classificationHot",
+      morno: "leadScore:classificationWarm",
+      frio: "leadScore:classificationCold",
+    };
+    const key = keys[value] ?? "leadScore:classificationCold";
+    return t(key);
+  };
+
+  // Formata o "último contato" de forma curta (data localizada) ou "—".
+  function fmtLast(iso: string | null): string {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? "—"
+      : formatDate(d, { day: "numeric", month: "numeric", year: "numeric" });
+  }
   const [rows, setRows] = useState<LeadScoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [windowDays, setWindowDays] = useState<number>(30);
@@ -74,10 +92,10 @@ export default function LeadScorePage() {
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold text-foreground">
             <TrendingUp className="size-5 text-primary" />
-            Lead Score
+            {t("leadScore:title")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Ranking de leads por engajamento na janela escolhida.
+            {t("leadScore:subtitle")}
           </p>
         </div>
         {/* Seletor de janela (espelha o padrão do dashboard) */}
@@ -94,7 +112,7 @@ export default function LeadScorePage() {
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {w} dias
+              {t("leadScore:windowDays", { count: w })}
             </button>
           ))}
         </div>
@@ -105,13 +123,13 @@ export default function LeadScorePage() {
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
               <TableHead className="w-10 text-muted-foreground">#</TableHead>
-              <TableHead className="text-muted-foreground">Lead</TableHead>
-              <TableHead className="text-muted-foreground">Score</TableHead>
-              <TableHead className="text-muted-foreground">Classificação</TableHead>
-              <TableHead className="text-muted-foreground">Msgs</TableHead>
-              <TableHead className="text-muted-foreground">Botões</TableHead>
-              <TableHead className="text-muted-foreground">Cliques</TableHead>
-              <TableHead className="text-muted-foreground">Último contato</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colLead")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colScore")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colClassification")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colMessages")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colButtons")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colClicks")}</TableHead>
+              <TableHead className="text-muted-foreground">{t("leadScore:colLastContact")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -124,7 +142,7 @@ export default function LeadScorePage() {
             ) : rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum lead com interação na janela.
+                  {t("leadScore:empty")}
                 </TableCell>
               </TableRow>
             ) : (
@@ -136,12 +154,15 @@ export default function LeadScorePage() {
                 >
                   <TableCell className="text-muted-foreground">{i + 1}</TableCell>
                   <TableCell>
-                    <div className="font-medium text-foreground">{r.name || "Sem nome"}</div>
+                    <div className="font-medium text-foreground">{r.name || t("leadScore:unnamed")}</div>
                     <div className="font-mono text-xs text-muted-foreground">{r.phone}</div>
                   </TableCell>
                   <TableCell className="font-semibold text-foreground">{r.score}</TableCell>
                   <TableCell>
-                    <ClassificationBadge value={r.classification} />
+                    <ClassificationBadge
+                      value={r.classification}
+                      label={classificationLabel(r.classification)}
+                    />
                   </TableCell>
                   <TableCell className="text-muted-foreground">{r.msg_count}</TableCell>
                   <TableCell className="text-muted-foreground">{r.button_count}</TableCell>
@@ -149,7 +170,7 @@ export default function LeadScorePage() {
                     {r.link_count}
                     {r.sale_count > 0 ? (
                       <span className="ml-1 text-[10px] text-emerald-400">
-                        ({r.sale_count} venda)
+                        {t("leadScore:saleSuffix", { count: r.sale_count })}
                       </span>
                     ) : null}
                   </TableCell>

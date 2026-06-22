@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -60,6 +61,35 @@ const categoryColors: Record<string, string> = {
   Marketing: 'bg-purple-600/20 text-purple-400 border-purple-600/30',
   Utility: 'bg-blue-600/20 text-blue-400 border-blue-600/30',
   Authentication: 'bg-amber-600/20 text-amber-400 border-amber-600/30',
+};
+
+// Mapeia a categoria (enum da Meta) para a chave i18n do rótulo de UI.
+const categoryLabelKeys: Record<string, string> = {
+  Marketing: 'categoryMarketing',
+  Utility: 'categoryUtility',
+  Authentication: 'categoryAuthentication',
+};
+
+// Mapeia o status (enum da Meta) para a chave i18n do rótulo do badge.
+// As classes de cor continuam vindo de `templateStatusConfig` (lib compartilhada).
+const statusLabelKeys: Record<string, string> = {
+  DRAFT: 'statusDraft',
+  PENDING: 'statusPending',
+  APPROVED: 'statusApproved',
+  REJECTED: 'statusRejected',
+  PAUSED: 'statusPaused',
+  DISABLED: 'statusDisabled',
+  IN_APPEAL: 'statusInAppeal',
+  PENDING_DELETION: 'statusPendingDeletion',
+};
+
+// Mapeia o formato de cabeçalho para a chave i18n do item do Select.
+const headerFormatLabelKeys: Record<HeaderFormat, string> = {
+  none: 'headerFormatNone',
+  text: 'headerFormatText',
+  image: 'headerFormatImage',
+  video: 'headerFormatVideo',
+  document: 'headerFormatDocument',
 };
 
 interface TemplateFormData {
@@ -126,6 +156,8 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
 export function TemplateManager() {
   const supabase = createClient();
   const { user, loading: authLoading } = useAuth();
+  // i18n: namespace próprio do painel de Modelos + chaves comuns (Cancelar/Excluir/etc.)
+  const { t } = useTranslation(['settingsTemplates', 'common']);
 
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -197,7 +229,7 @@ export function TemplateManager() {
       setTemplates(data || []);
     } catch (err) {
       console.error('Failed to fetch templates:', err);
-      toast.error('Failed to load templates');
+      toast.error(t('toastLoadFailed'));
     } finally {
       setLoading(false);
     }
@@ -282,18 +314,18 @@ export function TemplateManager() {
       toast.success(
         data.dry_run
           ? isEdit
-            ? 'Template updated (dry-run — no Meta call)'
-            : 'Template saved (dry-run — no Meta call)'
+            ? t('toastUpdatedDryRun')
+            : t('toastSavedDryRun')
           : isEdit
-            ? 'Edit submitted — Meta typically reviews within 24 hours.'
-            : 'Submitted to Meta — typical review time is 24 hours. Status updates automatically.',
+            ? t('toastEditSubmitted')
+            : t('toastSubmitted'),
       );
       setDialogOpen(false);
       setForm(emptyForm);
       setEditingId(null);
     } catch (err) {
       console.error('Submit error:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to submit');
+      toast.error(err instanceof Error ? err.message : t('toastSubmitFailed'));
     } finally {
       setSubmitting(false);
     }
@@ -309,9 +341,13 @@ export function TemplateManager() {
         throw new Error(data?.error || `Sync failed (HTTP ${res.status})`);
       }
       toast.success(
-        `Synced ${data.total} template${data.total === 1 ? '' : 's'} from Meta` +
+        // Plural via _one/_other (i18next escolhe pela `count`)
+        t('toastSynced', { count: data.total }) +
           (data.inserted || data.updated
-            ? ` (${data.inserted} new, ${data.updated} updated)`
+            ? t('toastSyncedDetails', {
+                inserted: data.inserted,
+                updated: data.updated,
+              })
             : ''),
       );
       if (Array.isArray(data.errors) && data.errors.length > 0) {
@@ -320,22 +356,21 @@ export function TemplateManager() {
             `${e.name} (${e.language})`,
         );
         const suffix =
-          data.errors.length > 3 ? `, +${data.errors.length - 3} more` : '';
-        toast.error(`Failed to sync: ${preview.join(', ')}${suffix}`);
+          data.errors.length > 3
+            ? t('toastSyncMore', { count: data.errors.length - 3 })
+            : '';
+        toast.error(t('toastSyncErrors', { names: preview.join(', ') }) + suffix);
       }
       if (data.truncated) {
         // Use error (not warning) so the message survives long
         // enough to read — sonner's `warning` auto-dismisses on
         // the same short timer as `success`.
-        toast.error(
-          'Synced the first 2000 templates only — your account has more. Sync again to continue, or contact support if this persists.',
-          { duration: 10000 },
-        );
+        toast.error(t('toastSyncTruncated'), { duration: 10000 });
       }
       await fetchTemplates(user.id);
     } catch (err) {
       console.error('Template sync error:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to sync templates');
+      toast.error(err instanceof Error ? err.message : t('toastSyncFailed'));
     } finally {
       setSyncing(false);
     }
@@ -356,12 +391,12 @@ export function TemplateManager() {
       if (!res.ok) {
         throw new Error(data?.error || `Delete failed (HTTP ${res.status})`);
       }
-      toast.success('Template deleted');
-      setTemplates((prev) => prev.filter((t) => t.id !== target.id));
+      toast.success(t('toastDeleted'));
+      setTemplates((prev) => prev.filter((row) => row.id !== target.id));
       setTemplateToDelete(null);
     } catch (err) {
       console.error('Delete error:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to delete template');
+      toast.error(err instanceof Error ? err.message : t('toastDeleteFailed'));
     } finally {
       setDeletingId(null);
     }
@@ -458,12 +493,14 @@ export function TemplateManager() {
 
   async function handleHeaderImageFile(file: File) {
     if (!['image/jpeg', 'image/png'].includes(file.type)) {
-      toast.error('Header image must be a JPEG or PNG.');
+      toast.error(t('toastImageTypeError'));
       return;
     }
     if (file.size > MEDIA_MAX_BYTES_BY_KIND.image) {
       toast.error(
-        `Image is ${(file.size / 1024 / 1024).toFixed(1)} MB — Meta's limit is 5 MB.`,
+        t('toastImageTooLarge', {
+          size: (file.size / 1024 / 1024).toFixed(1),
+        }),
       );
       return;
     }
@@ -471,9 +508,9 @@ export function TemplateManager() {
     try {
       const { publicUrl } = await uploadAccountMedia('chat-media', file);
       setForm((f) => ({ ...f, header_media_url: publicUrl }));
-      toast.success('Image uploaded.');
+      toast.success(t('toastImageUploaded'));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Upload failed.');
+      toast.error(err instanceof Error ? err.message : t('toastUploadFailed'));
     } finally {
       setUploadingHeader(false);
     }
@@ -482,24 +519,22 @@ export function TemplateManager() {
   return (
     <section className="animate-in fade-in-50 space-y-4 duration-200">
       <SettingsPanelHead
-        title="Message templates"
-        description={
-          'Create templates and submit them to Meta for approval. Use "Sync from Meta" to pull templates approved elsewhere.'
-        }
+        title={t('panelTitle')}
+        description={t('panelDescription')}
         action={
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
               onClick={handleSyncFromMeta}
               disabled={syncing}
-              title="Pull approved templates from your Meta WhatsApp Business Account"
+              title={t('syncTooltip')}
             >
               <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? 'Syncing…' : 'Sync from Meta'}
+              {syncing ? t('syncing') : t('syncFromMeta')}
             </Button>
             <Button onClick={openCreate}>
               <Plus className="size-4" />
-              New Template
+              {t('newTemplate')}
             </Button>
           </div>
         }
@@ -508,9 +543,9 @@ export function TemplateManager() {
       {templates.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <p className="text-muted-foreground text-sm">No templates yet.</p>
+            <p className="text-muted-foreground text-sm">{t('emptyTitle')}</p>
             <p className="text-muted-foreground text-xs mt-1">
-              Create your first message template to get started.
+              {t('emptyDescription')}
             </p>
           </CardContent>
         </Card>
@@ -528,10 +563,16 @@ export function TemplateManager() {
                       <Badge
                         className={`text-xs border ${categoryColors[template.category] || ''}`}
                       >
-                        {template.category}
+                        {/* Rótulo da categoria traduzido; cai no valor cru se for categoria desconhecida */}
+                        {categoryLabelKeys[template.category]
+                          ? t(categoryLabelKeys[template.category])
+                          : template.category}
                       </Badge>
                       <Badge className={`text-xs border ${status.classes}`}>
-                        {status.label}
+                        {/* Rótulo do status traduzido; fallback no label cru da lib */}
+                        {statusLabelKeys[statusKey]
+                          ? t(statusLabelKeys[statusKey])
+                          : status.label}
                       </Badge>
                       {template.language && (
                         <span className="text-xs text-muted-foreground uppercase">
@@ -547,7 +588,7 @@ export function TemplateManager() {
                                 ? 'text-yellow-400'
                                 : 'text-red-400'
                           }`}
-                          title="Meta quality score"
+                          title={t('qualityScoreTitle')}
                         >
                           {template.quality_score}
                         </span>
@@ -576,12 +617,12 @@ export function TemplateManager() {
                         variant="ghost"
                         size="sm"
                         onClick={() => openEdit(template)}
-                        title="Editing triggers Meta re-review — status flips to PENDING."
-                        aria-label="Edit template"
+                        title={t('editApprovedTooltip')}
+                        aria-label={t('editAria')}
                         className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
                       >
                         <Pencil className="size-3.5" />
-                        Edit
+                        {t('common:edit')}
                       </Button>
                     )}
                     {(statusKey === 'REJECTED' || statusKey === 'PAUSED') && (
@@ -589,12 +630,12 @@ export function TemplateManager() {
                         variant="ghost"
                         size="sm"
                         onClick={() => openEdit(template)}
-                        title="Edit the template and resubmit to Meta for review."
-                        aria-label="Edit and resubmit template"
+                        title={t('resubmitTooltip')}
+                        aria-label={t('resubmitAria')}
                         className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
                       >
                         <RotateCcw className="size-3.5" />
-                        Resubmit
+                        {t('resubmit')}
                       </Button>
                     )}
                     <Button
@@ -604,13 +645,13 @@ export function TemplateManager() {
                       disabled={deletingId === template.id}
                       aria-label={
                         template.meta_template_id
-                          ? 'Delete template from Meta and locally'
-                          : 'Delete template locally'
+                          ? t('deleteRemoteAria')
+                          : t('deleteLocalAria')
                       }
                       title={
                         template.meta_template_id
-                          ? 'Delete from Meta and locally'
-                          : 'Delete locally'
+                          ? t('deleteRemoteTooltip')
+                          : t('deleteLocalTooltip')
                       }
                       className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 w-8"
                     >
@@ -641,12 +682,12 @@ export function TemplateManager() {
         <DialogContent className="bg-popover border-border sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-popover-foreground">
-              {editingId ? 'Edit Message Template' : 'New Message Template'}
+              {editingId ? t('dialogTitleEdit') : t('dialogTitleNew')}
             </DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {editingId
-                ? 'Save your changes to re-submit to Meta. Status will flip back to PENDING during review.'
-                : 'Build a template and submit it to Meta for approval. Once approved, you can use it in broadcasts and the inbox.'}
+                ? t('dialogDescriptionEdit')
+                : t('dialogDescriptionNew')}
             </DialogDescription>
           </DialogHeader>
 
@@ -654,19 +695,18 @@ export function TemplateManager() {
             <div className="flex items-start gap-2 rounded border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
               <AlertCircle className="size-4 mt-0.5 shrink-0" />
               <p>
-                AUTHENTICATION templates have a fixed body + OTP button shape
-                that needs a different builder. Create them in Meta WhatsApp
-                Manager for now and use <strong>Sync from Meta</strong> to
-                bring them in.
+                {t('authBannerStart')}
+                <strong>{t('authBannerSyncLabel')}</strong>
+                {t('authBannerEnd')}
               </p>
             </div>
           )}
 
           <div className="space-y-4 py-2">
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Template Name</Label>
+              <Label className="text-muted-foreground">{t('templateNameLabel')}</Label>
               <Input
-                placeholder="e.g. order_confirmation"
+                placeholder={t('templateNamePlaceholder')}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 disabled={editingId !== null}
@@ -674,14 +714,14 @@ export function TemplateManager() {
               />
               <p className="text-[11px] text-muted-foreground">
                 {editingId
-                  ? 'Name is fixed once a template exists on Meta — create a new template to change it.'
-                  : 'Lowercase letters, digits, and underscores only.'}
+                  ? t('templateNameHintEdit')
+                  : t('templateNameHintNew')}
               </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Category</Label>
+                <Label className="text-muted-foreground">{t('categoryLabel')}</Label>
                 <Select
                   value={form.category}
                   onValueChange={(val) =>
@@ -701,7 +741,8 @@ export function TemplateManager() {
                         value={cat}
                         className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                       >
-                        {cat}
+                        {/* Rótulo da categoria traduzido (valor enviado à Meta continua o enum cru) */}
+                        {t(categoryLabelKeys[cat])}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -709,7 +750,7 @@ export function TemplateManager() {
               </div>
 
               <div className="space-y-2">
-                <Label className="text-muted-foreground">Language</Label>
+                <Label className="text-muted-foreground">{t('languageLabel')}</Label>
                 <Input
                   list="template-language-codes"
                   placeholder="en_US"
@@ -727,11 +768,14 @@ export function TemplateManager() {
                 </datalist>
                 <p className="text-[11px] text-muted-foreground">
                   {editingId
-                    ? 'Language is fixed once a template exists on Meta.'
+                    ? t('languageHintEdit')
                     : (
                         <>
-                          Must match the exact code on Meta — <code>en_US</code>{' '}
-                          and <code>en</code> are distinct.
+                          {t('languageHintNewPrefix')}
+                          <code>en_US</code>
+                          {t('languageHintNewMiddle')}
+                          <code>en</code>
+                          {t('languageHintNewSuffix')}
                         </>
                       )}
                 </p>
@@ -739,7 +783,7 @@ export function TemplateManager() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Header</Label>
+              <Label className="text-muted-foreground">{t('headerLabel')}</Label>
               <Select
                 value={form.header_format}
                 onValueChange={(val) =>
@@ -765,9 +809,7 @@ export function TemplateManager() {
                       value={type}
                       className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                     >
-                      {type === 'none'
-                        ? 'None'
-                        : type.charAt(0).toUpperCase() + type.slice(1)}
+                      {t(headerFormatLabelKeys[type])}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -777,8 +819,8 @@ export function TemplateManager() {
                 <div className="space-y-2 mt-2">
                   <Input
                     id="template-header-text"
-                    aria-label="Header text"
-                    placeholder="Header text (max 60 chars, optional {{1}})"
+                    aria-label={t('headerText')}
+                    placeholder={t('headerTextPlaceholder', { v1: '{{1}}' })}
                     value={form.header_content}
                     onChange={(e) =>
                       setForm({ ...form, header_content: e.target.value })
@@ -789,8 +831,8 @@ export function TemplateManager() {
                   {headerVarCount > 0 && (
                     <Input
                       id="template-header-sample"
-                      aria-label="Sample value for header variable"
-                      placeholder="Sample value for {{1}} (required for Meta review)"
+                      aria-label={t('headerSampleAria')}
+                      placeholder={t('headerSamplePlaceholder', { v1: '{{1}}' })}
                       value={form.header_sample}
                       onChange={(e) =>
                         setForm({ ...form, header_sample: e.target.value })
@@ -828,15 +870,17 @@ export function TemplateManager() {
                         ) : (
                           <Upload className="h-3.5 w-3.5" />
                         )}
-                        Upload image
+                        {t('uploadImage')}
                       </Button>
                       <span className="text-[11px] text-muted-foreground">
-                        JPEG or PNG, ≤5 MB
+                        {t('imageHint')}
                       </span>
                     </div>
                   )}
                   <Input
-                    placeholder={`https://… (or paste a public ${form.header_format} link)`}
+                    placeholder={t('mediaUrlPlaceholder', {
+                      kind: form.header_format,
+                    })}
                     value={form.header_media_url}
                     onChange={(e) =>
                       setForm({ ...form, header_media_url: e.target.value })
@@ -847,27 +891,28 @@ export function TemplateManager() {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={form.header_media_url}
-                      alt="Header sample"
+                      alt={t('headerSampleAlt')}
                       className="max-h-28 rounded-md border border-border object-contain"
                     />
                   )}
                   <p className="text-[11px] text-muted-foreground leading-relaxed">
                     {form.header_format === 'image'
-                      ? 'Upload a JPEG/PNG (≤5 MB, ≥800×418 px recommended) or paste a public HTTPS link — we upload it to Meta for review automatically.'
-                      : 'Must be a publicly accessible HTTPS link. Meta fetches it once during review, so it needs to stay live for ~24 hrs.'}
-                    {form.header_format === 'video' &&
-                      ' Recommended: MP4 / 3GPP, ≤16 MB, ≤60 seconds.'}
-                    {form.header_format === 'document' &&
-                      ' Recommended: PDF, ≤100 MB.'}
+                      ? t('mediaHintImage')
+                      : t('mediaHintOther')}
+                    {form.header_format === 'video' && t('mediaHintVideo')}
+                    {form.header_format === 'document' && t('mediaHintDocument')}
                   </p>
                 </div>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Body Text</Label>
+              <Label className="text-muted-foreground">{t('bodyTextLabel')}</Label>
               <Textarea
-                placeholder="Hello {{1}}, your order {{2}} is confirmed."
+                placeholder={t('bodyTextPlaceholder', {
+                  v1: '{{1}}',
+                  v2: '{{2}}',
+                })}
                 value={form.body_text}
                 onChange={(e) =>
                   setForm({ ...form, body_text: e.target.value })
@@ -877,23 +922,24 @@ export function TemplateManager() {
                 className="bg-muted border-border text-foreground placeholder:text-muted-foreground resize-none"
               />
               <p className="text-[11px] text-muted-foreground">
-                Use {`{{1}}`}, {`{{2}}`} for variables (must be contiguous
-                starting at {`{{1}}`}).
+                {t('bodyTextHint', { v1: '{{1}}', v2: '{{2}}' })}
               </p>
 
               {bodyVarCount > 0 && (
                 <div className="space-y-1.5 pt-1">
                   <Label className="text-[11px] text-muted-foreground">
-                    Sample values (Meta uses these to review your template)
+                    {t('sampleValuesLabel')}
                   </Label>
                   {form.body_samples.map((val, i) => {
                     const inputId = `template-body-sample-${i}`;
+                    // Passa o placeholder literal {{N}} como variável de interpolação
+                    const varToken = `{{${i + 1}}}`;
                     return (
                       <Input
                         key={i}
                         id={inputId}
-                        aria-label={`Sample value for body variable {{${i + 1}}}`}
-                        placeholder={`Sample for {{${i + 1}}}`}
+                        aria-label={t('bodySampleAria', { var: varToken })}
+                        placeholder={t('bodySamplePlaceholder', { var: varToken })}
                         value={val}
                         onChange={(e) => {
                           const next = [...form.body_samples];
@@ -909,9 +955,9 @@ export function TemplateManager() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-muted-foreground">Footer (optional)</Label>
+              <Label className="text-muted-foreground">{t('footerLabel')}</Label>
               <Input
-                placeholder="Optional footer text (max 60 chars)"
+                placeholder={t('footerPlaceholder')}
                 value={form.footer_text}
                 onChange={(e) =>
                   setForm({ ...form, footer_text: e.target.value })
@@ -923,7 +969,7 @@ export function TemplateManager() {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label className="text-muted-foreground">Buttons (optional)</Label>
+                <Label className="text-muted-foreground">{t('buttonsLabel')}</Label>
                 <Button
                   type="button"
                   variant="outline"
@@ -933,13 +979,12 @@ export function TemplateManager() {
                   className="border-border bg-transparent text-muted-foreground hover:bg-muted h-7 text-xs"
                 >
                   <Plus className="size-3" />
-                  Add Button
+                  {t('addButton')}
                 </Button>
               </div>
               {form.buttons.length === 0 ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Up to {TEMPLATE_LIMITS.maxButtonsTotal} buttons. QUICK_REPLY
-                  buttons must come before URL / phone / copy-code buttons.
+                  {t('buttonsHint', { max: TEMPLATE_LIMITS.maxButtonsTotal })}
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -967,30 +1012,30 @@ export function TemplateManager() {
                               value="QUICK_REPLY"
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              Quick Reply
+                              {t('buttonTypeQuickReply')}
                             </SelectItem>
                             <SelectItem
                               value="URL"
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              URL
+                              {t('buttonTypeUrl')}
                             </SelectItem>
                             <SelectItem
                               value="PHONE_NUMBER"
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              Phone
+                              {t('buttonTypePhone')}
                             </SelectItem>
                             <SelectItem
                               value="COPY_CODE"
                               className="text-popover-foreground focus:bg-muted focus:text-popover-foreground"
                             >
-                              Copy Code
+                              {t('buttonTypeCopyCode')}
                             </SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
-                          placeholder="Button label"
+                          placeholder={t('buttonLabelPlaceholder')}
                           value={btn.text}
                           maxLength={TEMPLATE_LIMITS.buttonTextMaxLength}
                           onChange={(e) =>
@@ -1011,7 +1056,7 @@ export function TemplateManager() {
                       {btn.type === 'URL' && (
                         <div className="space-y-1 pl-1">
                           <Input
-                            placeholder="https://example.com/path or with {{1}} suffix"
+                            placeholder={t('buttonUrlPlaceholder', { v1: '{{1}}' })}
                             value={btn.url}
                             onChange={(e) =>
                               updateButton(i, { url: e.target.value })
@@ -1020,7 +1065,9 @@ export function TemplateManager() {
                           />
                           {extractVariableIndices(btn.url).length > 0 && (
                             <Input
-                              placeholder="Example value for {{1}} (required when URL has a variable)"
+                              placeholder={t('buttonUrlExamplePlaceholder', {
+                                v1: '{{1}}',
+                              })}
                               value={btn.example ?? ''}
                               onChange={(e) =>
                                 updateButton(i, { example: e.target.value })
@@ -1032,7 +1079,7 @@ export function TemplateManager() {
                       )}
                       {btn.type === 'PHONE_NUMBER' && (
                         <Input
-                          placeholder="+15551234567"
+                          placeholder={t('buttonPhonePlaceholder')}
                           value={btn.phone_number}
                           onChange={(e) =>
                             updateButton(i, { phone_number: e.target.value })
@@ -1042,7 +1089,7 @@ export function TemplateManager() {
                       )}
                       {btn.type === 'COPY_CODE' && (
                         <Input
-                          placeholder="Example code (e.g. SUMMER20)"
+                          placeholder={t('buttonCopyCodePlaceholder')}
                           value={btn.example}
                           onChange={(e) =>
                             updateButton(i, { example: e.target.value })
@@ -1063,7 +1110,7 @@ export function TemplateManager() {
               onClick={() => setDialogOpen(false)}
               className="border-border text-muted-foreground hover:bg-muted"
             >
-              Cancel
+              {t('common:cancel')}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -1073,12 +1120,12 @@ export function TemplateManager() {
               {submitting ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  {editingId ? 'Saving…' : 'Submitting…'}
+                  {editingId ? t('saving') : t('submitting')}
                 </>
               ) : editingId ? (
-                'Save & Resubmit'
+                t('saveAndResubmit')
               ) : (
-                'Submit for Approval'
+                t('submitForApproval')
               )}
             </Button>
           </DialogFooter>
@@ -1096,11 +1143,15 @@ export function TemplateManager() {
       >
         <DialogContent className="bg-popover border-border sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle className="text-popover-foreground">Delete template?</DialogTitle>
+            <DialogTitle className="text-popover-foreground">{t('deleteDialogTitle')}</DialogTitle>
             <DialogDescription className="text-muted-foreground">
               {templateToDelete?.meta_template_id
-                ? `"${templateToDelete?.name}" will be deleted from Meta and from wacrm. Active broadcasts using this template will start failing on their next send. This can't be undone.`
-                : `"${templateToDelete?.name}" will be deleted from wacrm. It was never submitted to Meta, so no remote cleanup is needed.`}
+                ? t('deleteDialogDescriptionRemote', {
+                    name: templateToDelete?.name,
+                  })
+                : t('deleteDialogDescriptionLocal', {
+                    name: templateToDelete?.name,
+                  })}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="bg-popover border-border">
@@ -1110,7 +1161,7 @@ export function TemplateManager() {
               disabled={deletingId !== null}
               className="border-border text-muted-foreground hover:bg-muted"
             >
-              Cancel
+              {t('common:cancel')}
             </Button>
             <Button
               onClick={confirmDelete}
@@ -1120,10 +1171,10 @@ export function TemplateManager() {
               {deletingId !== null ? (
                 <>
                   <Loader2 className="size-4 animate-spin" />
-                  Deleting…
+                  {t('deleting')}
                 </>
               ) : (
-                'Delete'
+                t('common:delete')
               )}
             </Button>
           </DialogFooter>

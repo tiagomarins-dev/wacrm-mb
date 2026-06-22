@@ -1,0 +1,19 @@
+{
+  "title": "Configurações",
+  "description": "Tudo em um só lugar — sua conta e seu espaço de trabalho. Escolha uma seção para gerenciá-la.",
+  "sectionsAria": "Seções de configurações",
+  "groupAccount": "Conta",
+  "groupWorkspace": "Espaço de trabalho",
+  "overview": "Visão geral",
+  "profile": "Seu perfil",
+  "security": "Login e segurança",
+  "appearance": "Aparência",
+  "whatsapp": "WhatsApp",
+  "templates": "Modelos",
+  "quickReplies": "Respostas rápidas",
+  "integrations": "Integrações",
+  "leadScore": "Lead Score",
+  "fields": "Campos e etiquetas",
+  "deals": "Negócios e moeda",
+  "members": "Membros da equipe"
+}

@@ -1,0 +1,20 @@
+{
+  "title": "Lead Score",
+  "subtitle": "Ranking de leads por engajamento na janela escolhida.",
+  "windowDays_one": "{{count}} dia",
+  "windowDays_other": "{{count}} dias",
+  "colLead": "Lead",
+  "colScore": "Score",
+  "colClassification": "Classificação",
+  "colMessages": "Msgs",
+  "colButtons": "Botões",
+  "colClicks": "Cliques",
+  "colLastContact": "Último contato",
+  "empty": "Nenhum lead com interação na janela.",
+  "unnamed": "Sem nome",
+  "saleSuffix_one": "({{count}} venda)",
+  "saleSuffix_other": "({{count}} vendas)",
+  "classificationHot": "Quente",
+  "classificationWarm": "Morno",
+  "classificationCold": "Frio"
+}

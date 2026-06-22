@@ -1,10 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { createClient } from '@/lib/supabase/client'
 import { useActiveConnection } from '@/hooks/use-active-connection'
 import { useAuth } from '@/hooks/use-auth'
 import { formatCurrency } from '@/lib/currency'
+import { formatNumber } from '@/lib/i18n/format'
 import {
   MessageSquare,
   UserPlus,
@@ -38,7 +40,18 @@ import { ActivityFeed } from '@/components/dashboard/activity-feed'
 type RangeDays = 7 | 30 | 90
 
 export default function DashboardPage() {
+  const { t, i18n } = useTranslation('dashboard')
+  const lng = i18n.language
   const { defaultCurrency } = useAuth()
+
+  // Rótulo de delta localizado (substitui a função module-level antiga):
+  // resolve o sufixo + "sem mudança" via t e formata o número pelo locale.
+  const deltaLbl = (delta: number, suffixKey: string): string => {
+    const suffix = t(suffixKey)
+    if (delta === 0) return t('noChange', { suffix })
+    const sign = delta > 0 ? '+' : ''
+    return `${sign}${formatNumber(delta, lng)} ${suffix}`
+  }
   const [metrics, setMetrics] = useState<MetricsBundle | null>(null)
   const [metricsLoading, setMetricsLoading] = useState(true)
 
@@ -128,9 +141,9 @@ export default function DashboardPage() {
     <div className="space-y-5">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Live analytics across conversations, contacts, deals, broadcasts, and automations.
+          {t('subtitle')}
         </p>
       </div>
 
@@ -141,43 +154,43 @@ export default function DashboardPage() {
         ) : (
           <>
             <MetricCard
-              title="Active Conversations"
-              value={metrics.activeConversations.current.toLocaleString()}
+              title={t('activeConversations')}
+              value={formatNumber(metrics.activeConversations.current, lng)}
               icon={MessageSquare}
               delta={{
                 sign: metrics.activeConversations.previous,
-                label: deltaLabel(metrics.activeConversations.previous, 'new today vs yesterday'),
+                label: deltaLbl(metrics.activeConversations.previous, 'newTodayVsYesterday'),
               }}
             />
             <MetricCard
-              title="New Contacts Today"
-              value={metrics.newContactsToday.current.toLocaleString()}
+              title={t('newContactsToday')}
+              value={formatNumber(metrics.newContactsToday.current, lng)}
               icon={UserPlus}
               delta={{
                 sign:
                   metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                label: deltaLabel(
+                label: deltaLbl(
                   metrics.newContactsToday.current - metrics.newContactsToday.previous,
-                  'vs yesterday',
+                  'vsYesterday',
                 ),
               }}
             />
             <MetricCard
-              title="Open Deals Value"
+              title={t('openDealsValue')}
               value={formatCurrency(metrics.openDealsValue, defaultCurrency)}
               icon={DollarSign}
-              subtitle={`${metrics.openDealsCount} open deal${metrics.openDealsCount === 1 ? '' : 's'}`}
+              subtitle={t('openDeals', { count: metrics.openDealsCount })}
             />
             <MetricCard
-              title="Messages Sent Today"
-              value={metrics.messagesSentToday.current.toLocaleString()}
+              title={t('messagesSentToday')}
+              value={formatNumber(metrics.messagesSentToday.current, lng)}
               icon={Send}
               delta={{
                 sign:
                   metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                label: deltaLabel(
+                label: deltaLbl(
                   metrics.messagesSentToday.current - metrics.messagesSentToday.previous,
-                  'vs yesterday',
+                  'vsYesterday',
                 ),
               }}
             />
@@ -222,10 +235,3 @@ export default function DashboardPage() {
   )
 }
 
-// ------------------------------------------------------------
-
-function deltaLabel(delta: number, suffix: string): string {
-  if (delta === 0) return `No change ${suffix}`
-  const sign = delta > 0 ? '+' : ''
-  return `${sign}${delta.toLocaleString()} ${suffix}`
-}

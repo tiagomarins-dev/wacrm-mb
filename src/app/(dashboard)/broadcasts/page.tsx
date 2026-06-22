@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Broadcast } from '@/types';
@@ -19,6 +20,7 @@ import { useCan } from '@/hooks/use-can';
 import { useActiveConnection } from '@/hooks/use-active-connection';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
+import { useFormat } from '@/lib/i18n/format';
 
 /**
  * Poll cadence while any broadcast is sending. Kept modest so we don't
@@ -59,6 +61,8 @@ function RateCell({
 }
 
 export default function BroadcastsPage() {
+  const { t } = useTranslation(['broadcasts', 'common']);
+  const { formatDate, formatDateTime } = useFormat();
   const router = useRouter();
   const canCreate = useCan('send-messages');
   // Conexão ativa (multi-número, 033): lista os broadcasts desta conexão.
@@ -174,7 +178,7 @@ export default function BroadcastsPage() {
       <div className="flex h-64 flex-col items-center justify-center gap-2">
         <p className="text-sm text-red-400">{error}</p>
         <Button variant="outline" onClick={() => window.location.reload()}>
-          Retry
+          {t('common:retry')}
         </Button>
       </div>
     );
@@ -212,9 +216,9 @@ export default function BroadcastsPage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Broadcasts</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t('title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Send bulk messages to your contacts using approved templates.
+            {t('subtitle')}
           </p>
         </div>
         <GatedButton
@@ -224,16 +228,16 @@ export default function BroadcastsPage() {
           className="w-full justify-center bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto"
         >
           <Plus className="h-4 w-4" />
-          New Broadcast
+          {t('newBroadcast')}
         </GatedButton>
       </div>
 
       {broadcasts.length === 0 ? (
         <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-border bg-card">
           <Radio className="mb-3 h-10 w-10 text-muted-foreground" />
-          <p className="text-sm font-medium text-foreground">No broadcasts yet</p>
+          <p className="text-sm font-medium text-foreground">{t('emptyTitle')}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Create your first broadcast to reach your contacts at scale.
+            {t('emptyDesc')}
           </p>
           <GatedButton
             canAct={canCreate}
@@ -250,15 +254,15 @@ export default function BroadcastsPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Name</TableHead>
-                <TableHead className="hidden text-muted-foreground md:table-cell">Template</TableHead>
+                <TableHead className="text-muted-foreground">{t('colName')}</TableHead>
+                <TableHead className="hidden text-muted-foreground md:table-cell">{t('colTemplate')}</TableHead>
                 <TableHead className="hidden text-right text-muted-foreground sm:table-cell">
-                  Recipients
+                  {t('colRecipients')}
                 </TableHead>
-                <TableHead className="hidden text-muted-foreground lg:table-cell">Delivery</TableHead>
-                <TableHead className="hidden text-muted-foreground lg:table-cell">Read</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="hidden text-muted-foreground sm:table-cell">Date</TableHead>
+                <TableHead className="hidden text-muted-foreground lg:table-cell">{t('colDelivery')}</TableHead>
+                <TableHead className="hidden text-muted-foreground lg:table-cell">{t('colRead')}</TableHead>
+                <TableHead className="text-muted-foreground">{t('colStatus')}</TableHead>
+                <TableHead className="hidden text-muted-foreground sm:table-cell">{t('colDate')}</TableHead>
                 <TableHead className="text-right text-muted-foreground" />
               </TableRow>
             </TableHeader>
@@ -304,13 +308,13 @@ export default function BroadcastsPage() {
                             <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-yellow-400" />
                           </span>
                         )}
-                        {status.label}
+                        {t(status.labelKey, { defaultValue: status.label })}
                       </span>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {broadcast.status === 'scheduled' && broadcast.scheduled_at
-                        ? `🕒 ${new Date(broadcast.scheduled_at).toLocaleString()}`
-                        : new Date(broadcast.created_at).toLocaleDateString()}
+                        ? `🕒 ${formatDateTime(broadcast.scheduled_at)}`
+                        : formatDate(broadcast.created_at)}
                     </TableCell>
                     <TableCell
                       className="text-right"
@@ -329,7 +333,7 @@ export default function BroadcastsPage() {
                               {cancelBusy ? (
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                               ) : (
-                                'Confirm'
+                                t('common:confirm')
                               )}
                             </Button>
                             <Button
@@ -338,7 +342,7 @@ export default function BroadcastsPage() {
                               onClick={() => setCancelingId(null)}
                               className="h-7 border-border px-2 text-xs text-muted-foreground"
                             >
-                              Keep
+                              {t('common:keep')}
                             </Button>
                           </span>
                         ) : (
@@ -347,7 +351,7 @@ export default function BroadcastsPage() {
                             onClick={() => setCancelingId(broadcast.id)}
                             className="h-7 border-border px-2 text-xs text-muted-foreground hover:bg-muted"
                           >
-                            Cancel
+                            {t('common:cancel')}
                           </Button>
                         ))}
                     </TableCell>

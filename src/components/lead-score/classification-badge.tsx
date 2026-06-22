@@ -11,11 +11,15 @@ const MAP = {
 
 export type LeadClassification = keyof typeof MAP;
 
+// `label` opcional: permite que a chamadora forneça o rótulo já traduzido
+// (i18n) sem quebrar os call sites que ainda usam o rótulo padrão pt-BR.
 export function ClassificationBadge({
   value,
+  label,
   className,
 }: {
   value: LeadClassification;
+  label?: string;
   className?: string;
 }) {
   const m = MAP[value] ?? MAP.frio;
@@ -27,7 +31,7 @@ export function ClassificationBadge({
         className,
       )}
     >
-      {m.label}
+      {label ?? m.label}
     </span>
   );
 }

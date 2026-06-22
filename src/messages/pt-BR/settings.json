@@ -1,0 +1,18 @@
+{
+  "title": "Aparência",
+  "description": "Defina o idioma, o modo e a cor de destaque usados no app. Salvo neste dispositivo — experimente, muda ao vivo.",
+  "language": "Idioma",
+  "languageAria": "Idioma",
+  "mode": "Modo",
+  "modeAria": "Modo de cor",
+  "modeLight": "Claro",
+  "modeDark": "Escuro",
+  "useModeAria": "Usar modo {{mode}}",
+  "fontSize": "Tamanho da fonte",
+  "fontSizeDesc": "Aumenta o tamanho do texto e da interface toda, proporcionalmente.",
+  "fontSizeAria": "Tamanho da fonte {{name}}",
+  "fontScale_normal": "Padrão",
+  "fontScale_large": "Grande",
+  "fontScale_larger": "Maior",
+  "accentColor": "Cor de destaque"
+}

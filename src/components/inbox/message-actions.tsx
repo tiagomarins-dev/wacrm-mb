@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { CornerUpLeft, Copy, SmilePlus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,7 @@ export function MessageActions({
   // interacts elsewhere.
   const [touchOpen, setTouchOpen] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { t } = useTranslation("inbox");
 
   const isAgent =
     message.sender_type === "agent" || message.sender_type === "bot";
@@ -104,7 +106,7 @@ export function MessageActions({
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger
             className="flex h-5 w-5 items-center justify-center rounded-full text-popover-foreground hover:bg-muted hover:text-foreground"
-            aria-label="React"
+            aria-label={t("react")}
           >
             <SmilePlus className="h-3.5 w-3.5" />
           </PopoverTrigger>
@@ -129,7 +131,7 @@ export function MessageActions({
           type="button"
           onClick={handleReply}
           className="flex h-5 w-5 items-center justify-center rounded-full text-popover-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Reply"
+          aria-label={t("reply")}
         >
           <CornerUpLeft className="h-3.5 w-3.5" />
         </button>
@@ -137,7 +139,7 @@ export function MessageActions({
           type="button"
           onClick={handleCopy}
           className="flex h-5 w-5 items-center justify-center rounded-full text-popover-foreground hover:bg-muted hover:text-foreground"
-          aria-label="Copy"
+          aria-label={t("copy")}
         >
           <Copy className="h-3.5 w-3.5" />
         </button>

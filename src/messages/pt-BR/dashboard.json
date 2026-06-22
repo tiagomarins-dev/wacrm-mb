@@ -1,0 +1,13 @@
+{
+  "title": "Painel",
+  "subtitle": "Análises ao vivo de conversas, contatos, negócios, disparos e automações.",
+  "activeConversations": "Conversas ativas",
+  "newContactsToday": "Novos contatos hoje",
+  "openDealsValue": "Valor de negócios abertos",
+  "messagesSentToday": "Mensagens enviadas hoje",
+  "openDeals_one": "{{count}} negócio aberto",
+  "openDeals_other": "{{count}} negócios abertos",
+  "newTodayVsYesterday": "novos hoje vs ontem",
+  "vsYesterday": "vs ontem",
+  "noChange": "Sem mudança {{suffix}}"
+}

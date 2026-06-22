@@ -1,0 +1,21 @@
+{
+  "selectPipeline": "Selecione um Funil",
+  "noPipelinesItem": "Nenhum funil ainda",
+  "managePipelines": "Gerenciar Funis",
+  "addPipeline": "Adicionar Funil",
+  "addDeal": "Adicionar Negócio",
+  "emptyTitle": "Nenhum funil ainda",
+  "emptyDescription": "Crie um funil para começar a acompanhar negócios",
+  "createPipeline": "Criar Funil",
+  "newPipelineTitle": "Novo Funil",
+  "pipelineNameLabel": "Nome do Funil",
+  "pipelineNamePlaceholder": "ex.: Vendas Corporativas",
+  "defaultStagesHint": "As etapas padrão (Novo Lead → Ganho) serão criadas automaticamente.",
+  "creating": "Criando...",
+  "gateCreatePipelines": "criar funis",
+  "gateCreateDeals": "criar negócios",
+  "errorNoAccount": "Seu perfil não está vinculado a uma conta.",
+  "errorCreatePipeline": "Falha ao criar o funil",
+  "errorMoveDeal": "Falha ao mover o negócio",
+  "pipelineCreated": "Funil criado"
+}

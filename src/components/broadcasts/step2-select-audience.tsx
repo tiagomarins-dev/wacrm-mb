@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { CustomField, Tag } from '@/types';
 import { Button } from '@/components/ui/button';
@@ -39,42 +40,45 @@ interface Step2Props {
   onBack: () => void;
 }
 
+// Opções de público: `labelKey`/`descriptionKey` apontam para chaves i18n
+// resolvidas no render (o array é module-level e não tem acesso ao `t`).
 const audienceOptions: {
   type: AudienceType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: typeof Users;
 }[] = [
   {
     type: 'all',
-    label: 'All Contacts',
-    description: 'Send to every contact in your database',
+    labelKey: 'step2.options.allLabel',
+    descriptionKey: 'step2.options.allDesc',
     icon: Users,
   },
   {
     type: 'tags',
-    label: 'Filter by Tags',
-    description: 'Target contacts with specific tags',
+    labelKey: 'step2.options.tagsLabel',
+    descriptionKey: 'step2.options.tagsDesc',
     icon: Tags,
   },
   {
     type: 'custom_field',
-    label: 'Custom Field',
-    description: 'Filter by a custom field value',
+    labelKey: 'step2.options.customFieldLabel',
+    descriptionKey: 'step2.options.customFieldDesc',
     icon: Filter,
   },
   {
     type: 'csv',
-    label: 'Upload CSV',
-    description: 'Upload a list of phone numbers',
+    labelKey: 'step2.options.csvLabel',
+    descriptionKey: 'step2.options.csvDesc',
     icon: Upload,
   },
 ];
 
-const OPERATOR_OPTIONS: { value: CustomFieldOperator; label: string }[] = [
-  { value: 'is', label: 'is' },
-  { value: 'is_not', label: 'is not' },
-  { value: 'contains', label: 'contains' },
+// Operadores do filtro de campo personalizado: `labelKey` resolvido no render.
+const OPERATOR_OPTIONS: { value: CustomFieldOperator; labelKey: string }[] = [
+  { value: 'is', labelKey: 'step2.operators.is' },
+  { value: 'is_not', labelKey: 'step2.operators.isNot' },
+  { value: 'contains', labelKey: 'step2.operators.contains' },
 ];
 
 export function Step2SelectAudience({
@@ -83,6 +87,7 @@ export function Step2SelectAudience({
   onNext,
   onBack,
 }: Step2Props) {
+  const { t } = useTranslation(['broadcastWizard', 'common']);
   const [tags, setTags] = useState<Tag[]>([]);
   const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
@@ -249,9 +254,9 @@ export function Step2SelectAudience({
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-semibold text-foreground">Select Audience</h2>
+        <h2 className="text-lg font-semibold text-foreground">{t('step2.title')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Choose who will receive this broadcast.
+          {t('step2.subtitle')}
         </p>
       </div>
 
@@ -293,9 +298,9 @@ export function Step2SelectAudience({
                 <Icon className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-sm font-medium text-foreground">{option.label}</p>
+                <p className="text-sm font-medium text-foreground">{t(option.labelKey)}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  {option.description}
+                  {t(option.descriptionKey)}
                 </p>
               </div>
             </button>
@@ -305,12 +310,12 @@ export function Step2SelectAudience({
 
       {audience.type === 'tags' && (
         <div className="rounded-xl border border-border bg-card/50 p-4">
-          <p className="mb-3 text-sm font-medium text-foreground">Select Tags</p>
+          <p className="mb-3 text-sm font-medium text-foreground">{t('step2.selectTags')}</p>
           {loadingTags ? (
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
           ) : tags.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No tags found. Create tags in Settings.
+              {t('step2.noTags')}
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -341,12 +346,12 @@ export function Step2SelectAudience({
 
       {audience.type === 'custom_field' && (
         <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
-          <p className="text-sm font-medium text-foreground">Custom Field Filter</p>
+          <p className="text-sm font-medium text-foreground">{t('step2.customFieldFilter')}</p>
           {loadingFields ? (
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
           ) : customFields.length === 0 ? (
             <p className="text-xs text-muted-foreground">
-              No custom fields defined. Create one in Settings → Custom Fields.
+              {t('step2.noCustomFields')}
             </p>
           ) : (
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_140px_minmax(0,1fr)]">
@@ -355,7 +360,7 @@ export function Step2SelectAudience({
                 onChange={(e) => updateCustomField({ fieldId: e.target.value })}
                 className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
               >
-                <option value="">Select field…</option>
+                <option value="">{t('step2.selectField')}</option>
                 {customFields.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.field_name}
@@ -373,7 +378,7 @@ export function Step2SelectAudience({
               >
                 {OPERATOR_OPTIONS.map((op) => (
                   <option key={op.value} value={op.value}>
-                    {op.label}
+                    {t(op.labelKey)}
                   </option>
                 ))}
               </select>
@@ -381,7 +386,7 @@ export function Step2SelectAudience({
                 type="text"
                 value={audience.customField?.value ?? ''}
                 onChange={(e) => updateCustomField({ value: e.target.value })}
-                placeholder="Value"
+                placeholder={t('step2.valuePlaceholder')}
                 className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -394,12 +399,12 @@ export function Step2SelectAudience({
         <div className="mb-3 flex items-center gap-2">
           <X className="h-4 w-4 text-red-400" />
           <p className="text-sm font-medium text-foreground">
-            Exclude contacts with these tags
+            {t('step2.excludeTitle')}
           </p>
-          <span className="text-xs text-muted-foreground">(optional)</span>
+          <span className="text-xs text-muted-foreground">{t('step2.optional')}</span>
         </div>
         {tags.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No tags available.</p>
+          <p className="text-xs text-muted-foreground">{t('step2.noTagsAvailable')}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {tags.map((tag) => {
@@ -428,11 +433,11 @@ export function Step2SelectAudience({
 
       {/* Audience Summary */}
       <div className="rounded-xl border border-border bg-card/50 p-4">
-        <p className="mb-2 text-sm font-medium text-foreground">Audience Summary</p>
+        <p className="mb-2 text-sm font-medium text-foreground">{t('step2.summaryTitle')}</p>
         {loadingCount ? (
           <div className="flex items-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground">Calculating…</span>
+            <span className="text-xs text-muted-foreground">{t('step2.calculating')}</span>
           </div>
         ) : estimatedCount !== null ? (
           <div className="flex items-center gap-2">
@@ -440,11 +445,11 @@ export function Step2SelectAudience({
             <span className="text-sm text-foreground">
               {estimatedCount.toLocaleString()}
             </span>
-            <span className="text-xs text-muted-foreground">estimated recipients</span>
+            <span className="text-xs text-muted-foreground">{t('step2.estimatedRecipients')}</span>
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Select an audience type to see the estimate.
+            {t('step2.selectTypeHint')}
           </p>
         )}
       </div>
@@ -456,14 +461,14 @@ export function Step2SelectAudience({
           className="border-border text-muted-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          {t('common.back')}
         </Button>
         <Button
           onClick={onNext}
           disabled={!isValid}
           className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
-          Next
+          {t('common.next')}
           <ArrowRight className="h-4 w-4" />
         </Button>
       </div>

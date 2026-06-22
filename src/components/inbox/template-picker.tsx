@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import type { MessageTemplate } from "@/types";
 import { Button } from "@/components/ui/button";
@@ -78,6 +79,7 @@ export function TemplatePicker({
   onOpenChange,
   onSelect,
 }: TemplatePickerProps) {
+  const { t } = useTranslation("inbox");
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<MessageTemplate | null>(null);
@@ -204,7 +206,7 @@ export function TemplatePicker({
               </div>
             ) : templates.length === 0 ? (
               <div className="rounded-md border border-border bg-background/50 p-6 text-center">
-                <p className="text-sm text-popover-foreground">No approved templates</p>
+                <p className="text-sm text-popover-foreground">{t('noApprovedTemplates')}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Approve a template in Meta WhatsApp Manager, then sync it
                   from Settings → Templates.
@@ -246,7 +248,7 @@ export function TemplatePicker({
         ) : (
           <div className="space-y-3">
             <div className="rounded-md border border-border bg-background/50 p-3">
-              <p className="mb-1 text-xs text-muted-foreground">Preview</p>
+              <p className="mb-1 text-xs text-muted-foreground">{t('preview')}</p>
               <p className="whitespace-pre-wrap text-sm text-popover-foreground">
                 {renderBodyPreview(selected.body_text, params)}
               </p>

@@ -1,0 +1,21 @@
+{
+  "selectPipeline": "Select Pipeline",
+  "noPipelinesItem": "No pipelines yet",
+  "managePipelines": "Manage Pipelines",
+  "addPipeline": "Add Pipeline",
+  "addDeal": "Add Deal",
+  "emptyTitle": "No pipelines yet",
+  "emptyDescription": "Create a pipeline to start tracking deals",
+  "createPipeline": "Create Pipeline",
+  "newPipelineTitle": "New Pipeline",
+  "pipelineNameLabel": "Pipeline Name",
+  "pipelineNamePlaceholder": "e.g., Enterprise Sales",
+  "defaultStagesHint": "Default stages (New Lead → Won) will be created automatically.",
+  "creating": "Creating...",
+  "gateCreatePipelines": "create pipelines",
+  "gateCreateDeals": "create deals",
+  "errorNoAccount": "Your profile is not linked to an account.",
+  "errorCreatePipeline": "Failed to create pipeline",
+  "errorMoveDeal": "Failed to move deal",
+  "pipelineCreated": "Pipeline created"
+}
