@@ -49,6 +49,7 @@ import type { LeadScoreRow } from '@/types';
 import { ImportModal } from '@/components/contacts/import-modal';
 import { CustomFieldsManager } from '@/components/contacts/custom-fields-manager';
 import { useCan } from '@/hooks/use-can';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import { GatedButton } from '@/components/ui/gated-button';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -60,6 +61,8 @@ interface ContactWithTags extends Contact {
 
 export default function ContactsPage() {
   const supabase = createClient();
+  // Conexão ativa (multi-número, 033): filtra os contatos por conexão.
+  const { activeConnectionId } = useActiveConnection();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
 
@@ -117,6 +120,9 @@ export default function ContactsPage() {
       .order('created_at', { ascending: false })
       .range(from, to);
 
+    // Multi-número (033): só os contatos da conexão ativa.
+    if (activeConnectionId) query = query.eq('connection_id', activeConnectionId);
+
     if (search.trim()) {
       const term = `%${search.trim()}%`;
       query = query.or(`name.ilike.${term},phone.ilike.${term},email.ilike.${term}`);
@@ -160,7 +166,7 @@ export default function ContactsPage() {
 
     setContacts(enriched);
     setLoading(false);
-  }, [supabase, page, search, tagsMap]);
+  }, [supabase, page, search, tagsMap, activeConnectionId]);
 
   // Load-once-on-mount-ish data fetches. Each setter inside runs
   // inside an async promise completion (Supabase await), not

@@ -93,6 +93,7 @@ function makeAdmin(store: Store) {
 const broadcast: ScheduledBroadcastRow = {
   id: 'b1',
   account_id: 'a1',
+  connection_id: null,
   template_name: 'promo',
   template_language: 'en_US',
   template_variables: {},

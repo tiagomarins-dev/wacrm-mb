@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { CONNECTIONS_CHANGED_EVENT } from '@/hooks/use-active-connection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,6 +51,10 @@ export function WhatsAppConfig() {
   const [resetting, setResetting] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [config, setConfig] = useState<WhatsAppConfigType | null>(null);
+  // Multi-número (033): a conta pode ter várias conexões. `connections` é a
+  // lista; `selectedId` é a que está no formulário (null = adicionando nova).
+  const [connections, setConnections] = useState<WhatsAppConfigType[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
   const [resetReason, setResetReason] = useState<ResetReason>(null);
   const [statusMessage, setStatusMessage] = useState<string>('');
@@ -85,76 +90,99 @@ export function WhatsAppConfig() {
       ? `${window.location.origin}/api/whatsapp/webhook`
       : '';
 
-  const fetchConfig = useCallback(async (acctId: string) => {
-    setLoading(true);
-    try {
-      // Load form values from Supabase (shows what's in DB).
-      // Switched from `user_id` (which would only match the row's
-      // original author) to `account_id` so every member of the
-      // account sees the same saved configuration. UNIQUE(account_id)
-      // on the table guarantees the .maybeSingle() return type
-      // remains accurate.
-      const { data, error } = await supabase
-        .from('whatsapp_config')
-        .select('*')
-        .eq('account_id', acctId)
-        .maybeSingle();
-
-      if (error) {
-        console.error('Failed to load config row:', error);
-      }
-
-      if (data) {
-        setConfig(data);
-        setPhoneNumberId(data.phone_number_id || '');
-        setWabaId(data.waba_id || '');
-        setAccessToken(MASKED_TOKEN);
-        setVerifyToken('');
-        setPin('');
-        setTokenEdited(false);
-      } else {
-        setConfig(null);
-        setPhoneNumberId('');
-        setWabaId('');
-        setAccessToken('');
-        setVerifyToken('');
-        setPin('');
-        setTokenEdited(false);
-      }
-      // Clear any stale probe result when reloading the row.
-      setRegistrationProbe(null);
-
-      // Then verify health via the API (decrypts token + pings Meta)
-      if (data) {
-        try {
-          const res = await fetch('/api/whatsapp/config', { method: 'GET' });
-          const payload = await res.json();
-
-          if (payload.connected) {
-            setConnectionStatus('connected');
-            setResetReason(null);
-            setStatusMessage('');
-          } else {
-            setConnectionStatus('disconnected');
-            setResetReason(payload.needs_reset ? 'token_corrupted' : payload.reason === 'meta_api_error' ? 'meta_api_error' : null);
-            setStatusMessage(payload.message || '');
-          }
-        } catch (err) {
-          console.error('Health check failed:', err);
-          setConnectionStatus('disconnected');
-        }
-      } else {
-        setConnectionStatus('disconnected');
-        setResetReason(null);
-        setStatusMessage('');
-      }
-    } catch (err) {
-      console.error('fetchConfig error:', err);
-      toast.error('Failed to load WhatsApp configuration');
-    } finally {
-      setLoading(false);
+  // Popula o formulário a partir de uma conexão (ou limpa, p/ "adicionar nova").
+  const populateForm = useCallback((row: WhatsAppConfigType | null) => {
+    if (row) {
+      setConfig(row);
+      setPhoneNumberId(row.phone_number_id || '');
+      setWabaId(row.waba_id || '');
+      setAccessToken(MASKED_TOKEN);
+    } else {
+      setConfig(null);
+      setPhoneNumberId('');
+      setWabaId('');
+      setAccessToken('');
     }
-  }, [supabase]);
+    setVerifyToken('');
+    setPin('');
+    setTokenEdited(false);
+    setRegistrationProbe(null);
+  }, []);
+
+  // Carrega TODAS as conexões da conta (multi-número, 033). Sem `.maybeSingle()`
+  // (que quebraria com 2+). Seleciona uma para o formulário: a preferida (recém
+  // salva) → a já selecionada → a primária → a 1ª.
+  const loadConnections = useCallback(
+    async (acctId: string, preferId?: string | null) => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('whatsapp_config')
+          .select('*')
+          .eq('account_id', acctId)
+          .order('is_primary', { ascending: false })
+          .order('created_at', { ascending: true });
+        if (error) console.error('Failed to load connections:', error);
+
+        const list = (data ?? []) as WhatsAppConfigType[];
+        setConnections(list);
+
+        const pick =
+          (preferId && list.find((c) => c.id === preferId)) ||
+          (selectedId && list.find((c) => c.id === selectedId)) ||
+          list.find((c) => c.is_primary) ||
+          list[0] ||
+          null;
+        setSelectedId(pick?.id ?? null);
+        populateForm(pick ?? null);
+
+        // Health check (decripta token + pinga a Meta) da conexão primária.
+        if (pick) {
+          try {
+            const res = await fetch('/api/whatsapp/config', { method: 'GET' });
+            const payload = await res.json();
+            if (payload.connected) {
+              setConnectionStatus('connected');
+              setResetReason(null);
+              setStatusMessage('');
+            } else {
+              setConnectionStatus('disconnected');
+              setResetReason(
+                payload.needs_reset
+                  ? 'token_corrupted'
+                  : payload.reason === 'meta_api_error'
+                    ? 'meta_api_error'
+                    : null,
+              );
+              setStatusMessage(payload.message || '');
+            }
+          } catch (err) {
+            console.error('Health check failed:', err);
+            setConnectionStatus('disconnected');
+          }
+        } else {
+          setConnectionStatus('disconnected');
+          setResetReason(null);
+          setStatusMessage('');
+        }
+      } catch (err) {
+        console.error('loadConnections error:', err);
+        toast.error('Failed to load WhatsApp configuration');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [supabase, selectedId, populateForm],
+  );
+
+  // Seleciona uma conexão existente para edição, ou null para "adicionar nova".
+  function selectConnection(id: string | null) {
+    setSelectedId(id);
+    populateForm(id ? connections.find((c) => c.id === id) ?? null : null);
+    setConnectionStatus('unknown');
+    setResetReason(null);
+    setStatusMessage('');
+  }
 
   useEffect(() => {
     // Need both the auth session (`!authLoading`) AND the profile
@@ -167,8 +195,9 @@ export function WhatsAppConfig() {
       setLoading(false);
       return;
     }
-    fetchConfig(accountId);
-  }, [authLoading, profileLoading, user, accountId, fetchConfig]);
+    loadConnections(accountId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, profileLoading, user, accountId]);
 
   async function handleSave() {
     if (!phoneNumberId.trim()) {
@@ -188,6 +217,9 @@ export function WhatsAppConfig() {
       // and writing direct to Supabase stores the token in plaintext,
       // which then fails decryption on every subsequent health check.
       const payload: Record<string, unknown> = {
+        // Editando uma conexão existente → manda o id (UPDATE). Adicionando
+        // (selectedId null) → omite → o backend cria uma conexão NOVA.
+        connection_id: selectedId ?? undefined,
         phone_number_id: phoneNumberId.trim(),
         waba_id: wabaId.trim() || null,
         verify_token: verifyToken.trim() || null,
@@ -256,7 +288,10 @@ export function WhatsAppConfig() {
         setPin('');
       }
 
-      if (accountId) await fetchConfig(accountId);
+      // Recarrega a lista e avisa o provider (dropdown) — o seletor de conexão
+      // aparece/atualiza automaticamente, sem recarregar a página.
+      if (accountId) await loadConnections(accountId);
+      window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
     } catch (err) {
       console.error('Save error:', err);
       toast.error('Failed to save configuration');
@@ -312,7 +347,7 @@ export function WhatsAppConfig() {
           { duration: 8000 },
         );
       }
-      if (accountId) await fetchConfig(accountId);
+      if (accountId) await loadConnections(accountId);
     } catch (err) {
       console.error('verify-registration failed:', err);
       toast.error('Could not reach the verification endpoint.');
@@ -322,13 +357,18 @@ export function WhatsAppConfig() {
   }
 
   async function handleReset() {
-    if (!confirm('This will delete the current WhatsApp config so you can re-enter it. Continue?')) {
+    if (!confirm('This will disconnect this WhatsApp connection so you can re-enter it. Continue?')) {
       return;
     }
 
     try {
       setResetting(true);
-      const res = await fetch('/api/whatsapp/config', { method: 'DELETE' });
+      // Multi-número (033): desconecta a conexão SELECIONADA (DELETE é soft —
+      // status='disconnected'; FK RESTRICT impede hard-delete com dados).
+      const url = selectedId
+        ? `/api/whatsapp/config?id=${encodeURIComponent(selectedId)}`
+        : '/api/whatsapp/config';
+      const res = await fetch(url, { method: 'DELETE' });
       const data = await res.json();
 
       if (!res.ok) {
@@ -336,16 +376,9 @@ export function WhatsAppConfig() {
         return;
       }
 
-      toast.success('Configuration cleared. You can now re-enter your credentials.');
-      setConfig(null);
-      setPhoneNumberId('');
-      setWabaId('');
-      setAccessToken('');
-      setVerifyToken('');
-      setTokenEdited(false);
-      setConnectionStatus('disconnected');
-      setResetReason(null);
-      setStatusMessage('');
+      toast.success('Connection reset. You can now re-enter the credentials.');
+      if (accountId) await loadConnections(accountId);
+      window.dispatchEvent(new Event(CONNECTIONS_CHANGED_EVENT));
     } catch (err) {
       console.error('Reset error:', err);
       toast.error('Failed to reset configuration');
@@ -547,10 +580,66 @@ export function WhatsAppConfig() {
           </Alert>
         )}
 
+        {/* Conexões (multi-número, 033) — lista + adicionar. Trocar de
+            número no app é pelo seletor do header; aqui é onde se conecta
+            e edita cada número. */}
+        {connections.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Connected numbers</CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Select a number to edit, or add another. The header switcher
+                changes which number the app is viewing.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap gap-2">
+                {connections.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => selectConnection(c.id)}
+                    className={
+                      'flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors ' +
+                      (selectedId === c.id
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted')
+                    }
+                  >
+                    <span className="font-mono">{c.phone_number_id}</span>
+                    {c.is_primary && (
+                      <span className="rounded bg-primary/20 px-1 text-[10px] uppercase text-primary">
+                        primary
+                      </span>
+                    )}
+                    {c.status === 'disconnected' && (
+                      <XCircle className="size-3.5 text-red-500" />
+                    )}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => selectConnection(null)}
+                  className={
+                    'flex items-center gap-1.5 rounded-md border border-dashed px-3 py-1.5 text-sm transition-colors ' +
+                    (selectedId === null
+                      ? 'border-primary text-primary'
+                      : 'border-border text-muted-foreground hover:text-foreground hover:border-foreground/40')
+                  }
+                >
+                  + Add number
+                </button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* API Credentials */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-foreground">API Credentials</CardTitle>
+            <CardTitle className="text-foreground">
+              {selectedId ? 'Edit connection' : 'API Credentials'}
+            </CardTitle>
             <CardDescription className="text-muted-foreground">
               Enter your Meta WhatsApp Business API credentials.
             </CardDescription>

@@ -85,10 +85,14 @@ export async function GET() {
       )
     }
 
+    // Multi-número (033): a conta pode ter várias conexões; o health-check
+    // valida a PRIMÁRIA (`.eq('is_primary')`). Sem o filtro, `.maybeSingle()`
+    // erraria com 2+ linhas.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
       .select('phone_number_id, access_token, status')
       .eq('account_id', accountId)
+      .eq('is_primary', true)
       .maybeSingle()
 
     if (configError) {
@@ -185,7 +189,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { phone_number_id, waba_id, access_token, verify_token, pin } = body
+    // `connection_id` (multi-número, 033): quando presente, edita ESSA
+    // conexão; quando ausente, cria uma nova conexão para a conta.
+    const { connection_id, phone_number_id, waba_id, access_token, verify_token, pin } = body
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
@@ -269,14 +275,22 @@ export async function POST(request: Request) {
       )
     }
 
-    // Look up any pre-existing row for this account so we know whether
-    // this number is already registered with Meta — if so we can skip
-    // /register when the user didn't provide a PIN this time around.
-    const { data: existing } = await supabase
-      .from('whatsapp_config')
-      .select('id, registered_at, phone_number_id')
-      .eq('account_id', accountId)
-      .maybeSingle()
+    // Look up the row being edited so we know whether this number is
+    // already registered with Meta — if so we can skip /register when the
+    // user didn't provide a PIN this time around.
+    //
+    // Multi-número (033): edita a conexão indicada por `connection_id`
+    // (escopada à conta); sem ele, é uma conexão NOVA (existing=null →
+    // INSERT). Antes era `.eq('account_id').maybeSingle()`, que passa a
+    // quebrar com 2+ conexões na conta.
+    const { data: existing } = connection_id
+      ? await supabase
+          .from('whatsapp_config')
+          .select('id, registered_at, phone_number_id')
+          .eq('id', connection_id)
+          .eq('account_id', accountId)
+          .maybeSingle()
+      : { data: null as { id: string; registered_at: string | null; phone_number_id: string } | null }
 
     const sameNumber =
       existing?.phone_number_id === phone_number_id &&
@@ -367,10 +381,12 @@ export async function POST(request: Request) {
     }
 
     if (existing) {
+      // Atualiza SÓ a conexão editada (`.eq('id')`) — não a conta inteira;
+      // pós-033 uma conta pode ter várias conexões.
       const { error: updateError } = await supabase
         .from('whatsapp_config')
         .update(baseRow)
-        .eq('account_id', accountId)
+        .eq('id', existing.id)
 
       if (updateError) {
         console.error('Error updating whatsapp_config:', updateError)
@@ -380,15 +396,21 @@ export async function POST(request: Request) {
         )
       }
     } else {
-      // Insert with both columns: `account_id` is the tenancy key
-      // (NOT NULL post-017, UNIQUE so duplicates trip the constraint
-      // up-front), `user_id` is the audit column identifying which
-      // member of the account saved the config.
+      // Conexão NOVA (multi-número, 033). A primeira conexão da conta vira
+      // a primária (número de envio default / fallback do seletor).
+      // `account_id` = tenancy (NOT NULL pós-017), `user_id` = audit.
+      const { count } = await supabase
+        .from('whatsapp_config')
+        .select('id', { count: 'exact', head: true })
+        .eq('account_id', accountId)
+      const isPrimary = (count ?? 0) === 0
+
       const { error: insertError } = await supabase
         .from('whatsapp_config')
         .insert({
           account_id: accountId,
           user_id: user.id,
+          is_primary: isPrimary,
           ...baseRow,
         })
 
@@ -438,7 +460,7 @@ export async function POST(request: Request) {
  * Used by the "Reset Configuration" button to recover from a corrupted
  * encrypted token (mismatched ENCRYPTION_KEY across environments).
  */
-export async function DELETE() {
+export async function DELETE(request: Request) {
   try {
     const supabase = await createClient()
 
@@ -459,15 +481,26 @@ export async function DELETE() {
       )
     }
 
-    const { error: deleteError } = await supabase
+    // Multi-número (033): com a FK `connection_id ON DELETE RESTRICT`, um
+    // hard-delete da linha falha quando há dados (contatos/conversas/etc.)
+    // referenciando a conexão. Então "Resetar/Remover" é SOFT — marca
+    // status='disconnected'. `?id=` mira uma conexão específica; sem id,
+    // reseta todas as da conta (preserva o "Reset Configuration", que
+    // reabilita o re-save via POST/update).
+    const connectionId = new URL(request.url).searchParams.get('id')
+
+    let query = supabase
       .from('whatsapp_config')
-      .delete()
+      .update({ status: 'disconnected', updated_at: new Date().toISOString() })
       .eq('account_id', accountId)
+    if (connectionId) query = query.eq('id', connectionId)
+
+    const { error: deleteError } = await query
 
     if (deleteError) {
-      console.error('Error deleting whatsapp_config:', deleteError)
+      console.error('Error disconnecting whatsapp_config:', deleteError)
       return NextResponse.json(
-        { error: 'Failed to delete configuration' },
+        { error: 'Failed to reset configuration' },
         { status: 500 }
       )
     }
@@ -475,6 +508,83 @@ export async function DELETE() {
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Error in WhatsApp config DELETE:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/**
+ * PATCH /api/whatsapp/config
+ *
+ * Define a conexão PRIMÁRIA da conta (multi-número, 033) — o número de
+ * envio default e o fallback do seletor de conexão ativa. Body: { connection_id }.
+ * Desmarca as demais antes de marcar a alvo (o índice parcial único
+ * `idx_whatsapp_config_one_primary` só permite uma primária por conta).
+ */
+export async function PATCH(request: Request) {
+  try {
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser()
+
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const accountId = await resolveAccountId(supabase, user.id)
+    if (!accountId) {
+      return NextResponse.json(
+        { error: 'Your profile is not linked to an account.' },
+        { status: 403 },
+      )
+    }
+
+    const { connection_id } = await request.json()
+    if (!connection_id || typeof connection_id !== 'string') {
+      return NextResponse.json(
+        { error: 'connection_id is required' },
+        { status: 400 },
+      )
+    }
+
+    // Garante que a conexão pertence à conta antes de promover.
+    const { data: target } = await supabase
+      .from('whatsapp_config')
+      .select('id')
+      .eq('id', connection_id)
+      .eq('account_id', accountId)
+      .maybeSingle()
+    if (!target) {
+      return NextResponse.json({ error: 'Connection not found' }, { status: 404 })
+    }
+
+    // Desmarca todas as primárias da conta, depois marca a alvo. Faz nessa
+    // ordem para não colidir com o índice parcial único de "uma primária".
+    const { error: unsetError } = await supabase
+      .from('whatsapp_config')
+      .update({ is_primary: false, updated_at: new Date().toISOString() })
+      .eq('account_id', accountId)
+      .eq('is_primary', true)
+    if (unsetError) {
+      console.error('Error unsetting primary connection:', unsetError)
+      return NextResponse.json({ error: 'Failed to update primary' }, { status: 500 })
+    }
+
+    const { error: setError } = await supabase
+      .from('whatsapp_config')
+      .update({ is_primary: true, updated_at: new Date().toISOString() })
+      .eq('id', connection_id)
+      .eq('account_id', accountId)
+    if (setError) {
+      console.error('Error setting primary connection:', setError)
+      return NextResponse.json({ error: 'Failed to update primary' }, { status: 500 })
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Error in WhatsApp config PATCH:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

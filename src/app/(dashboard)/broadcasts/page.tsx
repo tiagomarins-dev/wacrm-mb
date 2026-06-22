@@ -16,6 +16,7 @@ import {
 import { Radio, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useCan } from '@/hooks/use-can';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import { GatedButton } from '@/components/ui/gated-button';
 import { getBroadcastStatus } from '@/lib/broadcast-status';
 
@@ -60,6 +61,8 @@ function RateCell({
 export default function BroadcastsPage() {
   const router = useRouter();
   const canCreate = useCan('send-messages');
+  // Conexão ativa (multi-número, 033): lista os broadcasts desta conexão.
+  const { activeConnectionId } = useActiveConnection();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,10 +98,13 @@ export default function BroadcastsPage() {
   async function fetchBroadcasts() {
     try {
       const supabase = createClient();
-      const { data, error: fetchError } = await supabase
+      let q = supabase
         .from('broadcasts')
         .select('*')
         .order('created_at', { ascending: false });
+      // Multi-número (033): filtra pela conexão ativa.
+      if (activeConnectionId) q = q.eq('connection_id', activeConnectionId);
+      const { data, error: fetchError } = await q;
 
       if (fetchError) throw fetchError;
       setBroadcasts(data ?? []);
@@ -111,7 +117,8 @@ export default function BroadcastsPage() {
 
   useEffect(() => {
     fetchBroadcasts();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConnectionId]);
 
   const anySending = useMemo(
     () => broadcasts.some((b) => b.status === 'sending'),

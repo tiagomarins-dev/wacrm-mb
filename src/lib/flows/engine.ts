@@ -315,6 +315,7 @@ async function isDuplicateInbound(
 async function findEntryFlow(
   db: AdminClient,
   accountId: string,
+  connectionId: string,
   message: ParsedInbound,
   isFirstInbound: boolean,
 ): Promise<FlowRow | null> {
@@ -322,13 +323,14 @@ async function findEntryFlow(
   // are responses to existing prompts; they never start a new flow.
   if (message.kind !== "text") return null;
 
-  // Pull all active flows for this account. Active set is bounded
-  // (the builder discourages double-trigger overlap; partial index
-  // makes the lookup index-supported).
+  // Pull all active flows for this account AND connection. O filtro por
+  // connection_id (multi-número, 033) impede que um flow da conexão B
+  // dispare num inbound recebido na conexão A.
   const { data: flows, error } = await db
     .from("flows")
     .select("*")
     .eq("account_id", accountId)
+    .eq("connection_id", connectionId)
     .eq("status", "active")
     .order("created_at", { ascending: true });
   if (error || !flows) return null;
@@ -951,6 +953,7 @@ export async function dispatchInboundToFlows(
     const flow = await findEntryFlow(
       db,
       input.accountId,
+      input.connectionId,
       input.message,
       input.isFirstInboundMessage,
     );
@@ -1161,6 +1164,9 @@ async function startNewRun(
       // contact_id) WHERE status='active', so two accounts sharing
       // a contact phone number each run their own flows independently.
       account_id: flow.account_id,
+      // Conexão do run (033) = a do flow. Alimenta o índice de
+      // idempotência connection-scoped (idx_one_active_run_per_contact).
+      connection_id: flow.connection_id,
       // Audit: preserves the flow's author on the run row for log
       // attribution.
       user_id: flow.user_id,
@@ -1243,6 +1249,7 @@ export async function resumeRunOnLinkClick(
   // (o token não carrega account_id; aqui temos a row inteira).
   await db.from("link_clicks").insert({
     account_id: run.account_id,
+    connection_id: run.connection_id,
     contact_id: run.contact_id,
     flow_run_id: run.id,
     node_key: node.node_key,

@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import {
   dedupeByPhone,
   isUniqueViolation,
@@ -125,6 +126,9 @@ export function ImportModal({
 }: ImportModalProps) {
   const supabase = createClient();
   const { accountId, canEditSettings } = useAuth();
+  // Conexão ativa (multi-número, 033): contatos importados nascem nela e
+  // o dedup é por-conexão.
+  const { activeConnectionId } = useActiveConnection();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [file, setFile] = useState<File | null>(null);
@@ -226,10 +230,15 @@ export function ImportModal({
 
       // 2) Skip numbers already in this account. One read of the
       //    generated `phone_normalized` column (migration 022) → Set.
-      const { data: existingRows } = await supabase
+      // Dedup por-conexão (033): só pula números já existentes NESTA
+      // conexão — o mesmo número pode entrar em outra conexão da conta.
+      let existingQuery = supabase
         .from('contacts')
         .select('phone_normalized')
         .eq('account_id', accountId);
+      if (activeConnectionId)
+        existingQuery = existingQuery.eq('connection_id', activeConnectionId);
+      const { data: existingRows } = await existingQuery;
       const existing = new Set(
         (existingRows ?? [])
           .map(
@@ -272,6 +281,7 @@ export function ImportModal({
         const rows = chunk.map((row) => ({
           user_id: user.id,
           account_id: accountId,
+          connection_id: activeConnectionId ?? null,
           phone: row.phone,
           name: row.name || null,
           email: row.email || null,

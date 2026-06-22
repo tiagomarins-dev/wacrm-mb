@@ -253,6 +253,9 @@ export interface FlowRow {
   /** Account tenancy (NOT NULL post-017). The engine looks up active
    *  flows for inbound dispatch using this field. */
   account_id: string;
+  /** Conexão dona do flow (multi-número, 033). O dispatch só casa flows
+   *  da mesma conexão da conversa. Nullable durante o rollout. */
+  connection_id: string | null;
   /** Author. Used as a default sender-of-record on engine sends and
    *  preserved on flow_runs for log/audit display. */
   user_id: string;
@@ -285,6 +288,9 @@ export interface FlowRunRow {
   flow_id: string;
   /** Tenancy. Matches flows.account_id; NOT NULL post-017. */
   account_id: string;
+  /** Conexão do run (multi-número, 033) = a do flow. Alimenta o índice
+   *  de idempotência (account_id, connection_id, contact_id) WHERE active. */
+  connection_id: string | null;
   /** Audit. Matches the parent flow.user_id. */
   user_id: string;
   contact_id: string | null;
@@ -358,6 +364,9 @@ export interface DispatchInboundInput {
   /** Account tenancy key. Drives the lookup of active flows and the
    *  idempotency check for previously-seen inbound message_ids. */
   accountId: string;
+  /** Conexão da conversa (multi-número, 033). O dispatch só casa flows
+   *  desta conexão e carimba o run com ela. */
+  connectionId: string;
   /** Sender-of-record for the bot's outbound prompts on engine
    *  sends. Set by the webhook to the WhatsApp config owner. */
   userId: string;

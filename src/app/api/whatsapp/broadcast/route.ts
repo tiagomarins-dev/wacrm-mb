@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import { getActiveConnection } from '@/lib/connections/active'
+import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import {
   sendRecipients,
   type BroadcastRecipientInput,
@@ -110,13 +112,15 @@ export async function POST(request: Request) {
       )
     }
 
-    const { data: config, error: configError } = await supabase
-      .from('whatsapp_config')
-      .select('*')
-      .eq('account_id', accountId)
-      .single()
+    // Conexão de envio = a CONEXÃO ATIVA do usuário (multi-número, 033).
+    // Broadcast não tem conversa única; envia pelo número selecionado no
+    // header (fallback: primária). H1 garantido em resolveOutboundConfig.
+    const active = await getActiveConnection(supabase, accountId).catch(() => null)
+    const config = active
+      ? await resolveOutboundConfig(supabase, accountId, active.id).catch(() => null)
+      : null
 
-    if (configError || !config) {
+    if (!config) {
       return NextResponse.json(
         {
           error:
