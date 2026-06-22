@@ -172,6 +172,7 @@ export interface IntegrationsConfigPublic {
   openrouter_set: boolean;
   notion_set: boolean;
   slack_set: boolean;
+  millaborges_set: boolean;
 }
 
 /** Auditoria de compartilhamento de conversa (migration 028). */
