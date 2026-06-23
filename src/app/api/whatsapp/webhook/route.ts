@@ -996,6 +996,23 @@ async function findOrCreateConversation(
     .single()
 
   if (createError) {
+    // Perdeu a race: outra entrega concorrente criou a conversa entre o
+    // lookup e o insert; o índice UNIQUE (migration 041) rejeitou a
+    // duplicata. Re-resolve em vez de derrubar a mensagem — espelha o
+    // recovery de findOrCreateContact acima (:947-958). O `.limit(1)` é
+    // salvaguarda: com o índice ativo só pode existir 1 linha.
+    if (isUniqueViolation(createError)) {
+      const { data: raced } = await supabaseAdmin()
+        .from('conversations')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('connection_id', connectionId)
+        .eq('contact_id', contactId)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle()
+      if (raced) return raced
+    }
     console.error('Error creating conversation:', createError)
     return null
   }
