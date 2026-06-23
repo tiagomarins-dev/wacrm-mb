@@ -28,6 +28,7 @@ import ptSettingsWhatsapp from "./pt-BR/settingsWhatsapp.json";
 import ptSettingsTemplates from "./pt-BR/settingsTemplates.json";
 import ptSettingsQuickReplies from "./pt-BR/settingsQuickReplies.json";
 import ptSettingsMembers from "./pt-BR/settingsMembers.json";
+import ptSettingsAiAgent from "./pt-BR/settingsAiAgent.json";
 import ptAutomationBuilder from "./pt-BR/automationBuilder.json";
 import ptFlowEditor from "./pt-BR/flowEditor.json";
 import ptPipelinesPanels from "./pt-BR/pipelinesPanels.json";
@@ -51,14 +52,15 @@ import enSettingsWhatsapp from "./en/settingsWhatsapp.json";
 import enSettingsTemplates from "./en/settingsTemplates.json";
 import enSettingsQuickReplies from "./en/settingsQuickReplies.json";
 import enSettingsMembers from "./en/settingsMembers.json";
+import enSettingsAiAgent from "./en/settingsAiAgent.json";
 import enAutomationBuilder from "./en/automationBuilder.json";
 import enFlowEditor from "./en/flowEditor.json";
 import enPipelinesPanels from "./en/pipelinesPanels.json";
 
-export const NAMESPACES = ["common", "nav", "header", "settings", "auth", "dashboard", "broadcasts", "contacts", "inbox", "settingsNav", "pipelines", "leadScore", "automations", "flows", "join", "broadcastWizard", "settingsWhatsapp", "settingsTemplates", "settingsQuickReplies", "settingsMembers", "automationBuilder", "flowEditor", "pipelinesPanels"] as const;
+export const NAMESPACES = ["common", "nav", "header", "settings", "auth", "dashboard", "broadcasts", "contacts", "inbox", "settingsNav", "pipelines", "leadScore", "automations", "flows", "join", "broadcastWizard", "settingsWhatsapp", "settingsTemplates", "settingsQuickReplies", "settingsMembers", "settingsAiAgent", "automationBuilder", "flowEditor", "pipelinesPanels"] as const;
 export const DEFAULT_NS = "common";
 
 export const resources = {
-  "pt-BR": { common: ptCommon, nav: ptNav, header: ptHeader, settings: ptSettings, auth: ptAuth, dashboard: ptDashboard, broadcasts: ptBroadcasts, contacts: ptContacts, inbox: ptInbox, settingsNav: ptSettingsNav, pipelines: ptPipelines, leadScore: ptLeadScore, automations: ptAutomations, flows: ptFlows, join: ptJoin, broadcastWizard: ptBroadcastWizard, settingsWhatsapp: ptSettingsWhatsapp, settingsTemplates: ptSettingsTemplates, settingsQuickReplies: ptSettingsQuickReplies, settingsMembers: ptSettingsMembers, automationBuilder: ptAutomationBuilder, flowEditor: ptFlowEditor, pipelinesPanels: ptPipelinesPanels },
-  en: { common: enCommon, nav: enNav, header: enHeader, settings: enSettings, auth: enAuth, dashboard: enDashboard, broadcasts: enBroadcasts, contacts: enContacts, inbox: enInbox, settingsNav: enSettingsNav, pipelines: enPipelines, leadScore: enLeadScore, automations: enAutomations, flows: enFlows, join: enJoin, broadcastWizard: enBroadcastWizard, settingsWhatsapp: enSettingsWhatsapp, settingsTemplates: enSettingsTemplates, settingsQuickReplies: enSettingsQuickReplies, settingsMembers: enSettingsMembers, automationBuilder: enAutomationBuilder, flowEditor: enFlowEditor, pipelinesPanels: enPipelinesPanels },
+  "pt-BR": { common: ptCommon, nav: ptNav, header: ptHeader, settings: ptSettings, auth: ptAuth, dashboard: ptDashboard, broadcasts: ptBroadcasts, contacts: ptContacts, inbox: ptInbox, settingsNav: ptSettingsNav, pipelines: ptPipelines, leadScore: ptLeadScore, automations: ptAutomations, flows: ptFlows, join: ptJoin, broadcastWizard: ptBroadcastWizard, settingsWhatsapp: ptSettingsWhatsapp, settingsTemplates: ptSettingsTemplates, settingsQuickReplies: ptSettingsQuickReplies, settingsMembers: ptSettingsMembers, settingsAiAgent: ptSettingsAiAgent, automationBuilder: ptAutomationBuilder, flowEditor: ptFlowEditor, pipelinesPanels: ptPipelinesPanels },
+  en: { common: enCommon, nav: enNav, header: enHeader, settings: enSettings, auth: enAuth, dashboard: enDashboard, broadcasts: enBroadcasts, contacts: enContacts, inbox: enInbox, settingsNav: enSettingsNav, pipelines: enPipelines, leadScore: enLeadScore, automations: enAutomations, flows: enFlows, join: enJoin, broadcastWizard: enBroadcastWizard, settingsWhatsapp: enSettingsWhatsapp, settingsTemplates: enSettingsTemplates, settingsQuickReplies: enSettingsQuickReplies, settingsMembers: enSettingsMembers, settingsAiAgent: enSettingsAiAgent, automationBuilder: enAutomationBuilder, flowEditor: enFlowEditor, pipelinesPanels: enPipelinesPanels },
 } as const;

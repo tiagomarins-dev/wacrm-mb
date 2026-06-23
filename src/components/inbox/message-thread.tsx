@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import { AI_AGENT_USER_ID, AI_AGENT_LABEL } from "@/lib/ai-agent/constants";
+import type { AiProfilePublic } from "@/types";
 import type {
   Conversation,
   Message,
@@ -174,6 +174,7 @@ export function MessageThread({
   const scrollRef = useRef<HTMLDivElement>(null);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
@@ -216,6 +217,28 @@ export function MessageThread({
           return;
         }
         setProfiles((data as Profile[]) ?? []);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Perfis de IA ativos (responsáveis virtuais). Lidos da view pública
+  // ai_profiles_public (só id/nome/enabled; a persona fica na base admin-only).
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    supabase
+      .from("ai_profiles_public")
+      .select("id, nome, enabled")
+      .eq("enabled", true)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to fetch ai profiles:", error);
+          return;
+        }
+        setAiProfiles((data as AiProfilePublic[]) ?? []);
       });
     return () => {
       cancelled = true;
@@ -839,11 +862,11 @@ export function MessageThread({
   );
   const assignedAgentId = conversation.assigned_agent_id ?? null;
   const currentAssignee = profiles.find((p) => p.user_id === assignedAgentId);
-  // A IA é um responsável "virtual" (id sintético, sem profile) — resolve o
-  // label próprio quando a conversa está atribuída a ela.
-  const assignedToAi = assignedAgentId === AI_AGENT_USER_ID;
-  const assignLabel = assignedToAi
-    ? AI_AGENT_LABEL
+  // Perfis de IA são responsáveis "virtuais" (id sintético, sem profile) —
+  // resolve o label próprio quando a conversa está atribuída a um deles.
+  const aiMatch = aiProfiles.find((p) => p.id === assignedAgentId);
+  const assignLabel = aiMatch
+    ? `🤖 ${aiMatch.nome}`
     : assignedAgentId
       ? (currentAssignee?.full_name ?? "Assigned")
       : "Assign";
@@ -1006,20 +1029,27 @@ export function MessageThread({
               align="end"
               className="border-border bg-popover"
             >
-              {/* Responsável virtual: a IA. Atribuir = bot assume; reatribuir
-                  a um humano = bot para. */}
-              <DropdownMenuItem
-                key="ai-agent"
-                onClick={() => handleAssignChange(AI_AGENT_USER_ID)}
-                className={cn(
-                  "text-sm",
-                  assignedToAi ? "text-primary" : "text-popover-foreground"
-                )}
-              >
-                <span className="flex-1">🤖 {AI_AGENT_LABEL}</span>
-                {assignedToAi && <Check className="ml-2 h-3 w-3" />}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-border" />
+              {/* Perfis de IA (responsáveis virtuais). Atribuir = bot assume
+                  com a config DAQUELE perfil; reatribuir a um humano = bot para. */}
+              {aiProfiles.map((ap) => {
+                const isSelected = ap.id === assignedAgentId;
+                return (
+                  <DropdownMenuItem
+                    key={ap.id}
+                    onClick={() => handleAssignChange(ap.id)}
+                    className={cn(
+                      "text-sm",
+                      isSelected ? "text-primary" : "text-popover-foreground"
+                    )}
+                  >
+                    <span className="flex-1">🤖 {ap.nome}</span>
+                    {isSelected && <Check className="ml-2 h-3 w-3" />}
+                  </DropdownMenuItem>
+                );
+              })}
+              {aiProfiles.length > 0 && (
+                <DropdownMenuSeparator className="bg-border" />
+              )}
               {profiles.length === 0 ? (
                 <DropdownMenuItem disabled className="text-sm text-muted-foreground">
                   No teammates available
