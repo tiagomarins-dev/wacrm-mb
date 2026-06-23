@@ -18,10 +18,34 @@ const SWAPS: [RegExp, string][] = [
   [/\bpagar\b/giu, 'garantir'],
 ]
 
-// Aplica o pós-filtro: troca termos proibidos e normaliza travessão → vírgula.
-// Preserva a capitalização inicial da palavra trocada (Compra → Matrícula).
+// Remove markdown da resposta. O WhatsApp não renderiza e o gpt-4o-mini insiste
+// em usar (negrito **, listas, títulos), aparecendo literal pro cliente. Garantia
+// determinística — a instrução do prompt sozinha não basta.
+export function stripMarkdown(text: string): string {
+  return (
+    text
+      // títulos "## Título" → "Título"
+      .replace(/^#{1,6}\s+/gm, '')
+      // marcadores de lista no início da linha: "- ", "* ", "1. " → ""
+      .replace(/^\s*[-*]\s+/gm, '')
+      .replace(/^\s*\d+\.\s+/gm, '')
+      // links [texto](url) → "texto url"
+      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1 $2')
+      // ênfase **x** / *x* / __x__ / _x_ → x
+      .replace(/(\*\*|__)([^*_\n]+)\1/g, '$2')
+      .replace(/(\*|_)([^*_\n]+)\1/g, '$2')
+      // asteriscos/sublinhados soltos que sobraram
+      .replace(/\*/g, '')
+      // colapsa 3+ quebras de linha em 2
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  )
+}
+
+// Aplica o pós-filtro: remove markdown, troca termos proibidos e normaliza
+// travessão. Preserva a capitalização inicial da palavra trocada.
 export function applyGuardrail(text: string): string {
-  let out = text
+  let out = stripMarkdown(text)
 
   // Travessão (— em dash, – en dash) → vírgula. A Milla nunca usa travessão.
   out = out.replace(/\s*[—–]\s*/g, ', ')

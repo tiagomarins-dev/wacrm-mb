@@ -50,6 +50,7 @@ function makeCtx(db: unknown, extra: Partial<AgentCtx> = {}): AgentCtx {
     system: '',
     messages: [],
     handoffRouting: null,
+    allowedTools: null,
     ...extra,
   }
 }
@@ -60,9 +61,23 @@ const call = (name: string, args: object) => ({
 })
 
 describe('buildToolDefs', () => {
-  it('expõe as 5 ferramentas de roteamento', () => {
+  it('sem allowed_tools (null) → as 5 ferramentas', () => {
     const names = buildToolDefs().map((t) => t.function.name)
     expect(names).toEqual(['get_curso', 'enviar_link_venda', 'buscar_suporte', 'transferir_humano', 'encerrar'])
+  })
+
+  it('subset de domínio → filtra domínio mas PRESERVA controle (C2)', () => {
+    const names = buildToolDefs(['get_curso']).map((t) => t.function.name)
+    expect(names).toContain('get_curso')
+    expect(names).toContain('transferir_humano') // controle sempre
+    expect(names).toContain('encerrar') // controle sempre
+    expect(names).not.toContain('buscar_suporte')
+    expect(names).not.toContain('enviar_link_venda')
+  })
+
+  it('tool desconhecida no array → ignorada (no-op), controle mantido', () => {
+    const names = buildToolDefs(['nao_existe']).map((t) => t.function.name)
+    expect(names).toEqual(['transferir_humano', 'encerrar'])
   })
 })
 

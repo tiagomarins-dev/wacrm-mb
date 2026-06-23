@@ -5,16 +5,24 @@ const holder: { db: unknown } = { db: null }
 vi.mock('@/lib/automations/admin-client', () => ({ supabaseAdmin: () => holder.db }))
 vi.mock('@/lib/automations/meta-send', () => ({ engineSendText: vi.fn(async () => ({ whatsapp_message_id: 'm1' })) }))
 vi.mock('./llm', () => ({ runAgentLoop: vi.fn() }))
-// Mantém o phoneAllowed REAL; só mocka o recheck de atribuição (isAssignedToAi).
+// Mantém o phoneAllowed REAL; mocka resolveAssignedProfile (perfil responsável).
 vi.mock('./dispatch', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./dispatch')>()
-  return { ...actual, isAssignedToAi: vi.fn(async () => true) }
+  return { ...actual, resolveAssignedProfile: vi.fn() }
 })
 
-import { runAiAgentForConversation } from './engine'
+import { runAiAgentForConversation, splitIntoMessages, extractStudentCourses } from './engine'
 import { engineSendText } from '@/lib/automations/meta-send'
 import { runAgentLoop } from './llm'
-import { isAssignedToAi } from './dispatch'
+import { resolveAssignedProfile } from './dispatch'
+
+// Perfil de IA mockado (campos que o engine lê).
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const PROFILE: any = {
+  id: 'profile-1', account_id: 'acc-1', nome: 'Assistente', enabled: true,
+  persona_prompt: null, model: 'm', classifier_model: null, max_bot_turns: 8,
+  handoff_routing: null, allowed_tools: null,
+}
 
 // Fake db: `b` é thenable (await direto) E tem maybeSingle/update.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,7 +71,8 @@ function baseTables(): Record<string, any> {
 beforeEach(() => {
   holder.db = null
   vi.clearAllMocks()
-  vi.mocked(isAssignedToAi).mockResolvedValue(true)
+  // Default: a conversa é do PROFILE no load e no recheck.
+  vi.mocked(resolveAssignedProfile).mockResolvedValue(PROFILE)
 })
 
 describe('runAiAgentForConversation', () => {
@@ -94,10 +103,12 @@ describe('runAiAgentForConversation', () => {
     expect((upd?.payload as { ai_topic: string }).ai_topic).toBe('vendas')
   })
 
-  it('humano reatribuiu no meio do turno (não é mais da IA) → NÃO envia', async () => {
+  it('reatribuíram no meio do turno (perfil mudou/humano assumiu) → NÃO envia (M1)', async () => {
     holder.db = makeDb(baseTables()).db
     vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null })
-    vi.mocked(isAssignedToAi).mockResolvedValue(false)
+    // load = PROFILE; recheck = null (não é mais o mesmo perfil) → aborta.
+    vi.mocked(resolveAssignedProfile).mockReset()
+    vi.mocked(resolveAssignedProfile).mockResolvedValueOnce(PROFILE).mockResolvedValueOnce(null)
     await runAiAgentForConversation(row)
     expect(engineSendText).not.toHaveBeenCalled()
   })
@@ -140,5 +151,39 @@ describe('runAiAgentForConversation', () => {
     vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: 'vendas', handoff: null })
     await runAiAgentForConversation(row)
     expect(engineSendText).not.toHaveBeenCalled()
+  })
+
+  it('resposta com 2 parágrafos → envia 2 bolhas separadas', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'Oi Tiago.\n\nVamos garantir sua vaga?', topic: 'vendas', handoff: null })
+    await runAiAgentForConversation(row)
+    expect(engineSendText).toHaveBeenCalledTimes(2)
+    expect(vi.mocked(engineSendText).mock.calls[0][0].text).toBe('Oi Tiago.')
+    expect(vi.mocked(engineSendText).mock.calls[1][0].text).toBe('Vamos garantir sua vaga?')
+  })
+})
+
+describe('extractStudentCourses', () => {
+  it('extrai nome_curso do payload', () => {
+    const student = { payload: { cursos_matriculados: [{ nome_curso: 'Mestres da UERJ' }, { nome_curso: 'Gramática' }] } }
+    expect(extractStudentCourses(student)).toEqual(['Mestres da UERJ', 'Gramática'])
+  })
+  it('não aluno / payload sem cursos → []', () => {
+    expect(extractStudentCourses(null)).toEqual([])
+    expect(extractStudentCourses({ payload: { aluno: {} } })).toEqual([])
+  })
+})
+
+describe('splitIntoMessages', () => {
+  it('quebra por linha em branco (parágrafos)', () => {
+    expect(splitIntoMessages('a\n\nb\n\nc')).toEqual(['a', 'b', 'c'])
+  })
+  it('parágrafo único → 1 bolha', () => {
+    expect(splitIntoMessages('uma frase só')).toEqual(['uma frase só'])
+  })
+  it('junta excedente além de 6 bolhas na última', () => {
+    const r = splitIntoMessages('1\n\n2\n\n3\n\n4\n\n5\n\n6\n\n7\n\n8')
+    expect(r).toHaveLength(6)
+    expect(r[5]).toBe('6\n\n7\n\n8')
   })
 })

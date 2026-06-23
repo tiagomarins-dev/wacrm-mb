@@ -22,23 +22,28 @@ interface BuildPromptArgs {
   courses: { slug: string; nome: string; posicionamento: string | null }[]
   supportCategories: string[]
   student: { status: string | null; payload: unknown } | null
+  // Dados do contato p/ personalização (nome/email) + cursos que o aluno já tem.
+  contactName?: string | null
+  contactEmail?: string | null
+  studentCourses?: string[]
 }
 
 // Monta o system prompt concatenando as camadas na ordem de precedência.
 export function buildSystemPrompt(args: BuildPromptArgs): string {
   const parts: string[] = []
 
-  // 1) Papel + objetivo.
-  parts.push(
-    'Você é a assistente virtual da Prof. Milla Borges no WhatsApp. Atende tanto leads (vendas) quanto alunos (suporte). Identifica o assunto, busca na base certa, responde com informação atual, conduz à matrícula quando é venda, resolve a dúvida quando é suporte, e transfere para um humano quando necessário.',
-  )
-
-  // 2) Persona editável do admin (pode estar vazia).
-  if (args.persona?.trim()) parts.push(args.persona.trim())
-
-  // 3) VOZ_MILLA DEPOIS da persona — guardrails de marca têm precedência
-  //    (se a persona contradisser, a voz/guardrails ganham).
-  parts.push(VOZ_MILLA)
+  // 1+2+3) Base do prompt. Se o perfil tem persona PRÓPRIA (ex.: a "Ruth",
+  // que já traz nome/voz/regras completas), ela é a base e NÃO somamos o papel
+  // genérico nem o VOZ_MILLA (evita duplicar/contradizer — o pós-filtro
+  // guardrail.ts segue como rede de segurança). Sem persona: papel + voz-milla.
+  if (args.persona?.trim()) {
+    parts.push(args.persona.trim())
+  } else {
+    parts.push(
+      'Você é a assistente virtual da Prof. Milla Borges no WhatsApp. Atende tanto leads (vendas) quanto alunos (suporte). Identifica o assunto, busca na base certa, responde com informação atual, conduz à matrícula quando é venda, resolve a dúvida quando é suporte, e transfere para um humano quando necessário.',
+    )
+    parts.push(VOZ_MILLA)
+  }
 
   // 4) Instrução-chave de roteamento por assunto.
   parts.push(
@@ -56,10 +61,36 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     parts.push(`Categorias de suporte: ${args.supportCategories.join(', ')}.`)
   }
 
-  // 6) Contexto do contato (sinal de roteamento — aluno tende a SUPORTE).
-  if (args.student && args.student.status === 'success') {
+  // 5.1) Venda CONSULTIVA: usar a dor da pessoa, construir valor ANTES do preço.
+  parts.push(
+    'VENDAS (você é uma VENDEDORA consultiva, NÃO um balcão de informação): NUNCA ignore o que a pessoa acabou de te contar. Quando ela disser a dificuldade dela (ex: argumentação, repertório, falta de tempo), ACOLHA e mostre em 1 ou 2 frases curtas como a Milla resolve EXATAMENTE aquilo (a correção humana mostra onde o ponto escapa; o método blinda ali) — gerando desejo. NÃO lidere pela condição/preço: só passe o valor quando a pessoa demonstrar interesse claro OU pedir o valor. Ao informar valor, PRIORIZE a parcela em 12x (o à vista é secundário). Quando a pessoa presta MAIS DE UM vestibular, ofereça o COMBO certo (ENEM e UERJ = Carioca; ENEM e FUVEST = Paulista; ENEM, UERJ e FUVEST = Brasil) e enfatize a economia frente ao separado. Use get_curso pelo slug para os valores reais. Conduza a conversa: acolher a dor, criar valor, então convidar pra matrícula.',
+  )
+
+  // 5.2) Estilo de resposta: breve e humano, mas SEM virar seco (multi-bolha).
+  parts.push(
+    'ESTILO DE RESPOSTA (MUITO IMPORTANTE): seja BREVE e natural, como uma pessoa real digitando no WhatsApp, NÃO como robô nem texto de site. No máximo 2 ou 3 frases curtas por resposta. Breve NÃO é seco: você ainda acolhe e conduz a venda, só não dá AULA de redação (o aluno já sabe o que importa) nem escreve parágrafos longos. Separe ideias em parágrafos curtos com UMA linha em branco entre eles: cada parágrafo vira uma mensagem separada no WhatsApp, então quebre como gente quebra a fala em várias mensagens. Uma única pergunta, no final.',
+  )
+
+  // 6) Dados do contato (personalização): nome p/ tratar pela alça, email p/
+  //    conferência, e os cursos que o aluno já possui (não revender o mesmo).
+  const contatoLinhas: string[] = []
+  if (args.contactName?.trim()) contatoLinhas.push(`Nome: ${args.contactName.trim()}`)
+  if (args.contactEmail?.trim()) contatoLinhas.push(`Email cadastrado: ${args.contactEmail.trim()}`)
+  if (args.studentCourses?.length) {
+    contatoLinhas.push(`Cursos e módulos que JÁ possui: ${args.studentCourses.join('; ')}`)
+  }
+  if (contatoLinhas.length) {
     parts.push(
-      'Este contato JÁ É ALUNO (consta na base de alunos). Dúvidas dele tendem a ser de suporte; trate com cuidado e use buscar_suporte. Mesmo assim, deixe o ASSUNTO da mensagem decidir.',
+      'DADOS DO CONTATO (use o NOME para personalizar, tratando a pessoa pelo nome desde já. NÃO repita o email sem a pessoa pedir. Se ele JÁ possui um curso, NÃO ofereça o mesmo curso de novo: foque em suporte e próximos passos):\n' +
+        contatoLinhas.join('\n'),
+    )
+  }
+
+  // Sinal de roteamento: aluno tende a SUPORTE.
+  const isAluno = !!args.studentCourses?.length || args.student?.status === 'success'
+  if (isAluno) {
+    parts.push(
+      'Este contato JÁ É ALUNO. Dúvidas dele tendem a ser de suporte; use buscar_suporte. Mesmo assim, deixe o ASSUNTO da mensagem decidir.',
     )
   }
 
@@ -68,9 +99,10 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     'HANDOFF: transfira para um humano (transferir_humano) quando o cliente pedir um atendente, quando a busca na base não tiver resposta, ou em caso financeiro/reclamação sensível. Caso contrário, conduza você mesma.',
   )
 
-  // 8) Formatação WhatsApp (sem markdown — o WhatsApp não renderiza).
+  // 8) Formatação WhatsApp: texto corrido, SEM markdown (o WhatsApp não
+  //    renderiza e o asterisco aparece literal pro cliente).
   parts.push(
-    'FORMATAÇÃO (WhatsApp): para negrito use UM asterisco em volta da palavra (ex: *Mestres da UERJ*), NUNCA dois (**). Não use markdown: nada de ##, listas com "-" ou "1." no início da linha, nem [texto](link). Escreva o link cru (https://...). Mensagens curtas, parágrafos curtos; evite listas longas. Se um curso não tiver link de matrícula, NÃO diga que houve erro ou problema técnico — diga que a matrícula desse curso é feita pela equipe e ofereça transferir para um atendente concluir.',
+    'FORMATAÇÃO (WhatsApp): escreva texto corrido e simples, SEM markdown — nada de asteriscos (* ou **) para negrito, nada de #, hífens ou números como marcadores de lista, nem links entre colchetes. Escreva o link cru (https://...). Mensagens curtas, com quebra de linha entre as frases. Se um curso não tiver link de matrícula, NÃO diga que houve erro técnico — diga que a matrícula desse curso é feita pela equipe e ofereça transferir para um atendente.',
   )
 
   return parts.join('\n\n')

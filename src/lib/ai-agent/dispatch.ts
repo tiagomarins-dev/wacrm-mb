@@ -8,7 +8,8 @@
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { AI_AGENT_USER_ID } from './constants'
+import { engineSendTyping } from '@/lib/automations/meta-send'
+import type { AiProfile } from '@/types'
 
 // MODO TESTE (allowlist): se `allowed` está preenchida, o agente SÓ atende
 // contatos cujo telefone (só dígitos) casa com a lista — por igualdade ou
@@ -57,9 +58,9 @@ export async function dispatchInboundToAiAgent(input: DispatchAiInput): Promise<
       .maybeSingle()
     if (!cfg?.enabled) return
 
-    // CONTROLE PRINCIPAL: a IA só atua se for a RESPONSÁVEL da conversa
-    // (assigned_agent_id == IA). Humano "assume" reatribuindo → bot para.
-    if (!(await isAssignedToAi(db, input.conversationId))) return
+    // CONTROLE PRINCIPAL: a IA só atua se a conversa estiver atribuída a um
+    // PERFIL de IA ativo. Humano "assume" reatribuindo a si → bot para.
+    if (!(await resolveAssignedProfile(db, input.accountId, input.conversationId))) return
 
     // Contato pediu pra não falar com bot? (e pega o phone p/ a allowlist)
     const { data: contact } = await db
@@ -89,22 +90,43 @@ export async function dispatchInboundToAiAgent(input: DispatchAiInput): Promise<
       { onConflict: 'conversation_id' },
     )
     if (error) console.error('[ai_agent] enqueue failed:', error.message)
+
+    // "digitando..." imediato (feedback enquanto o debounce + cron + LLM rolam).
+    // Fire-and-forget; dura ~25s e é refrescado pelo engine quando ele assume.
+    void engineSendTyping({
+      accountId: input.accountId,
+      conversationId: input.conversationId,
+      inboundWamid: input.inboundMessageId,
+    })
   } catch (err) {
     console.error('[ai_agent] dispatch failed:', err instanceof Error ? err.message : err)
   }
 }
 
-// True se a IA é a responsável atual da conversa (assigned_agent_id == IA).
-// É o gate central do modelo: usado no dispatch (enfileirar) e no engine
-// (rechecar antes de enviar — se um humano reatribuiu no meio, o bot para).
-export async function isAssignedToAi(
+// Resolve o PERFIL de IA responsável pela conversa: lê assigned_agent_id e
+// carrega o ai_profile correspondente (account-scoped + enabled). null = não
+// há perfil de IA ativo (humano / órfão / desabilitado) → o bot não atua.
+// É o gate central: usado no dispatch (enfileirar) e no engine (rechecar antes
+// de enviar — se reatribuíram pra outro perfil/humano no meio, o bot para).
+// Service-role bypassa RLS → filtra account_id explícito (igual knowledge.ts:6-8).
+export async function resolveAssignedProfile(
   db: SupabaseClient,
+  accountId: string,
   conversationId: string,
-): Promise<boolean> {
-  const { data } = await db
+): Promise<AiProfile | null> {
+  const { data: conv } = await db
     .from('conversations')
     .select('assigned_agent_id')
     .eq('id', conversationId)
     .maybeSingle()
-  return (data as { assigned_agent_id: string | null } | null)?.assigned_agent_id === AI_AGENT_USER_ID
+  const assigned = (conv as { assigned_agent_id: string | null } | null)?.assigned_agent_id
+  if (!assigned) return null
+  const { data: profile } = await db
+    .from('ai_profiles')
+    .select('*')
+    .eq('id', assigned)
+    .eq('account_id', accountId)
+    .eq('enabled', true)
+    .maybeSingle()
+  return (profile as AiProfile | null) ?? null
 }

@@ -235,6 +235,31 @@ export interface AiCourse {
   updated_at: string;
 }
 
+/**
+ * Perfil de IA (migration 040) — responsável "virtual" atribuível.
+ * Row completa: SÓ admin lê (RLS da base). Membros leem o subtipo público
+ * via a view ai_profiles_public.
+ */
+export interface AiProfile {
+  id: string;
+  account_id: string;
+  nome: string;
+  slug: string | null;
+  enabled: boolean;
+  persona_prompt: string | null;
+  model: string;
+  classifier_model: string | null;
+  max_bot_turns: number;
+  handoff_routing: Record<string, string> | null;
+  /** null = todas as tools de domínio; subset = perfil especializado. */
+  allowed_tools: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Perfil exposto a qualquer membro (view ai_profiles_public) — sem persona. */
+export type AiProfilePublic = Pick<AiProfile, 'id' | 'nome' | 'enabled'>;
+
 /** Artigo de SUPORTE (FAQ/procedimento). Migration 037. */
 export interface AiSupportArticle {
   id: string;

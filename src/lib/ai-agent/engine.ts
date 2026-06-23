@@ -7,8 +7,8 @@
 // Espelha a estrutura de executeAutomation (automations/engine.ts:175).
 // ============================================================
 import { supabaseAdmin } from '@/lib/automations/admin-client'
-import { engineSendText } from '@/lib/automations/meta-send'
-import { isAssignedToAi, phoneAllowed } from './dispatch'
+import { engineSendText, engineSendTyping } from '@/lib/automations/meta-send'
+import { resolveAssignedProfile, phoneAllowed } from './dispatch'
 import { buildSystemPrompt, serializeRecentMessages } from './prompt'
 import { listCursos, listSupportCategories } from './knowledge'
 import { runAgentLoop } from './llm'
@@ -22,6 +22,7 @@ export interface PendingRow {
   connection_id: string
   conversation_id: string
   contact_id: string
+  last_inbound_message_id?: string | null // wamid p/ o "digitando..."
 }
 
 // Executa o agente p/ uma conversa: monta contexto, roda o loop, aplica
@@ -29,19 +30,35 @@ export interface PendingRow {
 export async function runAiAgentForConversation(row: PendingRow): Promise<void> {
   const db = supabaseAdmin()
 
-  // Config do agente (modelo, persona, handoff, max_turns).
+  // Perfil de IA responsável pela conversa — persona/modelo/tools/handoff vêm
+  // DELE. null = não há perfil ativo atribuído (humano/órfão) → não atua.
+  const profile = await resolveAssignedProfile(db, row.account_id, row.conversation_id)
+  if (!profile) return
+  const profileId = profile.id // capturado p/ o recheck (M1)
+
+  // Config por conexão: só o kill-switch + allowlist (compartilhados entre os
+  // perfis daquela conexão). O "cérebro" agora mora no perfil.
   const { data: cfgRow } = await db
     .from('ai_agent_config')
-    .select('*')
+    .select('enabled, allowed_phones')
     .eq('account_id', row.account_id)
     .eq('connection_id', row.connection_id)
     .maybeSingle()
-  const cfg = cfgRow as AiAgentConfig | null
+  const cfg = cfgRow as Pick<AiAgentConfig, 'enabled' | 'allowed_phones'> | null
   if (!cfg?.enabled) return
 
   // Histórico recente (chat) + se é aluno (student_info) → sinal de roteamento.
   const messages = await serializeRecentMessages(db, row.conversation_id)
   if (messages.length === 0) return // nada a responder
+
+  // Refresca o "digitando..." agora que o engine assumiu (cobre o tempo do LLM).
+  if (row.last_inbound_message_id) {
+    void engineSendTyping({
+      accountId: row.account_id,
+      conversationId: row.conversation_id,
+      inboundWamid: row.last_inbound_message_id,
+    })
+  }
   const { data: student } = await db
     .from('student_info')
     .select('status, payload')
@@ -49,16 +66,30 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
     .eq('contact_id', row.contact_id)
     .maybeSingle()
 
+  // Dados do contato p/ personalização (nome/email) + phone p/ a allowlist.
+  // Carregado uma vez aqui e reaproveitado no envio (evita 2ª consulta).
+  const { data: contactRow } = await db
+    .from('contacts')
+    .select('name, email, phone')
+    .eq('id', row.contact_id)
+    .eq('account_id', row.account_id)
+    .maybeSingle()
+  const contact = contactRow as { name: string | null; email: string | null; phone: string | null } | null
+  const studentCourses = extractStudentCourses(student)
+
   // Catálogo p/ o prompt (cursos ativos + categorias de suporte).
   const courses = await listCursos(db, row.account_id)
   const supportCategories = await listSupportCategories(db, row.account_id)
 
-  // System prompt: voz-milla é concatenada DEPOIS da persona (precedência).
+  // System prompt: persona DO PERFIL + voz-milla concatenada DEPOIS (precedência).
   const system = buildSystemPrompt({
-    persona: cfg.persona_prompt,
+    persona: profile.persona_prompt,
     courses,
     supportCategories,
     student: (student as { status: string | null; payload: unknown } | null) ?? null,
+    contactName: contact?.name ?? null,
+    contactEmail: contact?.email ?? null,
+    studentCourses,
   })
 
   // Loop LLM com tool-calling. O LLM roteia o assunto via a tool que escolhe.
@@ -74,21 +105,24 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       connectionId: row.connection_id,
       conversationId: row.conversation_id,
       contactId: row.contact_id,
-      model: cfg.model,
-      classifierModel: cfg.classifier_model,
-      maxTurns: cfg.max_bot_turns,
+      model: profile.model,
+      classifierModel: profile.classifier_model,
+      maxTurns: profile.max_bot_turns,
       system,
       messages,
-      handoffRouting: cfg.handoff_routing,
+      handoffRouting: profile.handoff_routing,
+      allowedTools: profile.allowed_tools,
     })
   } catch (err) {
     console.error('[ai_agent] loop failed:', err instanceof Error ? err.message : err)
     return
   }
 
-  // RECHECK: a IA ainda é a responsável? Se um humano reatribuiu a conversa
-  // enquanto o LLM pensava, o bot para — não envia nem aplica handoff.
-  if (!(await isAssignedToAi(db, row.conversation_id))) return
+  // RECHECK (M1): a conversa ainda é do MESMO perfil que iniciou o run? Se um
+  // humano/automação reatribuiu (a si ou a OUTRO perfil) enquanto o LLM pensava,
+  // o bot para — não envia com a persona errada nem aplica handoff.
+  const still = await resolveAssignedProfile(db, row.account_id, row.conversation_id)
+  if (still?.id !== profileId) return
 
   // Grava o assunto detectado (analytics + roteamento de handoff).
   if (result.topic) {
@@ -98,14 +132,8 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   // Envia a resposta (se houver texto). transferir_humano/encerrar podem
   // não ter texto — nesse caso só aplica o handoff abaixo.
   if (result.reply?.trim()) {
-    // Allowlist opcional (defesa dupla): se setada, não envia fora da lista.
-    const { data: contact } = await db
-      .from('contacts')
-      .select('phone')
-      .eq('id', row.contact_id)
-      .eq('account_id', row.account_id)
-      .maybeSingle()
-    if (phoneAllowed((contact as { phone: string | null } | null)?.phone, cfg.allowed_phones)) {
+    // Allowlist opcional (defesa dupla): reusa o contato já carregado acima.
+    if (phoneAllowed(contact?.phone, cfg.allowed_phones)) {
       // Pós-filtro de marca (obrigatório) antes do envio.
       const safe = applyGuardrail(result.reply)
       // userId p/ auditoria do engineSendText (não é consultado p/ tenancy —
@@ -117,16 +145,31 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
         .eq('account_id', row.account_id)
         .maybeSingle()
       const userId = (conn as { user_id: string } | null)?.user_id ?? row.account_id
-      try {
-        await engineSendText({
-          accountId: row.account_id,
-          userId,
-          conversationId: row.conversation_id,
-          contactId: row.contact_id,
-          text: safe,
-        })
-      } catch (err) {
-        console.error('[ai_agent] send failed:', err instanceof Error ? err.message : err)
+      // Quebra a resposta em BOLHAS (parágrafos) e envia uma a uma, como um
+      // humano digita no WhatsApp. Entre bolhas: "digitando" + pausa curta.
+      const parts = splitIntoMessages(safe)
+      for (let i = 0; i < parts.length; i++) {
+        if (i > 0) {
+          if (row.last_inbound_message_id) {
+            void engineSendTyping({
+              accountId: row.account_id,
+              conversationId: row.conversation_id,
+              inboundWamid: row.last_inbound_message_id,
+            })
+          }
+          await new Promise((r) => setTimeout(r, 900))
+        }
+        try {
+          await engineSendText({
+            accountId: row.account_id,
+            userId,
+            conversationId: row.conversation_id,
+            contactId: row.contact_id,
+            text: parts[i],
+          })
+        } catch (err) {
+          console.error('[ai_agent] send failed:', err instanceof Error ? err.message : err)
+        }
       }
     } else {
       console.warn('[ai_agent] contato fora da allowlist — envio bloqueado:', row.conversation_id)
@@ -136,7 +179,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   // HANDOFF pós-envio: a IA pediu transferência → reatribui a conversa ao
   // humano roteado (ou desatribui, se sem rota). Feito DEPOIS do envio para
   // a mensagem de "vou te transferir" sair antes de o bot deixar de ser o
-  // responsável. A partir daqui, isAssignedToAi() falha → bot não atua mais.
+  // responsável. A partir daqui, resolveAssignedProfile() falha → bot para.
   if (result.handoff) {
     await db
       .from('conversations')
@@ -144,4 +187,31 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       .eq('id', row.conversation_id)
       .eq('account_id', row.account_id)
   }
+}
+
+// Divide a resposta do bot em mensagens separadas (bolhas do WhatsApp), quebrando
+// por parágrafo (linha em branco) — fica natural, como gente digitando. Junta o
+// excedente além de MAX_BOLHAS na última, p/ nunca spammar dezenas de mensagens.
+const MAX_BOLHAS = 6
+export function splitIntoMessages(text: string): string[] {
+  const parts = text
+    .split(/\n\s*\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return [text.trim()].filter(Boolean)
+  if (parts.length <= MAX_BOLHAS) return parts
+  const head = parts.slice(0, MAX_BOLHAS - 1)
+  const tail = parts.slice(MAX_BOLHAS - 1).join('\n\n')
+  return [...head, tail]
+}
+
+// Extrai os nomes dos cursos/módulos matriculados do payload do student_info.
+// Forma: payload.cursos_matriculados[] = { nome_curso, ... }. [] se não for aluno.
+export function extractStudentCourses(student: unknown): string[] {
+  const payload = (student as { payload?: { cursos_matriculados?: unknown } } | null)?.payload
+  const arr = payload?.cursos_matriculados
+  if (!Array.isArray(arr)) return []
+  return arr
+    .map((c) => (c as { nome_curso?: string })?.nome_curso)
+    .filter((n): n is string => typeof n === 'string' && n.trim().length > 0)
 }

@@ -1,4 +1,4 @@
-import { sendTextMessage, sendTemplateMessage } from '@/lib/whatsapp/meta-api'
+import { sendTextMessage, sendTemplateMessage, sendTypingIndicator } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import {
   sanitizePhoneForMeta,
@@ -19,6 +19,27 @@ import { resolveOutboundConfigForConversation } from '@/lib/connections/resolve'
 // route) to avoid risk to the working manual-send path — they can
 // converge in a later refactor.
 // ------------------------------------------------------------
+
+// Mostra "digitando..." na conversa enquanto o bot prepara a resposta. Resolve
+// a conexão da conversa (multi-número) + decripta o token e pede o typing à
+// Meta. Best-effort: nunca lança (typing é cosmético).
+export async function engineSendTyping(args: {
+  accountId: string
+  conversationId: string
+  inboundWamid: string
+}): Promise<void> {
+  try {
+    const db = supabaseAdmin()
+    const config = await resolveOutboundConfigForConversation(db, args.accountId, args.conversationId)
+    await sendTypingIndicator({
+      phoneNumberId: config.phone_number_id,
+      accessToken: decrypt(config.access_token),
+      messageId: args.inboundWamid,
+    })
+  } catch (err) {
+    console.error('[ai_agent] typing failed:', err instanceof Error ? err.message : err)
+  }
+}
 
 interface SendTextArgs {
   /** Account-level tenancy key. Drives contact + whatsapp_config

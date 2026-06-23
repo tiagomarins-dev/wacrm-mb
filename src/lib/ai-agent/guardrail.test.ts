@@ -1,5 +1,20 @@
 import { describe, expect, it } from 'vitest'
-import { applyGuardrail, hasForbidden } from './guardrail'
+import { applyGuardrail, hasForbidden, stripMarkdown } from './guardrail'
+
+describe('stripMarkdown', () => {
+  it('remove negrito ** e *', () => {
+    expect(stripMarkdown('**Combo Brasil** e *Descrição:* aqui')).toBe('Combo Brasil e Descrição: aqui')
+  })
+  it('remove marcadores de lista (1. e -)', () => {
+    expect(stripMarkdown('1. Combo Brasil\n- Descrição: x')).toBe('Combo Brasil\nDescrição: x')
+  })
+  it('link markdown vira texto + url', () => {
+    expect(stripMarkdown('veja [aqui](https://x.com)')).toBe('veja aqui https://x.com')
+  })
+  it('texto limpo passa igual', () => {
+    expect(stripMarkdown('12x de R$ 96,24')).toBe('12x de R$ 96,24')
+  })
+})
 
 describe('applyGuardrail', () => {
   it('troca vocabulário comercial frio pelo da Milla', () => {

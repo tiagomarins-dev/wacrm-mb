@@ -1,5 +1,4 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { AI_AGENT_USER_ID } from './constants'
 
 // Holder do db ativo (a factory do vi.mock fecha sobre ele); trocado por teste.
 const holder: { db: unknown } = { db: null }
@@ -42,16 +41,19 @@ const input = {
   flowConsumed: false,
 }
 
-// Cenário-base: agente ligado, conversa ATRIBUÍDA À IA, contato sem opt-out.
-// Tipos frouxos p/ os testes poderem reatribuir cada tabela.
+// Cenário-base: agente ligado, conversa atribuída a um PERFIL de IA ativo.
+// O fake-db não filtra por .eq() → o teste expressa o RESULTADO da consulta a
+// `ai_profiles` (perfil encontrado = {id,...}; não encontrado/disabled = null).
 function happyTables(): {
   ai_agent_config: { enabled: boolean; debounce_seconds: number; allowed_phones?: string[] | null } | null
   conversations: { assigned_agent_id: string | null }
+  ai_profiles: { id: string; enabled: boolean; account_id: string } | null
   contacts: { ai_opt_out: boolean; phone?: string | null }
 } {
   return {
     ai_agent_config: { enabled: true, debounce_seconds: 10, allowed_phones: null },
-    conversations: { assigned_agent_id: AI_AGENT_USER_ID },
+    conversations: { assigned_agent_id: 'profile-1' },
+    ai_profiles: { id: 'profile-1', enabled: true, account_id: 'acc-1' },
     contacts: { ai_opt_out: false, phone: '+5521987868395' },
   }
 }
@@ -84,9 +86,19 @@ describe('dispatchInboundToAiAgent', () => {
     expect(upserts).toHaveLength(0)
   })
 
-  it('conversa NÃO atribuída à IA → não enfileira', async () => {
+  it('atribuída a humano / perfil inexistente → não enfileira', async () => {
     const t = happyTables()
     t.conversations = { assigned_agent_id: 'humano-123' }
+    t.ai_profiles = null // a consulta a ai_profiles não casa nenhum perfil
+    const { db, upserts } = makeDb(t)
+    holder.db = db
+    await dispatchInboundToAiAgent(input)
+    expect(upserts).toHaveLength(0)
+  })
+
+  it('perfil desabilitado (enabled=false → consulta não retorna) → não enfileira', async () => {
+    const t = happyTables()
+    t.ai_profiles = null // WHERE enabled=true não casa
     const { db, upserts } = makeDb(t)
     holder.db = db
     await dispatchInboundToAiAgent(input)

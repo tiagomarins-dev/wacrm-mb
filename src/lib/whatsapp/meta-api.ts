@@ -259,6 +259,36 @@ export async function sendTextMessage(
   return { messageId: data.messages[0].id }
 }
 
+// Mostra "digitando..." pro cliente. A Meta Cloud API entrega isso junto da
+// marcação de lido: POST /messages com status='read' + typing_indicator. Dura
+// ~25s OU até o número enviar a próxima mensagem (a resposta do bot). Precisa
+// do wamid da última msg do cliente. Best-effort: typing é cosmético, falha
+// nunca quebra o fluxo.
+export async function sendTypingIndicator(args: {
+  phoneNumberId: string
+  accessToken: string
+  messageId: string
+}): Promise<void> {
+  const url = `${META_API_BASE}/${args.phoneNumberId}/messages`
+  try {
+    await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${args.accessToken}`,
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: args.messageId,
+        typing_indicator: { type: 'text' },
+      }),
+    })
+  } catch (err) {
+    console.error('[whatsapp] typing indicator failed:', err instanceof Error ? err.message : err)
+  }
+}
+
 export type MediaKind = 'image' | 'video' | 'document' | 'audio'
 
 export interface SendMediaMessageArgs {

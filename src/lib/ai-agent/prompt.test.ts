@@ -9,14 +9,17 @@ const baseArgs = {
 }
 
 describe('buildSystemPrompt', () => {
-  it('inclui os guardrails da voz-milla', () => {
+  it('COM persona: a persona é a base; NÃO duplica voz-milla nem o papel genérico', () => {
     const p = buildSystemPrompt(baseArgs)
-    expect(p).toContain('BARREIRAS VERMELHAS')
+    expect(p).toContain('PERSONA_DO_ADMIN_AQUI')
+    expect(p).not.toContain('BARREIRAS VERMELHAS') // voz-milla pulada
+    expect(p).not.toContain('assistente virtual da Prof. Milla Borges') // papel genérico pulado
   })
 
-  it('persona vem ANTES da voz-milla (guardrails têm precedência)', () => {
-    const p = buildSystemPrompt(baseArgs)
-    expect(p.indexOf('PERSONA_DO_ADMIN_AQUI')).toBeLessThan(p.indexOf('BARREIRAS VERMELHAS'))
+  it('SEM persona: usa o papel genérico + voz-milla', () => {
+    const p = buildSystemPrompt({ ...baseArgs, persona: null })
+    expect(p).toContain('assistente virtual da Prof. Milla Borges')
+    expect(p).toContain('BARREIRAS VERMELHAS')
   })
 
   it('tem a instrução de roteamento e o catálogo de cursos', () => {
@@ -26,14 +29,41 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('acesso, financeiro')
   })
 
+  it('formatação manda escrever SEM markdown (sem asteriscos)', () => {
+    const p = buildSystemPrompt(baseArgs)
+    expect(p).toContain('SEM markdown')
+  })
+
+  it('venda consultiva: prioriza 12x, empurra combo, não lidera pelo preço', () => {
+    const p = buildSystemPrompt(baseArgs)
+    expect(p).toContain('12x')
+    expect(p).toContain('Carioca')
+    expect(p).toContain('NÃO lidere pela')
+  })
+
+  it('estilo: manda ser breve e quebrar em mensagens separadas', () => {
+    const p = buildSystemPrompt(baseArgs)
+    expect(p).toContain('ESTILO DE RESPOSTA')
+    expect(p).toContain('mensagem separada')
+  })
+
   it('aluno (student.success) adiciona o sinal de suporte', () => {
     const p = buildSystemPrompt({ ...baseArgs, student: { status: 'success', payload: {} } })
     expect(p).toContain('JÁ É ALUNO')
   })
 
-  it('sem persona não quebra', () => {
-    const p = buildSystemPrompt({ ...baseArgs, persona: null })
-    expect(p).toContain('BARREIRAS VERMELHAS')
+  it('DADOS DO CONTATO: injeta nome, email e cursos que possui', () => {
+    const p = buildSystemPrompt({
+      ...baseArgs,
+      contactName: 'Tiago',
+      contactEmail: 'tiago@x.com',
+      studentCourses: ['Mestres da UERJ'],
+    })
+    expect(p).toContain('DADOS DO CONTATO')
+    expect(p).toContain('Tiago')
+    expect(p).toContain('tiago@x.com')
+    expect(p).toContain('Mestres da UERJ')
+    expect(p).toContain('JÁ É ALUNO') // cursos não-vazios → é aluno
   })
 })
 

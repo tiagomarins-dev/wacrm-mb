@@ -28,6 +28,7 @@ function ctx(db: unknown, over: Partial<AgentCtx> = {}): AgentCtx {
     accountId: 'acc-1', connectionId: 'c', conversationId: 'cv', contactId: 'ct',
     model: 'openai/gpt-4o-mini', classifierModel: null, maxTurns: 4,
     system: 'SYS', messages: [{ role: 'user', content: 'oi' }], handoffRouting: null,
+    allowedTools: null,
     ...over,
   }
 }

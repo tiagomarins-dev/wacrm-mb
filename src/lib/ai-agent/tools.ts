@@ -31,9 +31,16 @@ interface ToolResult {
   handoff?: { to: string | null }
 }
 
-// Definições das ferramentas no formato OpenAI (tools[]).
-export function buildToolDefs() {
-  return [
+// Tools de DOMÍNIO (filtráveis por allowed_tools do perfil). As de CONTROLE
+// (transferir_humano, encerrar) NÃO entram aqui: são sempre incluídas, senão
+// o handoff quebra (o engine depende de transferir_humano).
+const DOMAIN_TOOLS = new Set(['get_curso', 'enviar_link_venda', 'buscar_suporte'])
+
+// Definições das ferramentas no formato OpenAI (tools[]). `allowedTools` (do
+// perfil) filtra SÓ as tools de domínio; null/vazio = todas. Tool desconhecida
+// no array é ignorada (no-op). transferir_humano/encerrar entram sempre.
+export function buildToolDefs(allowedTools?: string[] | null) {
+  const all = [
     {
       type: 'function',
       function: {
@@ -98,6 +105,10 @@ export function buildToolDefs() {
       },
     },
   ]
+  // Sem allowed_tools = todas. Com lista: filtra só as de domínio; controle fica.
+  if (!allowedTools || allowedTools.length === 0) return all
+  const allow = new Set(allowedTools)
+  return all.filter((t) => !DOMAIN_TOOLS.has(t.function.name) || allow.has(t.function.name))
 }
 
 // Executa uma tool pedida pelo modelo e devolve o resultado + assunto detectado.
