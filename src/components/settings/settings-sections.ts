@@ -1,4 +1,5 @@
 import {
+  Bot,
   Coins,
   FileText,
   LayoutGrid,
@@ -32,6 +33,7 @@ export const SETTINGS_SECTIONS = [
   'quick-replies',
   'integrations',
   'lead-score',
+  'ai-agent',
   'fields',
   'deals',
   'members',
@@ -62,6 +64,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   'quick-replies': { id: 'quick-replies', labelKey: 'quickReplies', icon: MessageSquare, group: 'workspace' },
   integrations: { id: 'integrations', labelKey: 'integrations', icon: Zap, group: 'workspace', adminOnly: true },
   'lead-score': { id: 'lead-score', labelKey: 'leadScore', icon: TrendingUp, group: 'workspace', adminOnly: true },
+  'ai-agent': { id: 'ai-agent', labelKey: 'aiAgent', icon: Bot, group: 'workspace', adminOnly: true },
   fields: { id: 'fields', labelKey: 'fields', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', labelKey: 'deals', icon: Coins, group: 'workspace' },
   members: { id: 'members', labelKey: 'members', icon: UsersRound, group: 'workspace' },

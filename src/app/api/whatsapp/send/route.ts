@@ -435,6 +435,26 @@ export async function POST(request: Request) {
       )
     }
 
+    // Humano assumiu → derruba a pendência do agente de IA desta conversa
+    // (este endpoint só é chamado por atendente humano; o bot envia por
+    // outro caminho). O engine ainda recheca sender_type='agent' antes de
+    // enviar, então mesmo uma corrida aqui é coberta. Best-effort.
+    try {
+      const { error: pendingErr } = await supabaseAdmin()
+        .from('ai_agent_pending')
+        .delete()
+        .eq('account_id', accountId)
+        .eq('conversation_id', conversation_id)
+      if (pendingErr) {
+        console.error('[ai_agent] clear-pending-on-agent-send failed:', pendingErr.message)
+      }
+    } catch (err) {
+      console.error(
+        '[ai_agent] clear-pending-on-agent-send threw:',
+        err instanceof Error ? err.message : err,
+      )
+    }
+
     return NextResponse.json({
       success: true,
       message_id: messageRecord.id,

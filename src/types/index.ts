@@ -175,6 +175,135 @@ export interface IntegrationsConfigPublic {
   millaborges_set: boolean;
 }
 
+// ============================================================
+// Agente de IA no WhatsApp (migration 037).
+// ============================================================
+
+/** Config do agente por conexão. Row completa (uso no servidor/engine). */
+export interface AiAgentConfig {
+  id: string;
+  account_id: string;
+  connection_id: string;
+  enabled: boolean;
+  debounce_seconds: number;
+  model: string;
+  classifier_model: string | null;
+  persona_prompt: string | null;
+  handoff_hours: Record<string, unknown> | null;
+  handoff_routing: Record<string, string> | null;
+  max_bot_turns: number;
+  /** Allowlist de telefones (MODO TESTE). Vazio/null = responde a todos. */
+  allowed_phones: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Telemetria run-level de uma execução do agente (ai_agent_runs). Imutável. */
+export interface AiAgentRun {
+  id: string;
+  account_id: string;
+  connection_id: string | null;
+  conversation_id: string | null;
+  contact_id: string | null;
+  profile_id: string | null;
+  /** wamid da mensagem do CLIENTE que disparou a run (não a resposta do bot). */
+  inbound_message_id: string | null;
+  model: string | null;
+  status: 'ok' | 'no_reply' | 'blocked' | 'error' | 'superseded';
+  error_phase: 'auth' | 'llm' | 'tool' | 'send' | null;
+  error_message: string | null;
+  finish_reason: string | null;
+  requests: number;
+  turns: number;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cost_usd: number | null;
+  latency_ms: number | null;
+  llm_ms: number | null;
+  tools_used: string[] | null;
+  topic: 'vendas' | 'suporte' | null;
+  handoff: boolean;
+  guardrail_hits: number;
+  created_at: string;
+}
+
+/**
+ * Config do agente exposta ao client — sem `persona_prompt` cru (anti
+ * prompt-injection / pode conter instrução sensível). Espelha o padrão
+ * `*_set` de IntegrationsConfigPublic.
+ */
+export interface AiAgentConfigPublic {
+  enabled: boolean;
+  debounce_seconds: number;
+  model: string;
+  classifier_model: string | null;
+  handoff_routing: Record<string, string> | null;
+  max_bot_turns: number;
+  persona_set: boolean;
+}
+
+/** Curso (base de VENDAS do agente). Migration 037. */
+export interface AiCourse {
+  id: string;
+  account_id: string;
+  slug: string;
+  nome: string;
+  ativo: boolean;
+  posicionamento: string | null;
+  publico: string | null;
+  entregas: string | null;
+  numeros_claims: string | null;
+  condicao_vigente: string | null;
+  bonus: string | null;
+  garantia: string | null;
+  nao_prometer: string | null;
+  pagina_vendas_url: string | null;
+  link_venda: string | null;
+  atualizado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Perfil de IA (migration 040) — responsável "virtual" atribuível.
+ * Row completa: SÓ admin lê (RLS da base). Membros leem o subtipo público
+ * via a view ai_profiles_public.
+ */
+export interface AiProfile {
+  id: string;
+  account_id: string;
+  nome: string;
+  slug: string | null;
+  enabled: boolean;
+  persona_prompt: string | null;
+  model: string;
+  classifier_model: string | null;
+  max_bot_turns: number;
+  handoff_routing: Record<string, string> | null;
+  /** null = todas as tools de domínio; subset = perfil especializado. */
+  allowed_tools: string[] | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Perfil exposto a qualquer membro (view ai_profiles_public) — sem persona. */
+export type AiProfilePublic = Pick<AiProfile, 'id' | 'nome' | 'enabled'>;
+
+/** Artigo de SUPORTE (FAQ/procedimento). Migration 037. */
+export interface AiSupportArticle {
+  id: string;
+  account_id: string;
+  categoria: string;
+  titulo: string;
+  conteudo: string;
+  keywords: string | null;
+  ativo: boolean;
+  atualizado_em: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /** Auditoria de compartilhamento de conversa (migration 028). */
 export interface ConversationShare {
   id: string;

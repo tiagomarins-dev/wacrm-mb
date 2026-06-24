@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import type {
   AccountMember,
+  AiProfilePublic,
   AutomationStepType,
   AutomationTriggerType,
   CustomField,
@@ -233,6 +234,7 @@ interface AutomationResources {
   members: AccountMember[]
   templates: MessageTemplate[]
   customFields: CustomField[]
+  aiProfiles: AiProfilePublic[]
 }
 
 const ResourcesContext = createContext<AutomationResources>({
@@ -240,6 +242,7 @@ const ResourcesContext = createContext<AutomationResources>({
   members: [],
   templates: [],
   customFields: [],
+  aiProfiles: [],
 })
 
 function useResources(): AutomationResources {
@@ -251,6 +254,7 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<AccountMember[]>([])
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [customFields, setCustomFields] = useState<CustomField[]>([])
+  const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -261,7 +265,7 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
     // actually be sent (anything else 400s at send time), matching the
     // broadcast picker.
     void (async () => {
-      const [tagsRes, templatesRes, customFieldsRes] = await Promise.all([
+      const [tagsRes, templatesRes, customFieldsRes, aiProfilesRes] = await Promise.all([
         supabase.from("tags").select("*").order("name"),
         supabase
           .from("message_templates")
@@ -269,11 +273,14 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
           .eq("status", "APPROVED")
           .order("name"),
         supabase.from("custom_fields").select("*").order("field_name"),
+        // Perfis de IA atribuíveis — view pública (RLS escopa por conta).
+        supabase.from("ai_profiles_public").select("id, nome, enabled").eq("enabled", true),
       ])
       if (cancelled) return
       setTags((tagsRes.data as TagRecord[] | null) ?? [])
       setTemplates((templatesRes.data as MessageTemplate[] | null) ?? [])
       setCustomFields((customFieldsRes.data as CustomField[] | null) ?? [])
+      setAiProfiles((aiProfilesRes.data as AiProfilePublic[] | null) ?? [])
     })()
 
     // Members go through the API so we inherit its email-visibility
@@ -296,7 +303,7 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <ResourcesContext.Provider value={{ tags, members, templates, customFields }}>
+    <ResourcesContext.Provider value={{ tags, members, templates, customFields, aiProfiles }}>
       {children}
     </ResourcesContext.Provider>
   )
@@ -409,15 +416,23 @@ function AgentSelect({
   onChange: (v: string) => void
 }) {
   const { t } = useTranslation(["automationBuilder", "common"])
-  const { members } = useResources()
+  const { members, aiProfiles } = useResources()
+  const isAiValue = aiProfiles.some((ap) => ap.id === value)
+  // Sem membros carregados ainda: oferece os perfis de IA + entrada manual de id.
   if (members.length === 0) {
     return (
-      <Input
-        placeholder={t("agentIdPlaceholder")}
-        value={value}
+      <select
+        value={isAiValue ? value : ""}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-muted text-foreground"
-      />
+        className={SELECT_CLASS}
+      >
+        <option value="">{t("selectAgent")}</option>
+        {aiProfiles.map((ap) => (
+          <option key={ap.id} value={ap.id}>
+            🤖 {ap.nome}
+          </option>
+        ))}
+      </select>
     )
   }
   const selected = members.find((m) => m.user_id === value)
@@ -428,12 +443,20 @@ function AgentSelect({
       className={SELECT_CLASS}
     >
       <option value="">{t("selectAgent")}</option>
+      {/* Perfis de IA (responsáveis virtuais). Atribuir a conversa a um deles faz
+          o agente assumir com a config DAQUELE perfil (ex: gatilho "AJUDA" →
+          atribuir ao perfil Suporte). */}
+      {aiProfiles.map((ap) => (
+        <option key={ap.id} value={ap.id}>
+          🤖 {ap.nome}
+        </option>
+      ))}
       {members.map((m) => (
         <option key={m.user_id} value={m.user_id}>
           {m.full_name || m.email || m.user_id}
         </option>
       ))}
-      {value && !selected && (
+      {value && !selected && !isAiValue && (
         <option value={value}>{t("unknownAgentOption", { value })}</option>
       )}
     </select>

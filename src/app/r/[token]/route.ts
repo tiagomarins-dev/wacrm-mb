@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resumeRunOnLinkClick } from '@/lib/flows/engine'
 import { consumeLinkToken } from '@/lib/link-tracking/token'
+import { recordAgentClick } from '@/lib/link-tracking/agent-click'
 import { isBotUserAgent } from '@/lib/link-tracking/user-agent'
 
 export const runtime = 'nodejs'
@@ -32,14 +33,20 @@ export async function GET(
   }
 
   try {
-    await resumeRunOnLinkClick(
-      supabaseAdmin(),
-      payload,
-      _req.headers.get('user-agent'),
-    )
+    // Roteamento por origem do token: link do AGENTE de IA (sem flow_run)
+    // só audita o clique; link de FLOW retoma a run como antes.
+    if (payload.source === 'agent') {
+      await recordAgentClick(supabaseAdmin(), payload, _req.headers.get('user-agent'))
+    } else {
+      await resumeRunOnLinkClick(
+        supabaseAdmin(),
+        payload,
+        _req.headers.get('user-agent'),
+      )
+    }
   } catch (e) {
-    // Resume nunca bloqueia o redirect.
-    console.error('[link] resume failed:', e instanceof Error ? e.message : e)
+    // Nem o resume nem o registro bloqueiam o redirect.
+    console.error('[link] click handling failed:', e instanceof Error ? e.message : e)
   }
   return redirect()
 }
