@@ -1,0 +1,22 @@
+{
+  "title": "Conversas",
+  "subtitle": "Todas as conversas",
+  "searchPlaceholder": "Buscar por nome ou telefone...",
+  "colDate": "Última mensagem",
+  "colName": "Nome",
+  "colPhone": "Telefone",
+  "colLastMsg": "Mensagem",
+  "colAssignee": "Responsável",
+  "colStatus": "Status",
+  "statusOpen": "Aberta",
+  "statusPending": "Pendente",
+  "statusClosed": "Finalizada",
+  "filterAllStatus": "Todos os status",
+  "unassigned": "Não atribuído",
+  "loading": "Carregando...",
+  "empty": "Nenhuma conversa",
+  "noMatch": "Nenhuma conversa encontrada",
+  "failedLoad": "Falha ao carregar conversas",
+  "showing": "Exibindo {{from}}-{{to}} de {{total}}",
+  "pageOf": "Página {{page}} de {{total}}"
+}

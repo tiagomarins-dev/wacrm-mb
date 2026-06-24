@@ -49,7 +49,9 @@ const EMPTY_KEY: Record<QueueTab, string> = {
   sla: "emptySla",
   geral: "emptyGeral",
 };
-const TABS: QueueTab[] = ["fila", "minhas", "sla", "geral"];
+// "geral" saiu pra tela própria /conversations (paginada). TAB_LABEL/EMPTY_KEY
+// mantêm a chave por serem Record<QueueTab>, mas a aba não é renderizada.
+const TABS: QueueTab[] = ["fila", "minhas", "sla"];
 
 export function ConversationList({
   activeConversationId,
@@ -61,7 +63,7 @@ export function ConversationList({
   const { t } = useTranslation("inbox");
   const { user } = useAuth();
   const [search, setSearch] = useState("");
-  const [activeTab, setActiveTab] = useState<QueueTab>("geral");
+  const [activeTab, setActiveTab] = useState<QueueTab>("fila");
   const [loading, setLoading] = useState(true);
   // Conexão ativa (multi-número, 033): só as conversas desta conexão.
   const { activeConnectionId } = useActiveConnection();
