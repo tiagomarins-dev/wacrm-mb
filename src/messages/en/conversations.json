@@ -1,0 +1,22 @@
+{
+  "title": "Conversations",
+  "subtitle": "All conversations",
+  "searchPlaceholder": "Search by name or phone...",
+  "colDate": "Last message",
+  "colName": "Name",
+  "colPhone": "Phone",
+  "colLastMsg": "Message",
+  "colAssignee": "Assignee",
+  "colStatus": "Status",
+  "statusOpen": "Open",
+  "statusPending": "Pending",
+  "statusClosed": "Closed",
+  "filterAllStatus": "All statuses",
+  "unassigned": "Unassigned",
+  "loading": "Loading...",
+  "empty": "No conversations",
+  "noMatch": "No conversations found",
+  "failedLoad": "Failed to load conversations",
+  "showing": "Showing {{from}}-{{to}} of {{total}}",
+  "pageOf": "Page {{page}} of {{total}}"
+}
