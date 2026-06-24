@@ -4,20 +4,16 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search, ChevronDown } from "lucide-react";
+import { Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveConnection } from "@/hooks/use-active-connection";
+import { useAuth } from "@/hooks/use-auth";
+import { classifyTab, sortByTab, countByTab, type QueueTab } from "@/lib/inbox/queue";
 import { useTranslation } from "react-i18next";
 
 interface ConversationListProps {
@@ -40,16 +36,20 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
   closed: "bg-muted-foreground",
 };
 
-type InboxFilter = ConversationStatus | "all" | "unread";
-
-// labelKey = chave de tradução (namespace inbox), resolvida no render.
-const FILTER_OPTIONS: { labelKey: string; value: InboxFilter }[] = [
-  { labelKey: "filterAll", value: "all" },
-  { labelKey: "filterUnread", value: "unread" },
-  { labelKey: "filterOpen", value: "open" },
-  { labelKey: "filterPending", value: "pending" },
-  { labelKey: "filterClosed", value: "closed" },
-];
+// Abas da fila de atendimento → chave i18n do label / do empty state.
+const TAB_LABEL: Record<QueueTab, string> = {
+  fila: "tabFila",
+  minhas: "tabMinhas",
+  sla: "tabSla",
+  geral: "tabGeral",
+};
+const EMPTY_KEY: Record<QueueTab, string> = {
+  fila: "emptyFila",
+  minhas: "emptyMinhas",
+  sla: "emptySla",
+  geral: "emptyGeral",
+};
+const TABS: QueueTab[] = ["fila", "minhas", "sla", "geral"];
 
 export function ConversationList({
   activeConversationId,
@@ -59,11 +59,20 @@ export function ConversationList({
   resyncToken = 0,
 }: ConversationListProps) {
   const { t } = useTranslation("inbox");
+  const { user } = useAuth();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<InboxFilter>("all");
+  const [activeTab, setActiveTab] = useState<QueueTab>("geral");
   const [loading, setLoading] = useState(true);
   // Conexão ativa (multi-número, 033): só as conversas desta conexão.
   const { activeConnectionId } = useActiveConnection();
+  // Ticker p/ a aba SLA "virar" sozinha (sem msg/evento): recomputa a cada 30s.
+  // Sem isso, Date.now() ficaria congelado no useMemo e a conversa nunca entraria
+  // no SLA depois de 30min parada.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   // Keep the latest callback in a ref so the fetch effect below can
   // have a stable, empty-dep identity. Previously the fetch useCallback
@@ -125,13 +134,10 @@ export function ConversationList({
   }, [resyncToken, activeConnectionId]);
 
   const filtered = useMemo(() => {
-    let result = conversations;
-
-    if (filter === "unread") {
-      result = result.filter((c) => c.unread_count > 0);
-    } else if (filter !== "all") {
-      result = result.filter((c) => c.status === filter);
-    }
+    // Classifica pela aba ativa (fila/minhas/sla/geral), aplica a busca e ordena.
+    let result = conversations.filter((c) =>
+      classifyTab(c, activeTab, user?.id, now)
+    );
 
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -143,8 +149,14 @@ export function ConversationList({
       });
     }
 
-    return result;
-  }, [conversations, filter, search]);
+    return sortByTab(result, activeTab);
+  }, [conversations, activeTab, search, now, user?.id]);
+
+  // Contadores de cada aba (badges em todas).
+  const counts = useMemo(
+    () => countByTab(conversations, user?.id, now),
+    [conversations, user?.id, now]
+  );
 
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -159,8 +171,6 @@ export function ConversationList({
     },
     [onSelect]
   );
-
-  const activeFilter = FILTER_OPTIONS.find((o) => o.value === filter);
 
   return (
     // w-full on mobile so the list occupies the whole viewport when it's
@@ -179,31 +189,27 @@ export function ConversationList({
           />
         </div>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md hover:bg-muted">
-              {activeFilter ? t(activeFilter.labelKey, { defaultValue: activeFilter.labelKey }) : t('filterAll')}
-              <ChevronDown className="h-3 w-3" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="start"
-            className="border-border bg-popover"
-          >
-            {FILTER_OPTIONS.map((opt) => (
-              <DropdownMenuItem
-                key={opt.value}
-                onClick={() => setFilter(opt.value)}
-                className={cn(
-                  "text-sm",
-                  filter === opt.value
-                    ? "text-primary"
-                    : "text-popover-foreground"
-                )}
+        {/* Abas: Fila / Minhas / SLA / Geral, cada uma com badge contador.
+            flex-nowrap + overflow-x-auto p/ não cortar em largura estreita (~360px). */}
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as QueueTab)}>
+          <TabsList variant="line" className="w-full justify-start gap-1 overflow-x-auto">
+            {TABS.map((tab) => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                title={tab === "sla" ? t("slaTooltip") : undefined}
+                className="shrink-0 grow-0 gap-1.5 px-2 text-xs"
               >
-                {t(opt.labelKey, { defaultValue: opt.labelKey })}
-              </DropdownMenuItem>
+                {t(TAB_LABEL[tab])}
+                {counts[tab] > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-semibold text-primary">
+                    {counts[tab]}
+                  </span>
+                )}
+              </TabsTrigger>
             ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Conversation Items.
@@ -219,7 +225,7 @@ export function ConversationList({
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">{t('noConversations')}</p>
+            <p className="text-sm text-muted-foreground">{t(EMPTY_KEY[activeTab])}</p>
           </div>
         ) : (
           <div className="flex flex-col">
