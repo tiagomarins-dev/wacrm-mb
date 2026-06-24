@@ -238,6 +238,9 @@ export default function InboxPage() {
                     ...c,
                     last_message_text: newMsg.content_text ?? "",
                     last_message_at: newMsg.created_at,
+                    // Mantém o sender da última msg em sincronia p/ a conversa
+                    // migrar de aba ao vivo (cliente respondeu → trilha SLA/Fila).
+                    last_message_sender_type: newMsg.sender_type,
                     unread_count:
                       activeConversation?.id === newMsg.conversation_id
                         ? 0
