@@ -90,7 +90,10 @@ export function ConversationList({
       let q = supabase
         .from("conversations")
         .select("*, contact:contacts(*)")
-        .order("last_message_at", { ascending: false });
+        // nullsFirst:false — conversas sem mensagem (last_message_at null,
+        // ex: criadas por evento de reação) afundam pro fim da lista em vez
+        // de fixar no topo (default do DESC no Postgres é NULLS FIRST).
+        .order("last_message_at", { ascending: false, nullsFirst: false });
       // Multi-número (033): filtra pela conexão ativa.
       if (activeConnectionId) q = q.eq("connection_id", activeConnectionId);
       const { data, error } = await q;
