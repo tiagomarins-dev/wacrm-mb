@@ -33,9 +33,12 @@ function ctx(db: unknown, over: Partial<AgentCtx> = {}): AgentCtx {
   }
 }
 
-// Resposta canned do OpenRouter.
+// Resposta canned do OpenRouter. `usage` opcional (telemetria de custo/tokens).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const reply = (message: any) => ({ ok: true, json: async () => ({ choices: [{ message }] }) })
+const reply = (message: any, usage?: any) => ({
+  ok: true,
+  json: async () => ({ choices: [{ message, finish_reason: 'stop' }], ...(usage ? { usage } : {}) }),
+})
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.unstubAllGlobals())
@@ -90,5 +93,51 @@ describe('runAgentLoop', () => {
     vi.stubGlobal('fetch', fetchMock)
     const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
     expect(r.reply).toBeNull()
+  })
+
+  // ----- Telemetria (observabilidade) -----
+
+  it('acumula usage (tokens+custo) e pede usage.include no body', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      reply({ content: 'ok' }, { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15, cost: 0.0003 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
+    expect(r.telemetry.promptTokens).toBe(10)
+    expect(r.telemetry.completionTokens).toBe(5)
+    expect(r.telemetry.totalTokens).toBe(15)
+    expect(r.telemetry.costUsd).toBe(0.0003)
+    expect(r.telemetry.requests).toBe(1)
+    expect(r.telemetry.finishReason).toBe('stop')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.usage.include).toBe(true)
+  })
+
+  it('2 turns (tool + final) → requests=2 e toolsUsed contém a tool', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(reply({ tool_calls: [{ id: 't1', function: { name: 'get_curso', arguments: '{}' } }] }))
+      .mockResolvedValueOnce(reply({ content: 'pronto' }, { prompt_tokens: 8, completion_tokens: 4, total_tokens: 12, cost: 0.0002 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
+    expect(r.telemetry.requests).toBe(2)
+    expect(r.telemetry.toolsUsed).toContain('get_curso')
+  })
+
+  it('erro HTTP → telemetry.error.phase=llm (sem body cru)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
+    expect(r.telemetry.error?.phase).toBe('llm')
+    expect(r.telemetry.error?.message).toBe('OpenRouter 500')
+  })
+
+  it('resposta sem usage → tokens null sem crash', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply({ content: 'ok' })) // sem usage
+    vi.stubGlobal('fetch', fetchMock)
+    const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
+    expect(r.reply).toBe('ok')
+    expect(r.telemetry.promptTokens).toBeNull()
+    expect(r.telemetry.costUsd).toBeNull()
   })
 })

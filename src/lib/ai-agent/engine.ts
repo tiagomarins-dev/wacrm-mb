@@ -11,9 +11,10 @@ import { engineSendText, engineSendTyping } from '@/lib/automations/meta-send'
 import { resolveAssignedProfile, phoneAllowed } from './dispatch'
 import { buildSystemPrompt, serializeRecentMessages } from './prompt'
 import { listCursos, listSupportCategories } from './knowledge'
-import { runAgentLoop } from './llm'
-import { applyGuardrail } from './guardrail'
-import type { AiAgentConfig } from '@/types'
+import { runAgentLoop, type AgentTelemetry } from './llm'
+import { applyGuardrail, hasForbidden } from './guardrail'
+import { recordAgentRun, type AgentRunInsert } from './telemetry'
+import type { AiAgentConfig, AiAgentRun } from '@/types'
 
 // Subconjunto da row de ai_agent_pending que o engine precisa.
 export interface PendingRow {
@@ -93,11 +94,52 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   })
 
   // Loop LLM com tool-calling. O LLM roteia o assunto via a tool que escolhe.
+  // `result` fica acessível no catch p/ a telemetria; null antes de rodar.
+  const runStartedAt = Date.now()
   let result: {
     reply: string | null
     topic: 'vendas' | 'suporte' | null
     handoff: { to: string | null } | null
-  }
+    telemetry: AgentTelemetry
+  } | null = null
+
+  // Monta a linha-base da run (ids + telemetria + latência) p/ ai_agent_runs.
+  // `status` e os extras variam por caminho terminal; o resto vem do contexto
+  // e da telemetria do loop. Usado nos 3 pontos de gravação (auth/superseded/fim).
+  const buildRun = (
+    status: AiAgentRun['status'],
+    extra: {
+      error_phase?: AiAgentRun['error_phase']
+      guardrail_hits?: number
+      topic?: AiAgentRun['topic']
+      handoff?: boolean
+    } = {},
+  ): AgentRunInsert => ({
+    account_id: row.account_id,
+    connection_id: row.connection_id,
+    conversation_id: row.conversation_id,
+    contact_id: row.contact_id,
+    profile_id: profileId,
+    inbound_message_id: row.last_inbound_message_id ?? null,
+    model: profile.model,
+    status,
+    error_phase: extra.error_phase ?? null,
+    error_message: result?.telemetry.error?.message ?? null,
+    finish_reason: result?.telemetry.finishReason ?? null,
+    requests: result?.telemetry.requests ?? 0,
+    turns: result?.telemetry.turns ?? 0,
+    prompt_tokens: result?.telemetry.promptTokens ?? null,
+    completion_tokens: result?.telemetry.completionTokens ?? null,
+    total_tokens: result?.telemetry.totalTokens ?? null,
+    cost_usd: result?.telemetry.costUsd ?? null,
+    latency_ms: Date.now() - runStartedAt,
+    llm_ms: result?.telemetry.llmMs ?? null,
+    tools_used: result?.telemetry.toolsUsed ?? null,
+    topic: extra.topic ?? null,
+    handoff: extra.handoff ?? false,
+    guardrail_hits: extra.guardrail_hits ?? 0,
+  })
+
   try {
     result = await runAgentLoop({
       db,
@@ -114,20 +156,34 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       allowedTools: profile.allowed_tools,
     })
   } catch (err) {
+    // Falha antes/durante o loop sem telemetria (ex.: chave OpenRouter ausente).
     console.error('[ai_agent] loop failed:', err instanceof Error ? err.message : err)
+    await recordAgentRun(db, buildRun('error', { error_phase: 'auth' }))
     return
   }
 
   // RECHECK (M1): a conversa ainda é do MESMO perfil que iniciou o run? Se um
   // humano/automação reatribuiu (a si ou a OUTRO perfil) enquanto o LLM pensava,
-  // o bot para — não envia com a persona errada nem aplica handoff.
+  // o bot para — não envia com a persona errada nem aplica handoff. Grava a run
+  // como 'superseded' antes de sair (R1).
   const still = await resolveAssignedProfile(db, row.account_id, row.conversation_id)
-  if (still?.id !== profileId) return
+  if (still?.id !== profileId) {
+    await recordAgentRun(db, buildRun('superseded'))
+    return
+  }
 
   // Grava o assunto detectado (analytics + roteamento de handoff).
   if (result.topic) {
     await db.from('conversations').update({ ai_topic: result.topic }).eq('id', row.conversation_id)
   }
+
+  // Conta escapada de marca ANTES do gate da allowlist (R2): mede aderência à
+  // voz mesmo quando o envio é bloqueado.
+  const guardrailHits = result.reply ? (hasForbidden(result.reply) ? 1 : 0) : 0
+
+  // Desfecho do envio p/ a telemetria.
+  let status: 'ok' | 'no_reply' | 'blocked' | 'error' = 'no_reply'
+  let errorPhase: AiAgentRun['error_phase'] = null
 
   // Envia a resposta (se houver texto). transferir_humano/encerrar podem
   // não ter texto — nesse caso só aplica o handoff abaixo.
@@ -169,11 +225,19 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
           })
         } catch (err) {
           console.error('[ai_agent] send failed:', err instanceof Error ? err.message : err)
+          errorPhase = 'send'
         }
       }
+      status = errorPhase ? 'error' : 'ok'
     } else {
       console.warn('[ai_agent] contato fora da allowlist — envio bloqueado:', row.conversation_id)
+      status = 'blocked'
     }
+  }
+  // Erro do loop LLM (HTTP/fetch) tem precedência sobre no_reply.
+  if (result.telemetry.error) {
+    status = 'error'
+    errorPhase = 'llm'
   }
 
   // HANDOFF pós-envio: a IA pediu transferência → reatribui a conversa ao
@@ -187,6 +251,17 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       .eq('id', row.conversation_id)
       .eq('account_id', row.account_id)
   }
+
+  // Ponto único de gravação (R4): cobre ok/no_reply/blocked/error(send|llm).
+  await recordAgentRun(
+    db,
+    buildRun(status, {
+      error_phase: errorPhase,
+      guardrail_hits: guardrailHits,
+      topic: result.topic,
+      handoff: !!result.handoff,
+    }),
+  )
 }
 
 // Divide a resposta do bot em mensagens separadas (bolhas do WhatsApp), quebrando

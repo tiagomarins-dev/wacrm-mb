@@ -198,6 +198,36 @@ export interface AiAgentConfig {
   updated_at: string;
 }
 
+/** Telemetria run-level de uma execução do agente (ai_agent_runs). Imutável. */
+export interface AiAgentRun {
+  id: string;
+  account_id: string;
+  connection_id: string | null;
+  conversation_id: string | null;
+  contact_id: string | null;
+  profile_id: string | null;
+  /** wamid da mensagem do CLIENTE que disparou a run (não a resposta do bot). */
+  inbound_message_id: string | null;
+  model: string | null;
+  status: 'ok' | 'no_reply' | 'blocked' | 'error' | 'superseded';
+  error_phase: 'auth' | 'llm' | 'tool' | 'send' | null;
+  error_message: string | null;
+  finish_reason: string | null;
+  requests: number;
+  turns: number;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  cost_usd: number | null;
+  latency_ms: number | null;
+  llm_ms: number | null;
+  tools_used: string[] | null;
+  topic: 'vendas' | 'suporte' | null;
+  handoff: boolean;
+  guardrail_hits: number;
+  created_at: string;
+}
+
 /**
  * Config do agente exposta ao client — sem `persona_prompt` cru (anti
  * prompt-injection / pode conter instrução sensível). Espelha o padrão
