@@ -91,3 +91,14 @@ describe("countByTab", () => {
     expect(c.geral).toBe(list.length);
   });
 });
+
+// Efeito da desatribuição automática (cron 045): atribuída NÃO está em Fila;
+// ao virar assigned_agent_id=null (pós-unassign) ENTRA em Fila.
+describe("desatribuição → volta pra fila", () => {
+  it("atribuída fora da fila; null entra na fila", () => {
+    const atribuida = conv({ assigned_agent_id: "atendente-x" });
+    expect(classifyTab(atribuida, "fila", USER, NOW)).toBe(false);
+    const liberada = conv({ assigned_agent_id: undefined });
+    expect(classifyTab(liberada, "fila", USER, NOW)).toBe(true);
+  });
+});

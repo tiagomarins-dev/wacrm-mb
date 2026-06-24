@@ -58,9 +58,10 @@ services:
             curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/ai-agent/cron" >/dev/null 2>&1 || true
             sleep "$$AI_AGENT_CRON_INTERVAL"
           done ) &
-        # Loop PADRÃO para os demais crons (broadcasts, automations, flows).
+        # Loop PADRÃO para os demais crons (broadcasts, automations, flows,
+        # conversations — sweep de desatribuição de conversa ociosa).
         while true; do
-          for p in broadcasts automations flows; do
+          for p in broadcasts automations flows conversations; do
             curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/$$p/cron" >/dev/null 2>&1 || true
           done
           sleep "$$CRON_INTERVAL"

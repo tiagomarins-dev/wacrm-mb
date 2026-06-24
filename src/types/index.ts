@@ -186,6 +186,8 @@ export interface AiAgentConfig {
   connection_id: string;
   enabled: boolean;
   debounce_seconds: number;
+  /** Minutos sem interação p/ desatribuir a conversa (volta pra Fila). 0 = off. */
+  auto_unassign_minutes: number;
   model: string;
   classifier_model: string | null;
   persona_prompt: string | null;
