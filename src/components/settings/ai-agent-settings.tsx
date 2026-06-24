@@ -6,8 +6,9 @@ import { cn } from '@/lib/utils';
 import { AiProfilesManager } from './ai-profiles-manager';
 import { AiCoursesManager } from './ai-courses-manager';
 import { AiSupportManager } from './ai-support-manager';
+import { AiConnectionConfig } from './ai-connection-config';
 
-type Tab = 'profiles' | 'courses' | 'support';
+type Tab = 'profiles' | 'courses' | 'support' | 'connections';
 
 /**
  * Painel "Agente IA": sub-abas Perfis / Cursos / Suporte, montando os três
@@ -21,6 +22,7 @@ export function AiAgentSettings() {
     { id: 'profiles', label: t('tabProfiles') },
     { id: 'courses', label: t('tabCourses') },
     { id: 'support', label: t('tabSupport') },
+    { id: 'connections', label: t('tabConnections') },
   ];
 
   return (
@@ -46,6 +48,7 @@ export function AiAgentSettings() {
       {tab === 'profiles' && <AiProfilesManager />}
       {tab === 'courses' && <AiCoursesManager />}
       {tab === 'support' && <AiSupportManager />}
+      {tab === 'connections' && <AiConnectionConfig />}
     </div>
   );
 }
