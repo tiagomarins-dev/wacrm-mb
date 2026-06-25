@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMediaUrl, downloadMedia } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import {
+  resolveOutboundConfig,
+  resolveOutboundConfigForConversation,
+} from '@/lib/connections/resolve'
 
 export async function GET(
   request: Request,
@@ -49,15 +52,28 @@ export async function GET(
       )
     }
 
-    // Multi-número (033): busca a mídia com o token da conexão PRIMÁRIA.
-    // (Mídia de conexões não-primárias exigirá o conversation_id na
-    // chamada — wiring no lote de filtros/UI.) Usa resolveOutboundConfig
-    // p/ não quebrar com 2+ conexões (o `.single()` antigo dava PGRST116).
-    const config = await resolveOutboundConfig(supabase, accountId).catch(
-      () => null,
+    // Multi-número (033): a mídia tem que ser baixada com o token da
+    // CONEXÃO da conversa, não sempre a primária. O front anexa
+    // ?conversationId=; sem ele (URLs antigas), cai no fallback primária.
+    const conversationId = new URL(request.url).searchParams.get(
+      'conversationId',
     )
 
-    if (!config) {
+    let config
+    try {
+      config = conversationId
+        ? await resolveOutboundConfigForConversation(
+            supabase,
+            accountId,
+            conversationId,
+          )
+        : await resolveOutboundConfig(supabase, accountId)
+    } catch (err) {
+      // Loga só a mensagem — nunca o objeto (poderia conter access_token).
+      console.error(
+        'media: falha ao resolver config',
+        err instanceof Error ? err.message : err,
+      )
       return NextResponse.json(
         { error: 'WhatsApp not configured' },
         { status: 400 }

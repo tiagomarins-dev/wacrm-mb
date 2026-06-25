@@ -13,8 +13,17 @@ import {
   LayoutTemplate,
   ImageOff,
   CornerDownLeft,
+  Download,
 } from "lucide-react";
 import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { buttonVariants } from "@/components/ui/button";
+import { withConversation } from "@/lib/whatsapp/media-url";
 import { ReplyQuote } from "./reply-quote";
 import { MessageReactions } from "./message-reactions";
 
@@ -53,10 +62,24 @@ function MediaUnavailable({ label }: { label: string }) {
   );
 }
 
-function MediaImage({ url, alt }: { url: string; alt: string }) {
+// Renderiza a imagem do anexo: carrega via fetch autenticado (proxy),
+// abre em lightbox no clique e oferece download com a extensão correta.
+function MediaImage({
+  url,
+  alt,
+  conversationId,
+  downloadBase,
+}: {
+  url: string;
+  alt: string;
+  conversationId?: string;
+  downloadBase: string;
+}) {
   const [src, setSrc] = useState<string | null>(null);
+  const [mime, setMime] = useState<string>(""); // MIME real p/ extensão do download
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false); // lightbox aberto?
 
   const loadImage = useCallback(async () => {
     if (!url) return;
@@ -64,11 +87,12 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
     // Proxy URLs need auth fetch to create blob URL
     if (url.startsWith("/api/whatsapp/media/")) {
       try {
-        const res = await fetch(url);
+        // anexa o conversationId p/ o proxy escolher o token certo (multi-número)
+        const res = await fetch(withConversation(url, conversationId));
         if (!res.ok) throw new Error("Failed to load media");
         const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        setSrc(blobUrl);
+        setMime(blob.type);
+        setSrc(URL.createObjectURL(blob));
       } catch {
         setError(true);
       } finally {
@@ -78,7 +102,7 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
       setSrc(url);
       setLoading(false);
     }
-  }, [url]);
+  }, [url, conversationId]);
 
   useEffect(() => {
     loadImage();
@@ -106,13 +130,52 @@ function MediaImage({ url, alt }: { url: string; alt: string }) {
     );
   }
 
+  // extensão a partir do MIME real (image/png -> png), fallback jpg
+  const ext = mime.startsWith("image/") ? mime.slice(6).split("+")[0] : "jpg";
+  const downloadName = `${downloadBase}.${ext || "jpg"}`;
+
   return (
-    <img
-      src={src ?? ""}
-      alt={alt}
-      className="max-h-64 max-w-60 rounded-lg object-cover"
-      onError={() => setError(true)}
-    />
+    <>
+      <button
+        type="button"
+        onClick={() => setExpanded(true)}
+        className="block cursor-zoom-in"
+      >
+        <img
+          src={src ?? ""}
+          alt={alt}
+          className="max-h-64 max-w-60 rounded-lg object-cover"
+          onError={() => setError(true)}
+        />
+      </button>
+
+      {/* Lightbox: reusa o mesmo src (blobUrl), sem novo fetch */}
+      <Dialog open={expanded} onOpenChange={setExpanded}>
+        <DialogContent className="max-w-[92vw] sm:max-w-3xl">
+          <DialogTitle className="sr-only">{alt}</DialogTitle>
+          <DialogDescription className="sr-only">
+            Imagem em tamanho original
+          </DialogDescription>
+          <img
+            src={src ?? ""}
+            alt={alt}
+            className="max-h-[80vh] w-full object-contain"
+          />
+          <a
+            href={src ?? "#"}
+            download={downloadName}
+            className={buttonVariants({
+              variant: "secondary",
+              size: "sm",
+              className: "w-fit",
+            })}
+          >
+            <Download className="size-4" />
+            Baixar
+          </a>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -129,7 +192,12 @@ function MessageContent({ message }: { message: Message }) {
       return (
         <div>
           {message.media_url ? (
-            <MediaImage url={message.media_url} alt="Shared image" />
+            <MediaImage
+              url={message.media_url}
+              alt="Shared image"
+              conversationId={message.conversation_id}
+              downloadBase={`imagem-${message.message_id ?? "anexo"}`}
+            />
           ) : (
             <MediaUnavailable label="Image" />
           )}
@@ -146,7 +214,7 @@ function MessageContent({ message }: { message: Message }) {
         <div>
           {message.media_url ? (
             <video
-              src={message.media_url}
+              src={withConversation(message.media_url, message.conversation_id)}
               controls
               className="max-h-64 max-w-60 rounded-lg"
             />
@@ -165,30 +233,51 @@ function MessageContent({ message }: { message: Message }) {
       return (
         <div>
           {message.media_url ? (
-            <audio src={message.media_url} controls className="max-w-60" />
+            <audio
+              src={withConversation(message.media_url, message.conversation_id)}
+              controls
+              className="max-w-60"
+            />
           ) : (
             <MediaUnavailable label="Audio" />
           )}
         </div>
       );
 
-    case "document":
+    case "document": {
       if (!message.media_url) {
         return <MediaUnavailable label={message.content_text || "Document"} />;
       }
-      return (
-        <a
-          href={message.media_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
-        >
-          <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
-          <span className="truncate">
-            {message.content_text || "Document"}
-          </span>
-        </a>
+      // content_text pode trazer / ou quebras de linha — sanitiza p/ nome de arquivo
+      const docName = (message.content_text || "documento").replace(
+        /[/\\\r\n]+/g,
+        "_",
       );
+      const href = withConversation(message.media_url, message.conversation_id);
+      return (
+        <div className="flex items-center gap-2">
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex min-w-0 items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm hover:bg-muted"
+          >
+            <FileText className="h-5 w-5 shrink-0 text-muted-foreground" />
+            <span className="truncate">
+              {message.content_text || "Document"}
+            </span>
+          </a>
+          <a
+            href={href}
+            download={docName}
+            aria-label="Baixar documento"
+            className={buttonVariants({ variant: "ghost", size: "icon-sm" })}
+          >
+            <Download className="size-4" />
+          </a>
+        </div>
+      );
+    }
 
     case "template":
       return (
