@@ -1185,6 +1185,7 @@ export function MessageThread({
         open={templateModalOpen}
         onOpenChange={setTemplateModalOpen}
         onSelect={handleSendTemplate}
+        connectionId={conversation?.connection_id}
       />
 
       <ShareModal

@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import { getActiveConnection } from '@/lib/connections/active'
 import { submitMessageTemplate } from '@/lib/whatsapp/meta-api'
 import {
   validateTemplatePayload,
@@ -20,6 +21,7 @@ import { normalizeStatus } from '@/lib/whatsapp/template-status-normalize'
 function buildUpsertRow(
   accountId: string,
   userId: string,
+  connectionId: string,
   payload: TemplatePayload,
   extras: {
     status: 'DRAFT' | string
@@ -32,9 +34,10 @@ function buildUpsertRow(
     // of migration 017. Without this an INSERT throws on the
     // not-null constraint.
     account_id: accountId,
-    // Original author — kept as audit only. The unique index is
-    // still on (user_id, name, language) — see the upsert helper
-    // for the cross-teammate dedup follow-up.
+    // Conexão (WABA) dona do template (multi-número, 033). O índice
+    // único é (connection_id, name, language) — ver o upsert helper.
+    connection_id: connectionId,
+    // Autor — só auditoria; não entra mais no conflict target.
     user_id: userId,
     name: payload.name,
     category: payload.category,
@@ -61,14 +64,11 @@ async function upsertTemplateRow(
   supabase: SupabaseClient,
   row: ReturnType<typeof buildUpsertRow>,
 ) {
-  // TODO(account-sharing): conflict target is still scoped to
-  // user_id. Once a follow-up migration drops the legacy unique
-  // index on (user_id, name, language) and adds (account_id,
-  // name, language), switch `onConflict` here so two teammates
-  // can't shadow each other's same-named template.
+  // Conflict target = índice único da 033: (connection_id, name, language).
+  // O legado (user_id, name, language) foi dropado na 033 — usá-lo dá 42P10.
   return supabase
     .from('message_templates')
-    .upsert(row, { onConflict: 'user_id,name,language' })
+    .upsert(row, { onConflict: 'connection_id,name,language' })
     .select()
     .single()
 }
@@ -139,6 +139,26 @@ export async function POST(request: Request) {
       )
     }
 
+    // Multi-número (033): resolve a conexão ATIVA ANTES do branch dry-run.
+    // O template é amarrado a esta conexão (connection_id). Resolver fora
+    // do `if(dryRun)` é obrigatório: o índice único é NULL-distinct, então
+    // gravar connection_id nulo no dry-run viraria INSERT duplicado a cada
+    // re-submit. getActiveConnection cai na primária; só lança (→ null)
+    // se a conta não tem nenhuma conexão.
+    const active = await getActiveConnection(supabase, accountId).catch(
+      () => null,
+    )
+    if (!active) {
+      return NextResponse.json(
+        {
+          error:
+            'Nenhuma conexão WhatsApp configurada. Conecte sua conta em Configurações.',
+        },
+        { status: 400 },
+      )
+    }
+    const connectionId = active.id
+
     const dryRun =
       process.env.WHATSAPP_TEMPLATES_DRY_RUN === 'true' ||
       process.env.WHATSAPP_TEMPLATES_DRY_RUN === '1'
@@ -150,12 +170,12 @@ export async function POST(request: Request) {
       metaTemplateId = `dry-run-${crypto.randomUUID()}`
       metaStatus = 'PENDING'
     } else {
-      // Multi-número (033): submete pela conexão PRIMÁRIA (WABA). Submit
-      // por-conexão virá no lote de templates. Evita o crash de .single()
-      // com 2+ conexões.
-      const config = await resolveOutboundConfig(supabase, accountId).catch(
-        () => null,
-      )
+      // Submete pela WABA da conexão ATIVA (token + waba_id dela).
+      const config = await resolveOutboundConfig(
+        supabase,
+        accountId,
+        active.id,
+      ).catch(() => null)
       if (!config) {
         return NextResponse.json(
           {
@@ -205,7 +225,7 @@ export async function POST(request: Request) {
         // until they fix and re-submit.
         await upsertTemplateRow(
           supabase,
-          buildUpsertRow(accountId, user.id, payload, {
+          buildUpsertRow(accountId, user.id, connectionId, payload, {
             status: 'DRAFT',
             metaTemplateId: null,
             submissionError: message,
@@ -225,7 +245,7 @@ export async function POST(request: Request) {
 
     const { data: row, error: upsertErr } = await upsertTemplateRow(
       supabase,
-      buildUpsertRow(accountId, user.id, payload, {
+      buildUpsertRow(accountId, user.id, connectionId, payload, {
         status: normalizeStatus(metaStatus),
         metaTemplateId,
         submissionError: null,

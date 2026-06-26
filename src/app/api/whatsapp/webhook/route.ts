@@ -8,6 +8,7 @@ import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiAgent } from '@/lib/ai-agent/dispatch'
+import { dispatchTranscription } from '@/lib/transcription/dispatch'
 import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
@@ -603,25 +604,44 @@ async function processMessage(
     .eq('sender_type', 'customer')
   const isFirstInboundMessage = (priorCustomerMsgCount ?? 0) === 0
 
-  const { error: msgError } = await supabaseAdmin().from('messages').insert({
-    conversation_id: conversation.id,
-    sender_type: 'customer',
-    content_type: contentType,
-    content_text: contentText,
-    media_url: mediaUrl,
-    message_id: message.id,
-    status: 'delivered',
-    created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
-    reply_to_message_id: replyToInternalId,
-    // Only populated for content_type='interactive'. Migration 010 added
-    // the column; null for every other content_type so existing inserts
-    // behave identically.
-    interactive_reply_id: interactiveReplyId,
-  })
+  const { data: inserted, error: msgError } = await supabaseAdmin()
+    .from('messages')
+    .insert({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      content_type: contentType,
+      content_text: contentText,
+      media_url: mediaUrl,
+      message_id: message.id,
+      status: 'delivered',
+      created_at: new Date(parseInt(message.timestamp) * 1000).toISOString(),
+      reply_to_message_id: replyToInternalId,
+      // Only populated for content_type='interactive'. Migration 010 added
+      // the column; null for every other content_type so existing inserts
+      // behave identically.
+      interactive_reply_id: interactiveReplyId,
+      // Áudio entra na fila de transcrição (migration 046).
+      transcription_status: contentType === 'audio' ? 'pending' : null,
+    })
+    .select('id')
+    .single()
 
-  if (msgError) {
+  if (msgError || !inserted) {
     console.error('Error inserting message:', msgError)
     return
+  }
+
+  // Transcrição de áudio (fire-and-forget). Bytes da Meta expiram ~24h, então
+  // dispara já na chegada; o cron de retry só recupera dentro da janela.
+  if (contentType === 'audio') {
+    void dispatchTranscription({
+      db: supabaseAdmin(),
+      messageId: (inserted as { id: string }).id,
+      accountId,
+      conversationId: conversation.id,
+      connectionId,
+      mediaUrl: mediaUrl!,
+    }).catch((e) => console.error('[transcription] inbound:', (e as Error).message))
   }
 
   // Update conversation

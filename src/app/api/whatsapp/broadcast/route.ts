@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import { findTemplateRow } from '@/lib/whatsapp/find-template-row'
 import { getActiveConnection } from '@/lib/connections/active'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import type { MessageTemplate } from '@/types'
 import {
   sendRecipients,
   type BroadcastRecipientInput,
@@ -137,13 +139,12 @@ export async function POST(request: Request) {
     // the loop would N+1 against Supabase for every recipient.
     // Guard against a malformed local row crashing every send in
     // the loop with the same opaque TypeError — fail loudly once.
-    const { data: rawTemplateRow } = await supabase
-      .from('message_templates')
-      .select('*')
-      .eq('account_id', accountId)
-      .eq('name', template_name)
-      .eq('language', template_language || 'en_US')
-      .maybeSingle()
+    const rawTemplateRow = await findTemplateRow(supabase, {
+      accountId,
+      connectionId: active?.id,
+      name: template_name,
+      language: template_language || 'en_US',
+    })
     if (rawTemplateRow && !isMessageTemplate(rawTemplateRow)) {
       return NextResponse.json(
         {
@@ -153,7 +154,7 @@ export async function POST(request: Request) {
         { status: 500 },
       )
     }
-    const templateRow = rawTemplateRow ?? null
+    const templateRow = (rawTemplateRow as MessageTemplate | null) ?? null
 
     // Fan-out por destinatário extraído para lib compartilhada (reusada pelo
     // engine de agendamento). Sem mudança de comportamento.

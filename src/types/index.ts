@@ -173,6 +173,11 @@ export interface IntegrationsConfigPublic {
   notion_set: boolean;
   slack_set: boolean;
   millaborges_set: boolean;
+  /** Transcrição de áudio (migration 046) — campos não-secretos. */
+  transcription_enabled: boolean;
+  transcription_model: string | null;
+  transcription_fallback_model: string | null;
+  transcription_format_model: string | null;
 }
 
 // ============================================================
@@ -375,6 +380,8 @@ export interface Conversation {
   created_at: string;
   updated_at: string;
   contact?: Contact;
+  /** Conexão (número) dona da conversa (multi-número, 033). */
+  connection_id?: string | null;
 }
 
 export type SenderType = 'customer' | 'agent' | 'bot';
@@ -389,6 +396,16 @@ export type ContentType =
   /** Customer tapped a reply button or list row on a message we sent. */
   | 'interactive';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+/**
+ * Estado da fila de transcrição de áudio (migration 046). Coluna NOVA,
+ * separada de MessageStatus (entrega). Só preenchida em mensagens de áudio.
+ */
+export type TranscriptionStatus =
+  | 'pending'
+  | 'running'
+  | 'done'
+  | 'empty'
+  | 'failed';
 
 export interface Message {
   id: string;
@@ -417,6 +434,10 @@ export interface Message {
    * cue (renders with a "↩ button reply" affordance).
    */
   interactive_reply_id?: string;
+  /** Transcrição formatada do áudio (migration 046). "Áudio sem conteúdo" quando inaudível. */
+  transcription?: string;
+  /** Estado da fila de transcrição (migration 046). Só em content_type='audio'. */
+  transcription_status?: TranscriptionStatus;
 }
 
 export type ReactionActor = 'customer' | 'agent';
@@ -493,6 +514,9 @@ export interface TemplateSampleValues {
 export interface MessageTemplate {
   id: string;
   user_id: string;
+  /** Tenancy de conta (017) e conexão dona do template (multi-número, 033). */
+  account_id?: string | null;
+  connection_id?: string | null;
   name: string;
   category: 'Marketing' | 'Utility' | 'Authentication';
   language?: string;
@@ -749,6 +773,8 @@ export interface Automation {
   last_executed_at?: string | null;
   created_at: string;
   updated_at: string;
+  /** Conexão (número) dona da automação (multi-número, 033). */
+  connection_id?: string | null;
 }
 
 export interface AutomationStep {
