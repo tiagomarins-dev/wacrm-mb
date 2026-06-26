@@ -58,6 +58,27 @@ describe("classifyTab", () => {
     expect(classifyTab(conv({ assigned_agent_id: undefined }), "geral", USER, NOW)).toBe(true);
     expect(classifyTab(conv({ assigned_agent_id: AI_AGENT_USER_ID }), "geral", null, NOW)).toBe(true);
   });
+
+  describe("ia — atribuída à IA (bot genérico + perfis)", () => {
+    // Set montado pela page: bot genérico + ids de perfis de IA da conta.
+    const AI_IDS = new Set([AI_AGENT_USER_ID, "perfil-ia-1"]);
+
+    it("bot genérico entra", () => {
+      expect(classifyTab(conv({ assigned_agent_id: AI_AGENT_USER_ID }), "ia", USER, NOW, AI_IDS)).toBe(true);
+    });
+    it("perfil de IA (id no set) entra", () => {
+      expect(classifyTab(conv({ assigned_agent_id: "perfil-ia-1" }), "ia", USER, NOW, AI_IDS)).toBe(true);
+    });
+    it("humano não entra; null não entra; id fora do set não entra", () => {
+      expect(classifyTab(conv({ assigned_agent_id: USER }), "ia", USER, NOW, AI_IDS)).toBe(false);
+      expect(classifyTab(conv({ assigned_agent_id: undefined }), "ia", USER, NOW, AI_IDS)).toBe(false);
+      expect(classifyTab(conv({ assigned_agent_id: "perfil-desconhecido" }), "ia", USER, NOW, AI_IDS)).toBe(false);
+    });
+    // Backward-compat: sem o 5º arg (set default vazio) → nada classifica como IA.
+    it("sem aiAgentIds (4 args) → false", () => {
+      expect(classifyTab(conv({ assigned_agent_id: AI_AGENT_USER_ID }), "ia", USER, NOW)).toBe(false);
+    });
+  });
 });
 
 describe("sortByTab", () => {
@@ -88,7 +109,18 @@ describe("countByTab", () => {
     expect(c.fila).toBe(1);
     expect(c.minhas).toBe(1);
     expect(c.sla).toBe(1);
+    expect(c.ia).toBe(0); // sem aiAgentIds → nenhuma conversa classifica como IA
     expect(c.geral).toBe(list.length);
+  });
+
+  it("conta ia quando recebe o set", () => {
+    const ai = new Set([AI_AGENT_USER_ID, "perfil-ia-1"]);
+    const list: Conversation[] = [
+      conv({ assigned_agent_id: AI_AGENT_USER_ID }),
+      conv({ assigned_agent_id: "perfil-ia-1" }),
+      conv({ assigned_agent_id: USER }),
+    ];
+    expect(countByTab(list, USER, NOW, ai).ia).toBe(2);
   });
 });
 

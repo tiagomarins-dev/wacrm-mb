@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
 import { classifyTab, sortByTab, countByTab, type QueueTab } from "@/lib/inbox/queue";
+import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { useTranslation } from "react-i18next";
 
 interface ConversationListProps {
@@ -41,17 +42,19 @@ const TAB_LABEL: Record<QueueTab, string> = {
   fila: "tabFila",
   minhas: "tabMinhas",
   sla: "tabSla",
+  ia: "tabIa",
   geral: "tabGeral",
 };
 const EMPTY_KEY: Record<QueueTab, string> = {
   fila: "emptyFila",
   minhas: "emptyMinhas",
   sla: "emptySla",
+  ia: "emptyIa",
   geral: "emptyGeral",
 };
-// "geral" saiu pra tela própria /conversations (paginada). TAB_LABEL/EMPTY_KEY
-// mantêm a chave por serem Record<QueueTab>, mas a aba não é renderizada.
-const TABS: QueueTab[] = ["fila", "minhas", "sla"];
+// "geral" saiu pra tela própria /conversations (paginada); "ia" só aparece p/
+// admin/owner (montado dinamicamente no componente — ver `tabs`). TAB_LABEL/
+// EMPTY_KEY mantêm todas as chaves por serem Record<QueueTab>.
 
 export function ConversationList({
   activeConversationId,
@@ -61,10 +64,15 @@ export function ConversationList({
   resyncToken = 0,
 }: ConversationListProps) {
   const { t } = useTranslation("inbox");
-  const { user } = useAuth();
+  const { user, canManageMembers, accountId } = useAuth();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState<QueueTab>("fila");
   const [loading, setLoading] = useState(true);
+  // Ids tidos como "IA" p/ a aba Agente IA: bot genérico + perfis de IA da conta.
+  // Base sempre tem o bot; perfis entram via fetch admin (effect abaixo).
+  const [aiAgentIds, setAiAgentIds] = useState<ReadonlySet<string>>(
+    () => new Set([AI_AGENT_USER_ID])
+  );
   // Conexão ativa (multi-número, 033): só as conversas desta conexão.
   const { activeConnectionId } = useActiveConnection();
   // Ticker p/ a aba SLA "virar" sozinha (sem msg/evento): recomputa a cada 30s.
@@ -135,10 +143,66 @@ export function ConversationList({
     // up on any events sent while the WS was disconnected or throttled.
   }, [resyncToken, activeConnectionId]);
 
+  // Carrega os ids dos perfis de IA da conta p/ classificar a aba "Agente IA".
+  // Só admin/owner (canManageMembers) — a base table ai_profiles é admin-only
+  // (RLS migration 040). resyncToken nas deps refaz no reconnect/visibility;
+  // .eq(account_id) é defense-in-depth além da RLS (espelha dispatch.ts).
+  useEffect(() => {
+    let cancelled = false;
+
+    // setState fica dentro do IIFE async (nunca síncrono no corpo do effect, p/
+    // não disparar render em cascata — regra react-hooks/set-state-in-effect).
+    (async () => {
+      // Sem permissão/conta: set base só com o bot (sem fetch).
+      if (!canManageMembers || !accountId) {
+        if (!cancelled) setAiAgentIds(new Set([AI_AGENT_USER_ID]));
+        return;
+      }
+
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("ai_profiles")
+        .select("id")
+        .eq("account_id", accountId);
+
+      if (cancelled) return;
+
+      if (error) {
+        // Supabase errors têm props não-enumeráveis — logar campos explícitos.
+        console.error("Failed to fetch ai_profiles ids:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        return; // mantém o Set base (só o bot)
+      }
+
+      const ids = (data ?? []).map((r) => (r as { id: string }).id);
+      setAiAgentIds(new Set([AI_AGENT_USER_ID, ...ids]));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageMembers, accountId, resyncToken]);
+
+  // Abas visíveis: "Agente IA" só p/ admin/owner (canManageMembers), espelhando
+  // o gate das configs de IA (ai_profiles é admin+).
+  const tabs = useMemo<QueueTab[]>(
+    () => ["fila", "minhas", "sla", ...(canManageMembers ? ["ia" as const] : [])],
+    [canManageMembers]
+  );
+
+  // Aba efetivamente exibida: se o activeTab não está em `tabs` (ex.: era "ia" e
+  // a permissão caiu), cai pra "fila" — sem setState (evita aba órfã/empty
+  // fantasma de forma derivada, não imperativa).
+  const effectiveTab = tabs.includes(activeTab) ? activeTab : "fila";
+
   const filtered = useMemo(() => {
-    // Classifica pela aba ativa (fila/minhas/sla/geral), aplica a busca e ordena.
+    // Classifica pela aba ativa (fila/minhas/sla/ia/geral), aplica a busca e ordena.
     let result = conversations.filter((c) =>
-      classifyTab(c, activeTab, user?.id, now)
+      classifyTab(c, effectiveTab, user?.id, now, aiAgentIds)
     );
 
     if (search.trim()) {
@@ -151,13 +215,13 @@ export function ConversationList({
       });
     }
 
-    return sortByTab(result, activeTab);
-  }, [conversations, activeTab, search, now, user?.id]);
+    return sortByTab(result, effectiveTab);
+  }, [conversations, effectiveTab, search, now, user?.id, aiAgentIds]);
 
   // Contadores de cada aba (badges em todas).
   const counts = useMemo(
-    () => countByTab(conversations, user?.id, now),
-    [conversations, user?.id, now]
+    () => countByTab(conversations, user?.id, now, aiAgentIds),
+    [conversations, user?.id, now, aiAgentIds]
   );
 
   const handleSearchChange = useCallback(
@@ -191,11 +255,11 @@ export function ConversationList({
           />
         </div>
 
-        {/* Abas: Fila / Minhas / SLA / Geral, cada uma com badge contador.
+        {/* Abas: Fila / Minhas / SLA / Agente IA (admin+), cada uma com badge contador.
             flex-nowrap + overflow-x-auto p/ não cortar em largura estreita (~360px). */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as QueueTab)}>
+        <Tabs value={effectiveTab} onValueChange={(v) => setActiveTab(v as QueueTab)}>
           <TabsList variant="line" className="w-full justify-start gap-1 overflow-x-auto">
-            {TABS.map((tab) => (
+            {tabs.map((tab) => (
               <TabsTrigger
                 key={tab}
                 value={tab}
@@ -227,7 +291,7 @@ export function ConversationList({
           </div>
         ) : filtered.length === 0 ? (
           <div className="px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">{t(EMPTY_KEY[activeTab])}</p>
+            <p className="text-sm text-muted-foreground">{t(EMPTY_KEY[effectiveTab])}</p>
           </div>
         ) : (
           <div className="flex flex-col">
