@@ -6,18 +6,25 @@
 import type { Conversation } from "@/types";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 
-export type QueueTab = "fila" | "minhas" | "sla" | "geral";
+export type QueueTab = "fila" | "minhas" | "sla" | "ia" | "geral";
 
 // Limite do SLA (min sem resposta do atendente). Sem número mágico solto.
 export const SLA_THRESHOLD_MIN = 30;
 const SLA_MS = SLA_THRESHOLD_MIN * 60_000;
 
+// Set vazio reaproveitado quando o caller não passa os ids de IA (mantém
+// compatibilidade com chamadas de 4 args — ver classifyTab abaixo).
+const NO_AI_IDS: ReadonlySet<string> = new Set();
+
 // Uma conversa pertence à aba? `userId` = id do usuário logado (Minhas).
+// `aiAgentIds` = ids tidos como "IA" (bot genérico + perfis), montados pela page
+// (admin+). Opcional p/ não quebrar chamadas legadas de 4 args.
 export function classifyTab(
   conv: Conversation,
   tab: QueueTab,
   userId: string | null | undefined,
   now: number,
+  aiAgentIds: ReadonlySet<string> = NO_AI_IDS,
 ): boolean {
   const assigned = conv.assigned_agent_id ?? null;
   switch (tab) {
@@ -33,6 +40,9 @@ export function classifyTab(
       if (!conv.last_message_at) return false;
       return now - new Date(conv.last_message_at).getTime() > SLA_MS;
     }
+    case "ia":
+      // Atribuída à IA: bot genérico ou um perfil de IA (set já inclui ambos).
+      return assigned !== null && aiAgentIds.has(assigned);
     case "geral":
       return true;
   }
@@ -57,12 +67,14 @@ export function countByTab(
   list: Conversation[],
   userId: string | null | undefined,
   now: number,
+  aiAgentIds: ReadonlySet<string> = NO_AI_IDS,
 ): Record<QueueTab, number> {
-  const acc: Record<QueueTab, number> = { fila: 0, minhas: 0, sla: 0, geral: 0 };
+  const acc: Record<QueueTab, number> = { fila: 0, minhas: 0, sla: 0, ia: 0, geral: 0 };
   for (const c of list) {
     if (classifyTab(c, "fila", userId, now)) acc.fila++;
     if (classifyTab(c, "minhas", userId, now)) acc.minhas++;
     if (classifyTab(c, "sla", userId, now)) acc.sla++;
+    if (classifyTab(c, "ia", userId, now, aiAgentIds)) acc.ia++;
     acc.geral++;
   }
   return acc;
