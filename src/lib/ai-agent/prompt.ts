@@ -113,6 +113,9 @@ interface DbMessage {
   sender_type: 'customer' | 'agent' | 'bot'
   content_text: string | null
   content_type: string | null
+  // Transcrição automática de áudio (migration 046).
+  transcription: string | null
+  transcription_status: string | null
 }
 
 // Mapeia uma mensagem do banco p/ placeholder quando não tem texto (mídia).
@@ -125,6 +128,13 @@ function bodyOf(m: DbMessage): string {
     case 'document':
       return '[documento]'
     case 'audio':
+      // Usa a transcrição automática (migration 046) quando pronta — assim o
+      // agente "lê" o áudio em vez de só ver um placeholder. 'empty' = áudio
+      // sem fala compreensível; pending/running/failed/null = ainda sem texto.
+      if (m.transcription_status === 'done' && m.transcription?.trim()) {
+        return m.transcription.trim()
+      }
+      if (m.transcription_status === 'empty') return '[áudio sem conteúdo]'
       return '[áudio]'
     case 'video':
       return '[vídeo]'
@@ -144,7 +154,7 @@ export async function serializeRecentMessages(
 ): Promise<ChatMsg[]> {
   const { data, error } = await db
     .from('messages')
-    .select('sender_type, content_text, content_type, created_at')
+    .select('sender_type, content_text, content_type, created_at, transcription, transcription_status')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: false })
     .limit(limit)

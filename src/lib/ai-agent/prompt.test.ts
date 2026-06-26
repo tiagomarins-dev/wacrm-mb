@@ -106,6 +106,45 @@ describe('serializeRecentMessages', () => {
     expect(msgs[0]).toEqual({ role: 'user', content: '[áudio]' })
   })
 
+  it('áudio transcrito (status done) usa a transcrição no lugar do placeholder', async () => {
+    const db = makeDb({
+      data: [
+        {
+          sender_type: 'customer',
+          content_text: null,
+          content_type: 'audio',
+          transcription: 'Boa tarde, queria saber do intensivo',
+          transcription_status: 'done',
+        },
+      ],
+      error: null,
+    })
+    const msgs = await serializeRecentMessages(db, 'conv-1')
+    expect(msgs[0]).toEqual({ role: 'user', content: 'Boa tarde, queria saber do intensivo' })
+  })
+
+  it('áudio sem conteúdo (status empty) vira "[áudio sem conteúdo]"', async () => {
+    const db = makeDb({
+      data: [
+        { sender_type: 'customer', content_text: null, content_type: 'audio', transcription: 'Áudio sem conteúdo', transcription_status: 'empty' },
+      ],
+      error: null,
+    })
+    const msgs = await serializeRecentMessages(db, 'conv-1')
+    expect(msgs[0]).toEqual({ role: 'user', content: '[áudio sem conteúdo]' })
+  })
+
+  it('áudio ainda pendente (status pending) cai no placeholder', async () => {
+    const db = makeDb({
+      data: [
+        { sender_type: 'customer', content_text: null, content_type: 'audio', transcription: null, transcription_status: 'pending' },
+      ],
+      error: null,
+    })
+    const msgs = await serializeRecentMessages(db, 'conv-1')
+    expect(msgs[0]).toEqual({ role: 'user', content: '[áudio]' })
+  })
+
   it('erro → []', async () => {
     const db = makeDb({ data: null, error: { message: 'boom' } })
     expect(await serializeRecentMessages(db, 'conv-1')).toEqual([])
