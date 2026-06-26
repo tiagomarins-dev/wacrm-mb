@@ -109,6 +109,13 @@ describe("validateStepsForActivation", () => {
     ]);
   });
 
+  it("validates ai_reply with no config (não cai em 'unknown step type')", () => {
+    const issues = validateStepsForActivation([
+      { step_type: "ai_reply", step_config: {} },
+    ]);
+    expect(issues).toEqual([]);
+  });
+
   it("flags create_deal when required fields are missing", () => {
     const issues = validateStepsForActivation([
       { step_type: "create_deal", step_config: {} },

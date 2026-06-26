@@ -33,6 +33,7 @@ import {
   Loader2,
   ArrowDown,
   ArrowUp,
+  Bot,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -106,6 +107,7 @@ const STEP_META: Record<AutomationStepType, StepMeta> = {
   condition: { labelKey: "stepCondition", labelEn: "Condition (If/Else)", icon: GitBranch, border: "border-l-amber-500" },
   send_webhook: { labelKey: "stepSendWebhook", labelEn: "Send Webhook", icon: Webhook, border: "border-l-primary" },
   close_conversation: { labelKey: "stepCloseConversation", labelEn: "Close Conversation", icon: CircleSlash, border: "border-l-primary" },
+  ai_reply: { labelKey: "stepAiReply", labelEn: "Reply with AI", icon: Bot, border: "border-l-primary" },
 }
 
 const ADDABLE_STEPS: AutomationStepType[] = [
@@ -120,6 +122,7 @@ const ADDABLE_STEPS: AutomationStepType[] = [
   "condition",
   "send_webhook",
   "close_conversation",
+  "ai_reply",
 ]
 
 // Opções de gatilho. Os rótulos reutilizam as chaves já existentes no
@@ -214,6 +217,8 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
     case "send_webhook":
       return { url: "", headers: {}, body_template: "" }
     case "close_conversation":
+      return {}
+    case "ai_reply":
       return {}
     default:
       return {}
@@ -1349,6 +1354,12 @@ function StepEditor({
       return (
         <p className="text-xs text-muted-foreground">
           {t("closeConversationNote")}
+        </p>
+      )
+    case "ai_reply":
+      return (
+        <p className="text-xs text-muted-foreground">
+          {t("aiReplyNote")}
         </p>
       )
     default:
