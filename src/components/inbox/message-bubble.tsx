@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import type { Message, MessageReaction } from "@/types";
 import {
@@ -51,6 +52,47 @@ function StatusIcon({ status }: { status: Message["status"] }) {
     default:
       return null;
   }
+}
+
+// Bolha de áudio com botão "Ler transcrição". A transcrição é preenchida
+// assíncrono (gatilho/cron) e chega via realtime — quando transcription_status
+// vira done/empty, o botão aparece. Render como TEXTO PURO (React escapa).
+function AudioMessage({ message }: { message: Message }) {
+  const { t } = useTranslation("inbox");
+  const [open, setOpen] = useState(false);
+  const st = message.transcription_status;
+  return (
+    <div>
+      {message.media_url ? (
+        <audio
+          src={withConversation(message.media_url, message.conversation_id)}
+          controls
+          className="max-w-60"
+        />
+      ) : (
+        <MediaUnavailable label="Audio" />
+      )}
+      {(st === "done" || st === "empty") && (
+        <div className="mt-1">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="text-xs underline opacity-80 hover:opacity-100"
+          >
+            {open ? t("hideTranscription") : t("readTranscription")}
+          </button>
+          {open && (
+            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+              {st === "empty" ? t("audioNoContent") : message.transcription}
+            </p>
+          )}
+        </div>
+      )}
+      {(st === "pending" || st === "running") && (
+        <p className="mt-1 text-xs opacity-60">{t("transcribing")}</p>
+      )}
+    </div>
+  );
 }
 
 function MediaUnavailable({ label }: { label: string }) {
@@ -230,19 +272,7 @@ function MessageContent({ message }: { message: Message }) {
       );
 
     case "audio":
-      return (
-        <div>
-          {message.media_url ? (
-            <audio
-              src={withConversation(message.media_url, message.conversation_id)}
-              controls
-              className="max-w-60"
-            />
-          ) : (
-            <MediaUnavailable label="Audio" />
-          )}
-        </div>
-      );
+      return <AudioMessage message={message} />;
 
     case "document": {
       if (!message.media_url) {

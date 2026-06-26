@@ -31,5 +31,9 @@
   "removeAttachment": "Remover anexo",
   "addCaption": "Adicionar legenda…",
   "noApprovedTemplates": "Nenhum template aprovado",
-  "preview": "Pré-visualização"
+  "preview": "Pré-visualização",
+  "readTranscription": "Ler transcrição",
+  "hideTranscription": "Ocultar transcrição",
+  "audioNoContent": "Áudio sem conteúdo",
+  "transcribing": "Transcrevendo…"
 }

@@ -59,9 +59,10 @@ services:
             sleep "$$AI_AGENT_CRON_INTERVAL"
           done ) &
         # Loop PADRÃO para os demais crons (broadcasts, automations, flows,
-        # conversations — sweep de desatribuição de conversa ociosa).
+        # conversations — sweep de desatribuição de conversa ociosa;
+        # transcriptions — retry da transcrição de áudio).
         while true; do
-          for p in broadcasts automations flows conversations; do
+          for p in broadcasts automations flows conversations transcriptions; do
             curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/$$p/cron" >/dev/null 2>&1 || true
           done
           sleep "$$CRON_INTERVAL"

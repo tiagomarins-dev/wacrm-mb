@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react"
 import { useRouter } from "next/navigation"
+import { useActiveConnection } from "@/hooks/use-active-connection"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { toast } from "sonner"
@@ -255,6 +256,9 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
   const [templates, setTemplates] = useState<MessageTemplate[]>([])
   const [customFields, setCustomFields] = useState<CustomField[]>([])
   const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([])
+  // Conexão ativa (033): a automação é gravada com connection_id = ativa
+  // (api/automations/route.ts), então os templates listados são os dela.
+  const { activeConnectionId } = useActiveConnection()
 
   useEffect(() => {
     let cancelled = false
@@ -264,14 +268,17 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
     // scopes them to the caller's account. Only APPROVED templates can
     // actually be sent (anything else 400s at send time), matching the
     // broadcast picker.
+    // Filtra os templates pela conexão ativa (033) quando houver.
+    let tplQuery = supabase
+      .from("message_templates")
+      .select("*")
+      .eq("status", "APPROVED")
+    if (activeConnectionId) tplQuery = tplQuery.eq("connection_id", activeConnectionId)
+
     void (async () => {
       const [tagsRes, templatesRes, customFieldsRes, aiProfilesRes] = await Promise.all([
         supabase.from("tags").select("*").order("name"),
-        supabase
-          .from("message_templates")
-          .select("*")
-          .eq("status", "APPROVED")
-          .order("name"),
+        tplQuery.order("name"),
         supabase.from("custom_fields").select("*").order("field_name"),
         // Perfis de IA atribuíveis — view pública (RLS escopa por conta).
         supabase.from("ai_profiles_public").select("id, nome, enabled").eq("enabled", true),
@@ -300,7 +307,7 @@ function ResourcesProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [activeConnectionId])
 
   return (
     <ResourcesContext.Provider value={{ tags, members, templates, customFields, aiProfiles }}>

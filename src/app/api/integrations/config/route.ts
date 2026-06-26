@@ -18,6 +18,11 @@ interface ConfigRow {
   slack_bot_token: string | null
   slack_channel_id: string | null
   millaborges_api_key: string | null
+  // Transcrição de áudio (migration 046) — não-secretos.
+  transcription_enabled: boolean | null
+  transcription_model: string | null
+  transcription_fallback_model: string | null
+  transcription_format_model: string | null
 }
 
 function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
@@ -30,6 +35,10 @@ function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
     notion_set: !!row?.notion_api_key,
     slack_set: !!row?.slack_bot_token,
     millaborges_set: !!row?.millaborges_api_key,
+    transcription_enabled: row?.transcription_enabled ?? true,
+    transcription_model: row?.transcription_model ?? null,
+    transcription_fallback_model: row?.transcription_fallback_model ?? null,
+    transcription_format_model: row?.transcription_format_model ?? null,
   }
 }
 
@@ -82,6 +91,13 @@ export async function POST(request: Request) {
       slack_bot_token: tokenField(body.slack_bot_token, cur?.slack_bot_token ?? null),
       slack_channel_id: str(body.slack_channel_id),
       millaborges_api_key: tokenField(body.millaborges_api_key, cur?.millaborges_api_key ?? null),
+      // Transcrição: model ids plaintext via str(); enabled por coerção própria
+      // (str() devolve null p/ boolean).
+      transcription_enabled:
+        typeof body.transcription_enabled === 'boolean' ? body.transcription_enabled : true,
+      transcription_model: str(body.transcription_model),
+      transcription_fallback_model: str(body.transcription_fallback_model),
+      transcription_format_model: str(body.transcription_format_model),
     }
 
     // Validação leve: token sem o campo-companheiro não adianta.

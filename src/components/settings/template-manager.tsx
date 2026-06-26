@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import {
@@ -13,6 +13,11 @@ import {
   Pencil,
   RotateCcw,
   Upload,
+  Search,
+  LayoutGrid,
+  List,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -20,12 +25,22 @@ import {
   MEDIA_MAX_BYTES_BY_KIND,
 } from '@/lib/storage/upload-media';
 import { useAuth } from '@/hooks/use-auth';
+import { useActiveConnection } from '@/hooks/use-active-connection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { SettingsPanelHead } from './settings-panel-head';
 import {
   Dialog,
@@ -49,11 +64,21 @@ import type {
 } from '@/types';
 import { templateStatusConfig } from '@/lib/template-status';
 import {
+  filterTemplates,
+  sortTemplates,
+  type TemplateSortKey,
+  type TemplateSortDir,
+} from '@/lib/templates/filter-sort';
+import {
   extractVariableIndices,
   TEMPLATE_LIMITS,
 } from '@/lib/whatsapp/template-validators';
 
 const CATEGORIES = ['Marketing', 'Utility', 'Authentication'] as const;
+
+// Chave de persistência da visão (cartões/tabela) — convenção wacrm:scope:nome
+// (espelha CONTACT_PANEL_STORAGE_KEY em inbox/page.tsx:18).
+const TEMPLATES_VIEW_STORAGE_KEY = 'wacrm:templates:view';
 type HeaderFormat = 'none' | 'text' | 'image' | 'video' | 'document';
 const HEADER_FORMATS: HeaderFormat[] = ['none', 'text', 'image', 'video', 'document'];
 
@@ -156,11 +181,23 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
 export function TemplateManager() {
   const supabase = createClient();
   const { user, loading: authLoading } = useAuth();
+  // Conexões da conta (rótulo + filtro) — sem novo fetch; hook já carrega (033).
+  const { connections, activeConnectionId } = useActiveConnection();
   // i18n: namespace próprio do painel de Modelos + chaves comuns (Cancelar/Excluir/etc.)
-  const { t } = useTranslation(['settingsTemplates', 'common']);
+  // i18n.language alimenta a ordenação por nome e a formatação de data (locale-aware).
+  const { t, i18n } = useTranslation(['settingsTemplates', 'common']);
 
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+
+  // Controles da barra de filtros/ordenação/visão (tudo client-side, em memória).
+  const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search); // React 19 — sem debounce manual
+  const [connectionFilter, setConnectionFilter] = useState<string>('all');
+  const filterTouched = useRef(false); // trava o default após escolha do usuário
+  const [sortKey, setSortKey] = useState<TemplateSortKey>('date');
+  const [sortDir, setSortDir] = useState<TemplateSortDir>('desc');
+  const [view, setView] = useState<'cards' | 'table'>('cards'); // default do servidor
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -216,6 +253,34 @@ export function TemplateManager() {
     fetchTemplates(user.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, user?.id]);
+
+  // Default do filtro = conexão ativa do header; respeita escolha manual do usuário.
+  useEffect(() => {
+    if (!filterTouched.current && activeConnectionId) {
+      setConnectionFilter(activeConnectionId);
+    }
+  }, [activeConnectionId]);
+
+  // Hidratação da visão pós-mount (evita mismatch de SSR). Valida contra allow-list.
+  // Espelha inbox/page.tsx:56-63.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(TEMPLATES_VIEW_STORAGE_KEY);
+      if (stored === 'table' || stored === 'cards') setView(stored);
+    } catch {
+      // localStorage pode lançar em navegação privada/sandbox.
+    }
+  }, []);
+
+  // Troca a visão e persiste (best-effort) na convenção wacrm:scope:nome.
+  function changeView(next: 'cards' | 'table') {
+    setView(next);
+    try {
+      localStorage.setItem(TEMPLATES_VIEW_STORAGE_KEY, next);
+    } catch {
+      // Persistência é best-effort; ignora falha de storage.
+    }
+  }
 
   async function fetchTemplates(userId: string) {
     try {
@@ -480,6 +545,28 @@ export function TemplateManager() {
     }));
   }
 
+  // Mapa connection_id → rótulo (phone_number_id) p/ a coluna Conexão da tabela.
+  // Hooks antes de qualquer return condicional (regra dos hooks).
+  const connectionLabels = useMemo(
+    () => new Map(connections.map((c) => [c.id, c.phone_number_id])),
+    [connections],
+  );
+
+  // Lista visível = filtro (conexão + texto) + ordenação (puros). Não muta `templates`.
+  const visibleTemplates = useMemo(
+    () =>
+      sortTemplates(
+        filterTemplates(templates, {
+          connectionId: connectionFilter,
+          query: deferredSearch,
+        }),
+        sortKey,
+        sortDir,
+        i18n.language,
+      ),
+    [templates, connectionFilter, deferredSearch, sortKey, sortDir, i18n.language],
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -516,6 +603,124 @@ export function TemplateManager() {
     }
   }
 
+  // Badges de categoria + status — compartilhados por card e linha da tabela.
+  // language/quality_score NÃO entram aqui (não são badges; ficam inline no card
+  // e em células próprias na tabela).
+  function renderBadges(template: MessageTemplate) {
+    const statusKey = template.status || 'DRAFT';
+    const status = templateStatusConfig[statusKey];
+    return (
+      <>
+        <Badge
+          className={`text-xs border ${categoryColors[template.category] || ''}`}
+        >
+          {/* Rótulo da categoria traduzido; cai no valor cru se for categoria desconhecida */}
+          {categoryLabelKeys[template.category]
+            ? t(categoryLabelKeys[template.category])
+            : template.category}
+        </Badge>
+        <Badge
+          className={`text-xs border ${status.classes}`}
+          // R1: motivo de rejeição/erro de envio via title (mesmo texto do banner do card).
+          title={template.rejection_reason || template.submission_error || undefined}
+        >
+          {/* Rótulo do status traduzido; fallback no label cru da lib */}
+          {statusLabelKeys[statusKey]
+            ? t(statusLabelKeys[statusKey])
+            : status.label}
+        </Badge>
+      </>
+    );
+  }
+
+  // Ações (Editar/Reenviar/Excluir) — compartilhadas por card e linha da tabela.
+  // Editar aparece p/ APPROVED; Reenviar p/ REJECTED|PAUSED; Excluir sempre.
+  function renderActions(template: MessageTemplate) {
+    const statusKey = template.status || 'DRAFT';
+    return (
+      <div className="flex items-center gap-1 shrink-0">
+        {statusKey === 'APPROVED' && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openEdit(template)}
+            title={t('editApprovedTooltip')}
+            aria-label={t('editAria')}
+            className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
+          >
+            <Pencil className="size-3.5" />
+            {t('common:edit')}
+          </Button>
+        )}
+        {(statusKey === 'REJECTED' || statusKey === 'PAUSED') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openEdit(template)}
+            title={t('resubmitTooltip')}
+            aria-label={t('resubmitAria')}
+            className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
+          >
+            <RotateCcw className="size-3.5" />
+            {t('resubmit')}
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setTemplateToDelete(template)}
+          disabled={deletingId === template.id}
+          aria-label={
+            template.meta_template_id
+              ? t('deleteRemoteAria')
+              : t('deleteLocalAria')
+          }
+          title={
+            template.meta_template_id
+              ? t('deleteRemoteTooltip')
+              : t('deleteLocalTooltip')
+          }
+          className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 w-8"
+        >
+          {deletingId === template.id ? (
+            <Loader2 className="size-4 animate-spin" />
+          ) : (
+            <Trash2 className="size-4" />
+          )}
+        </Button>
+      </div>
+    );
+  }
+
+  // Chip de quality_score (Meta) — reutilizado no card e na célula Nome da tabela.
+  function renderQualityScore(template: MessageTemplate) {
+    if (!template.quality_score) return null;
+    return (
+      <span
+        className={`text-[10px] uppercase font-medium ${
+          template.quality_score === 'GREEN'
+            ? 'text-emerald-400'
+            : template.quality_score === 'YELLOW'
+              ? 'text-yellow-400'
+              : 'text-red-400'
+        }`}
+        title={t('qualityScoreTitle')}
+      >
+        {template.quality_score}
+      </span>
+    );
+  }
+
+  // Rótulo da conexão de um modelo: nome (phone_number_id) se conhecida; senão
+  // "removida" (id órfão de conexão desconectada) ou "sem conexão" (legado null).
+  function connectionLabel(template: MessageTemplate) {
+    const id = template.connection_id ?? '';
+    return (
+      connectionLabels.get(id) ??
+      (template.connection_id ? t('connectionUnknown') : t('connectionNone'))
+    );
+  }
+
   return (
     <section className="animate-in fade-in-50 space-y-4 duration-200">
       <SettingsPanelHead
@@ -550,123 +755,236 @@ export function TemplateManager() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-3 xl:grid-cols-2">
-          {templates.map((template) => {
-            const statusKey = template.status || 'DRAFT';
-            const status = templateStatusConfig[statusKey];
-            return (
-              <Card key={template.id}>
-                <CardContent className="flex items-start justify-between pt-4">
-                  <div className="space-y-2 min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-medium text-foreground">{template.name}</h3>
-                      <Badge
-                        className={`text-xs border ${categoryColors[template.category] || ''}`}
-                      >
-                        {/* Rótulo da categoria traduzido; cai no valor cru se for categoria desconhecida */}
-                        {categoryLabelKeys[template.category]
-                          ? t(categoryLabelKeys[template.category])
-                          : template.category}
-                      </Badge>
-                      <Badge className={`text-xs border ${status.classes}`}>
-                        {/* Rótulo do status traduzido; fallback no label cru da lib */}
-                        {statusLabelKeys[statusKey]
-                          ? t(statusLabelKeys[statusKey])
-                          : status.label}
-                      </Badge>
-                      {template.language && (
-                        <span className="text-xs text-muted-foreground uppercase">
-                          {template.language}
-                        </span>
+        <>
+          {/* Barra de filtros/ordenação/visão — só quando há modelos */}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative flex-1 sm:min-w-[200px]">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder={t('searchPlaceholder')}
+                aria-label={t('searchPlaceholder')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            {/* Filtro por conexão — guard !v: Select base-ui dispara null no deselect */}
+            <Select
+              value={connectionFilter}
+              onValueChange={(v) => {
+                if (!v) return;
+                filterTouched.current = true;
+                setConnectionFilter(v);
+              }}
+            >
+              <SelectTrigger
+                className="w-full sm:w-48"
+                aria-label={t('filterConnectionLabel')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('filterConnectionAll')}</SelectItem>
+                {connections.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.phone_number_id}
+                    {c.is_primary ? ` ${t('connectionPrimaryTag')}` : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Critério de ordenação */}
+            <Select
+              value={sortKey}
+              onValueChange={(v) => {
+                if (!v) return;
+                setSortKey(v as TemplateSortKey);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-40" aria-label={t('sortByLabel')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="date">{t('sortByDate')}</SelectItem>
+                <SelectItem value="status">{t('sortByStatus')}</SelectItem>
+                <SelectItem value="name">{t('sortByName')}</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Direção da ordenação */}
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={sortDir === 'asc' ? t('sortDirectionAsc') : t('sortDirectionDesc')}
+              title={sortDir === 'asc' ? t('sortDirectionAsc') : t('sortDirectionDesc')}
+              onClick={() => setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))}
+            >
+              {sortDir === 'asc' ? <ArrowUp className="size-4" /> : <ArrowDown className="size-4" />}
+            </Button>
+            {/* Alternância de visão cartões/tabela */}
+            <div className="flex items-center gap-1">
+              <Button
+                variant={view === 'cards' ? 'secondary' : 'outline'}
+                size="icon"
+                aria-pressed={view === 'cards'}
+                aria-label={t('viewCards')}
+                title={t('viewCards')}
+                onClick={() => changeView('cards')}
+              >
+                <LayoutGrid className="size-4" />
+              </Button>
+              <Button
+                variant={view === 'table' ? 'secondary' : 'outline'}
+                size="icon"
+                aria-pressed={view === 'table'}
+                aria-label={t('viewTable')}
+                title={t('viewTable')}
+                onClick={() => changeView('table')}
+              >
+                <List className="size-4" />
+              </Button>
+            </div>
+          </div>
+
+          {visibleTemplates.length === 0 ? (
+            // Vazio por causa de filtro/busca (≠ vazio real, tratado acima).
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-muted-foreground text-sm">{t('filteredEmptyTitle')}</p>
+                <p className="text-muted-foreground text-xs mt-1">
+                  {t('filteredEmptyDescription')}
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => {
+                    setSearch('');
+                    setConnectionFilter('all');
+                    filterTouched.current = true;
+                  }}
+                >
+                  {t('clearFilters')}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : view === 'table' ? (
+            // Visão tabela — wrapper do <Table> já tem overflow-x-auto (scroll no mobile).
+            <Card>
+              <CardContent className="p-0">
+                <Table>
+                  <TableCaption className="sr-only">{t('panelTitle')}</TableCaption>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('colName')}</TableHead>
+                      <TableHead>{t('colConnection')}</TableHead>
+                      <TableHead>{t('colCategory')}</TableHead>
+                      <TableHead>{t('colStatus')}</TableHead>
+                      <TableHead>{t('colLanguage')}</TableHead>
+                      <TableHead>{t('colCreatedAt')}</TableHead>
+                      <TableHead className="text-right">{t('colActions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleTemplates.map((template) => {
+                      const statusKey = template.status || 'DRAFT';
+                      const status = templateStatusConfig[statusKey];
+                      return (
+                        <TableRow key={template.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-foreground">
+                                {template.name}
+                              </span>
+                              {renderQualityScore(template)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {connectionLabel(template)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={`text-xs border ${categoryColors[template.category] || ''}`}
+                            >
+                              {categoryLabelKeys[template.category]
+                                ? t(categoryLabelKeys[template.category])
+                                : template.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={`text-xs border ${status.classes}`}
+                              title={
+                                template.rejection_reason ||
+                                template.submission_error ||
+                                undefined
+                              }
+                            >
+                              {statusLabelKeys[statusKey]
+                                ? t(statusLabelKeys[statusKey])
+                                : status.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="uppercase text-muted-foreground">
+                            {template.language}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground whitespace-nowrap">
+                            {new Date(template.created_at).toLocaleDateString(
+                              i18n.language,
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex justify-end">
+                              {renderActions(template)}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          ) : (
+            // Visão cartões (padrão).
+            <div className="grid gap-3 xl:grid-cols-2">
+              {visibleTemplates.map((template) => (
+                <Card key={template.id}>
+                  <CardContent className="flex items-start justify-between pt-4">
+                    <div className="space-y-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="font-medium text-foreground">{template.name}</h3>
+                        {renderBadges(template)}
+                        {template.language && (
+                          <span className="text-xs text-muted-foreground uppercase">
+                            {template.language}
+                          </span>
+                        )}
+                        {renderQualityScore(template)}
+                      </div>
+                      <p className="text-sm text-muted-foreground line-clamp-2">
+                        {template.body_text}
+                      </p>
+                      {template.footer_text && (
+                        <p className="text-xs text-muted-foreground italic">
+                          {template.footer_text}
+                        </p>
                       )}
-                      {template.quality_score && (
-                        <span
-                          className={`text-[10px] uppercase font-medium ${
-                            template.quality_score === 'GREEN'
-                              ? 'text-emerald-400'
-                              : template.quality_score === 'YELLOW'
-                                ? 'text-yellow-400'
-                                : 'text-red-400'
-                          }`}
-                          title={t('qualityScoreTitle')}
-                        >
-                          {template.quality_score}
-                        </span>
+                      {(template.rejection_reason || template.submission_error) && (
+                        <div className="flex items-start gap-1.5 text-xs text-red-400 bg-red-950/20 border border-red-900/40 rounded px-2 py-1.5">
+                          <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
+                          <span>
+                            {template.rejection_reason || template.submission_error}
+                          </span>
+                        </div>
                       )}
                     </div>
-                    <p className="text-sm text-muted-foreground line-clamp-2">
-                      {template.body_text}
-                    </p>
-                    {template.footer_text && (
-                      <p className="text-xs text-muted-foreground italic">
-                        {template.footer_text}
-                      </p>
-                    )}
-                    {(template.rejection_reason || template.submission_error) && (
-                      <div className="flex items-start gap-1.5 text-xs text-red-400 bg-red-950/20 border border-red-900/40 rounded px-2 py-1.5">
-                        <AlertCircle className="size-3.5 mt-0.5 shrink-0" />
-                        <span>
-                          {template.rejection_reason || template.submission_error}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0 ml-2">
-                    {statusKey === 'APPROVED' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(template)}
-                        title={t('editApprovedTooltip')}
-                        aria-label={t('editAria')}
-                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
-                      >
-                        <Pencil className="size-3.5" />
-                        {t('common:edit')}
-                      </Button>
-                    )}
-                    {(statusKey === 'REJECTED' || statusKey === 'PAUSED') && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEdit(template)}
-                        title={t('resubmitTooltip')}
-                        aria-label={t('resubmitAria')}
-                        className="text-muted-foreground hover:text-primary hover:bg-primary/10 h-8 px-2"
-                      >
-                        <RotateCcw className="size-3.5" />
-                        {t('resubmit')}
-                      </Button>
-                    )}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setTemplateToDelete(template)}
-                      disabled={deletingId === template.id}
-                      aria-label={
-                        template.meta_template_id
-                          ? t('deleteRemoteAria')
-                          : t('deleteLocalAria')
-                      }
-                      title={
-                        template.meta_template_id
-                          ? t('deleteRemoteTooltip')
-                          : t('deleteLocalTooltip')
-                      }
-                      className="text-muted-foreground hover:text-red-400 hover:bg-red-950/30 h-8 w-8"
-                    >
-                      {deletingId === template.id ? (
-                        <Loader2 className="size-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="size-4" />
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+                    <div className="ml-2">{renderActions(template)}</div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <Dialog

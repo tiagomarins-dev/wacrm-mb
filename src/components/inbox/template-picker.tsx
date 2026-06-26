@@ -34,6 +34,8 @@ interface TemplatePickerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (template: MessageTemplate, values: TemplateSendValues) => void;
+  /** Conexão da conversa (multi-número, 033): filtra os templates por ela. */
+  connectionId?: string | null;
 }
 
 function renderBodyPreview(body: string, params: string[]): string {
@@ -78,6 +80,7 @@ export function TemplatePicker({
   open,
   onOpenChange,
   onSelect,
+  connectionId,
 }: TemplatePickerProps) {
   const { t } = useTranslation("inbox");
   const [templates, setTemplates] = useState<MessageTemplate[]>([]);
@@ -93,6 +96,12 @@ export function TemplatePicker({
     let cancelled = false;
     (async () => {
       setLoading(true);
+      // Conexão mudou (ou reabriu): limpa qualquer template já selecionado
+      // p/ não vazar a escolha de outra conexão.
+      setSelected(null);
+      setParams([]);
+      setHeaderText("");
+      setButtonParams({});
       const supabase = createClient();
       const {
         data: { user },
@@ -106,12 +115,16 @@ export function TemplatePicker({
         return;
       }
 
-      const { data, error } = await supabase
+      // Filtra por conexão (033). O isolamento por conta é da RLS
+      // (message_templates_select) — o picker usa anon-key e não tem
+      // account_id em escopo. APPROVED preservado (só esses enviam).
+      let q = supabase
         .from("message_templates")
         .select("*")
-        .eq("user_id", user.id)
         .eq("status", "APPROVED")
         .order("created_at", { ascending: false });
+      if (connectionId) q = q.eq("connection_id", connectionId);
+      const { data, error } = await q;
 
       if (cancelled) return;
       if (error) {
@@ -126,7 +139,7 @@ export function TemplatePicker({
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, connectionId]);
 
   function resetSelection() {
     setSelected(null);

@@ -9,6 +9,7 @@ import {
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import { dispatchTranscription } from '@/lib/transcription/dispatch'
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -22,6 +23,7 @@ import {
 } from '@/lib/rate-limit'
 import type { MessageTemplate } from '@/types'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import { findTemplateRow } from '@/lib/whatsapp/find-template-row'
 
 export async function POST(request: Request) {
   try {
@@ -254,13 +256,14 @@ export async function POST(request: Request) {
     // crashing the send-builder later in the stack.
     let templateRow: MessageTemplate | null = null
     if (message_type === 'template' && template_name) {
-      const { data } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('account_id', accountId)
-        .eq('name', template_name)
-        .eq('language', template_language || 'en_US')
-        .maybeSingle()
+      // Lookup escopado à conexão da conversa (033) — evita casar o
+      // template de mesmo nome de outra conexão / erro multiple-rows.
+      const data = await findTemplateRow(supabase, {
+        accountId,
+        connectionId: conversation.connection_id,
+        name: template_name,
+        language: template_language || 'en_US',
+      })
       if (data && !isMessageTemplate(data)) {
         return NextResponse.json(
           {
@@ -270,7 +273,7 @@ export async function POST(request: Request) {
           { status: 500 },
         )
       }
-      templateRow = data ?? null
+      templateRow = (data as MessageTemplate | null) ?? null
     }
 
     const attempt = async (phone: string): Promise<string> => {
@@ -382,6 +385,8 @@ export async function POST(request: Request) {
         message_id: waMessageId,
         status: 'sent',
         reply_to_message_id: reply_to_message_id || null,
+        // Áudio entra na fila de transcrição (migration 046).
+        transcription_status: message_type === 'audio' ? 'pending' : null,
       })
       .select()
       .single()
@@ -403,6 +408,20 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', conversation_id)
+
+    // Transcrição de áudio (fire-and-forget). Usa supabaseAdmin: a config de
+    // transcrição vive em integrations_config (RLS admin-only), e o atendente
+    // que envia pode não ser admin — o client RLS não leria a config.
+    if (message_type === 'audio' && media_url && accountId) {
+      void dispatchTranscription({
+        db: supabaseAdmin(),
+        messageId: messageRecord.id,
+        accountId,
+        conversationId: conversation_id,
+        connectionId: conversation.connection_id,
+        mediaUrl: media_url,
+      }).catch((e) => console.error('[transcription] outbound:', (e as Error).message))
+    }
 
     // Pause any active Flow run for this contact — the agent stepping
     // in is the strongest "yield, human is here" signal. See PR #2

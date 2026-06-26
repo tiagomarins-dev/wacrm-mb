@@ -6,6 +6,7 @@ import { Loader2, Zap, CheckCircle2, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Card,
   CardContent,
@@ -34,6 +35,11 @@ export function IntegrationsConfig() {
   const [notionKey, setNotionKey] = useState('');
   const [slackToken, setSlackToken] = useState('');
   const [millaborgesKey, setMillaborgesKey] = useState('');
+  // Transcrição de áudio (não-secretos). Vazio = usa o default do código.
+  const [transcriptionEnabled, setTranscriptionEnabled] = useState(true);
+  const [transcriptionModel, setTranscriptionModel] = useState('');
+  const [transcriptionFallback, setTranscriptionFallback] = useState('');
+  const [transcriptionFormat, setTranscriptionFormat] = useState('');
   // Flags de "já configurado".
   const [sets, setSets] = useState({ openrouter: false, notion: false, slack: false, millaborges: false });
 
@@ -47,6 +53,10 @@ export function IntegrationsConfig() {
         setPrompt(c.openrouter_summary_prompt ?? '');
         setNotionDb(c.notion_database_id ?? '');
         setSlackChannel(c.slack_channel_id ?? '');
+        setTranscriptionEnabled(c.transcription_enabled ?? true);
+        setTranscriptionModel(c.transcription_model ?? '');
+        setTranscriptionFallback(c.transcription_fallback_model ?? '');
+        setTranscriptionFormat(c.transcription_format_model ?? '');
         setSets({
           openrouter: c.openrouter_set,
           notion: c.notion_set,
@@ -72,6 +82,10 @@ export function IntegrationsConfig() {
           openrouter_summary_prompt: prompt,
           notion_database_id: notionDb,
           slack_channel_id: slackChannel,
+          transcription_enabled: transcriptionEnabled,
+          transcription_model: transcriptionModel,
+          transcription_fallback_model: transcriptionFallback,
+          transcription_format_model: transcriptionFormat,
           // tokens só vão se preenchidos
           openrouter_api_key: openrouterKey || undefined,
           notion_api_key: notionKey || undefined,
@@ -206,6 +220,43 @@ export function IntegrationsConfig() {
               value={millaborgesKey}
               onChange={(e) => setMillaborgesKey(e.target.value)}
               placeholder={tokenPlaceholder(sets.millaborges)}
+              className="border-border bg-background text-foreground"
+            />
+          </Field>
+        </Section>
+
+        {/* Transcrição de áudio — modelos STT (configuráveis; vazio usa o default). */}
+        <Section title="Transcrição de áudio" connected={transcriptionEnabled}>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-muted-foreground">
+              Transcrever áudios automaticamente
+            </label>
+            <Switch
+              checked={transcriptionEnabled}
+              onCheckedChange={setTranscriptionEnabled}
+            />
+          </div>
+          <Field label="Modelo principal (STT)">
+            <Input
+              value={transcriptionModel}
+              onChange={(e) => setTranscriptionModel(e.target.value)}
+              placeholder="openai/whisper-large-v3-turbo"
+              className="border-border bg-background text-foreground"
+            />
+          </Field>
+          <Field label="Modelo de fallback (STT)">
+            <Input
+              value={transcriptionFallback}
+              onChange={(e) => setTranscriptionFallback(e.target.value)}
+              placeholder="openai/gpt-4o-mini-transcribe"
+              className="border-border bg-background text-foreground"
+            />
+          </Field>
+          <Field label="Modelo de formatação (correção do texto)">
+            <Input
+              value={transcriptionFormat}
+              onChange={(e) => setTranscriptionFormat(e.target.value)}
+              placeholder="openai/gpt-4o-mini"
               className="border-border bg-background text-foreground"
             />
           </Field>
