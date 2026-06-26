@@ -16,6 +16,8 @@ import type {
 } from '@/types'
 import { supabaseAdmin } from './admin-client'
 import { engineSendText, engineSendTemplate } from './meta-send'
+import { runAiAgentForConversation } from '@/lib/ai-agent/engine'
+import { resolveAssignedProfile } from '@/lib/ai-agent/dispatch'
 
 // ------------------------------------------------------------
 // Public API
@@ -456,6 +458,62 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         .eq('account_id', args.automation.account_id)
         .eq('contact_id', args.contactId)
       return `assigned to ${agentId}`
+    }
+
+    case 'ai_reply': {
+      // Dispara o agente de IA inline p/ responder a conversa agora (ex.: 1ª
+      // mensagem de um lead, antes do fluxo normal assumir). Delega 100% ao
+      // engine do agente — aqui só resolvemos a conversa e os gates.
+      // Guard PRIMEIRO: estreita contactId (string|null -> string) p/ o PendingRow.
+      if (!args.contactId) throw new Error('ai_reply needs a contact')
+
+      // O agente precisa do connection_id (config + envio); a conta não está em
+      // messages. Resolve a conversa exata e a conexão (account-scoped).
+      const conversationId = await resolveConversationId(args)
+      const { data: conv } = await db
+        .from('conversations')
+        .select('connection_id')
+        .eq('id', conversationId)
+        .eq('account_id', args.automation.account_id)
+        .maybeSingle()
+      const connectionId = (conv as { connection_id: string | null } | null)?.connection_id
+      if (!connectionId) return 'ai_reply: conversa sem conexão'
+
+      // Gate 1: precisa estar atribuída a um perfil de IA (passo "Atribuir" antes).
+      // Pré-checa só p/ log melhor — o engine recheca internamente de qualquer forma.
+      const profile = await resolveAssignedProfile(db, args.automation.account_id, conversationId)
+      if (!profile) {
+        return 'ai_reply: conversa não atribuída a um perfil de IA (adicione "Atribuir conversa" antes)'
+      }
+
+      // Gate 2: respeita opt-out de bot — o engine do agente NÃO checa ai_opt_out
+      // (só o dispatch normal, dispatch.ts:72). Sem isto, ai_reply furaria o opt-out.
+      const { data: c } = await db
+        .from('contacts')
+        .select('ai_opt_out')
+        .eq('id', args.contactId)
+        .eq('account_id', args.automation.account_id)
+        .maybeSingle()
+      if ((c as { ai_opt_out: boolean | null } | null)?.ai_opt_out) {
+        return 'ai_reply: contato optou por não falar com bot'
+      }
+
+      // Roda o agente inline. id='' é seguro: runAiAgentForConversation NÃO usa
+      // row.id (a telemetria grava por account/connection/conversation/contact/
+      // profile — sem FK p/ ai_agent_pending).
+      await runAiAgentForConversation({
+        id: '',
+        account_id: args.automation.account_id,
+        connection_id: connectionId,
+        conversation_id: conversationId,
+        contact_id: args.contactId,
+        last_inbound_message_id: null, // wamid não está no AutomationContext (v1)
+      })
+
+      // Safeguard anti-duplo-envio: cancela um run do agente AINDA ENFILEIRADO pelo
+      // dispatch normal do mesmo inbound. NÃO aborta um run já drenado/em execução.
+      await db.from('ai_agent_pending').delete().eq('conversation_id', conversationId)
+      return 'ai reply enviado'
     }
 
     case 'update_contact_field': {

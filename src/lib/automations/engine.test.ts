@@ -4,13 +4,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // so the vi.mock factory below can close over it.
 const h = vi.hoisted(() => ({
   state: {
-    owned: null as { id: string } | null,
+    owned: null as Record<string, unknown> | null,
     ownedCustomField: null as { id: string } | null,
     automations: [] as Record<string, unknown>[],
     steps: [] as Record<string, unknown>[],
     fromCalls: [] as string[],
     updateCalls: [] as { table: string; filters: [string, string, unknown][] }[],
     upsertCalls: [] as { table: string; payload: unknown }[],
+    // ai_reply: conversa devolvida pelo lookup de connection_id + deletes capturados.
+    conversation: null as Record<string, unknown> | null,
+    deletes: [] as { table: string; filters: [string, string, unknown][] }[],
   },
 }));
 
@@ -41,6 +44,17 @@ vi.mock("./admin-client", () => {
         state.upsertCalls.push({ table, payload: ops.payload });
         return { data: null, error: null };
       }
+      return { data: null, error: null };
+    }
+    if (table === "conversations") {
+      if (type === "update") {
+        state.updateCalls.push({ table, filters: ops.filters });
+        return { data: null, error: null };
+      }
+      return { data: state.conversation, error: null };
+    }
+    if (table === "ai_agent_pending") {
+      if (type === "delete") state.deletes.push({ table, filters: ops.filters });
       return { data: null, error: null };
     }
     if (table === "automations") return { data: state.automations, error: null };
@@ -95,7 +109,17 @@ vi.mock("./meta-send", () => ({
   engineSendTemplate: vi.fn(async () => ({ whatsapp_message_id: "m1" })),
 }));
 
+// Engine do agente + gate de perfil mockados — o step ai_reply só os orquestra.
+vi.mock("@/lib/ai-agent/engine", () => ({
+  runAiAgentForConversation: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/ai-agent/dispatch", () => ({
+  resolveAssignedProfile: vi.fn(async () => null),
+}));
+
 import { runAutomationsForTrigger } from "./engine";
+import { runAiAgentForConversation } from "@/lib/ai-agent/engine";
+import { resolveAssignedProfile } from "@/lib/ai-agent/dispatch";
 
 const ACCOUNT = "acct-1";
 
@@ -107,6 +131,10 @@ beforeEach(() => {
   h.state.fromCalls = [];
   h.state.updateCalls = [];
   h.state.upsertCalls = [];
+  h.state.conversation = null;
+  h.state.deletes = [];
+  vi.mocked(runAiAgentForConversation).mockClear();
+  vi.mocked(resolveAssignedProfile).mockResolvedValue(null);
 });
 
 describe("runAutomationsForTrigger — tenant isolation", () => {
@@ -256,3 +284,106 @@ function customStep(field: string, value: string) {
     step_config: { field, value },
   };
 }
+
+function automationWithAiReply() {
+  return {
+    id: "a1",
+    account_id: ACCOUNT,
+    user_id: "u1",
+    trigger_type: "new_message_received",
+    trigger_config: {},
+    is_active: true,
+  };
+}
+
+function aiReplyStep() {
+  return {
+    id: "s1",
+    automation_id: "a1",
+    step_type: "ai_reply",
+    position: 0,
+    parent_step_id: null,
+    step_config: {},
+  };
+}
+
+describe("ai_reply step", () => {
+  // Setup comum: contato da conta + conversa com conexão + automação com o step.
+  function setup() {
+    h.state.owned = { id: "c1" };
+    h.state.conversation = { connection_id: "conn-1" };
+    h.state.automations = [automationWithAiReply()];
+    h.state.steps = [aiReplyStep()];
+  }
+
+  it("chama runAiAgentForConversation com a conversa/conexão e limpa o pending", async () => {
+    setup();
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    expect(vi.mocked(runAiAgentForConversation)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        account_id: ACCOUNT,
+        connection_id: "conn-1",
+        conversation_id: "conv-1",
+        contact_id: "c1",
+      }),
+    );
+    expect(h.state.deletes).toHaveLength(1);
+    expect(h.state.deletes[0].filters).toContainEqual([
+      "eq",
+      "conversation_id",
+      "conv-1",
+    ]);
+  });
+
+  it("NÃO chama o agente quando a conversa não está atribuída a um perfil de IA", async () => {
+    setup();
+    vi.mocked(resolveAssignedProfile).mockResolvedValue(null);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    expect(vi.mocked(runAiAgentForConversation)).not.toHaveBeenCalled();
+  });
+
+  it("NÃO chama o agente quando a conversa não tem conexão", async () => {
+    setup();
+    h.state.conversation = { connection_id: null };
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    expect(vi.mocked(runAiAgentForConversation)).not.toHaveBeenCalled();
+  });
+
+  it("respeita ai_opt_out do contato (não chama o agente)", async () => {
+    setup();
+    h.state.owned = { id: "c1", ai_opt_out: true };
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    expect(vi.mocked(runAiAgentForConversation)).not.toHaveBeenCalled();
+  });
+});

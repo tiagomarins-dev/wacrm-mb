@@ -651,7 +651,9 @@ export type AutomationStepType =
   | 'wait'
   | 'condition'
   | 'send_webhook'
-  | 'close_conversation';
+  | 'close_conversation'
+  /** Dispara o agente de IA inline (responde a conversa agora). */
+  | 'ai_reply';
 
 export type AutomationLogStatus = 'success' | 'partial' | 'failed';
 

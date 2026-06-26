@@ -135,6 +135,9 @@ function validateOne(step: StepLike, path: string, issues: ValidationIssue[]): v
     case 'close_conversation':
       // No config required.
       break
+    case 'ai_reply':
+      // Sem config obrigatória — o perfil/contexto vem da conversa atribuída.
+      break
     default:
       issues.push({ path, message: `unknown step type: ${step.step_type}` })
   }
