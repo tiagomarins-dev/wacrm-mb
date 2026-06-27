@@ -4,16 +4,17 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search } from "lucide-react";
+import { Search, ArrowDown, ArrowUp } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
-import { classifyTab, sortByTab, countByTab, type QueueTab } from "@/lib/inbox/queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir, type QueueTab } from "@/lib/inbox/queue";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { useTranslation } from "react-i18next";
 
@@ -36,6 +37,10 @@ const STATUS_COLORS: Record<ConversationStatus, string> = {
   pending: "bg-amber-500",
   closed: "bg-muted-foreground",
 };
+
+// Direção do ordenador por tempo (toggle global das abas) + chave de persistência.
+type SortDir = "asc" | "desc";
+const SORT_DIR_KEY = "wacrm:inbox:sort-dir";
 
 // Abas da fila de atendimento → chave i18n do label / do empty state.
 const TAB_LABEL: Record<QueueTab, string> = {
@@ -82,6 +87,22 @@ export function ConversationList({
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  // Direção da ordenação por tempo. null = usa o default da aba (Fila/SLA asc,
+  // resto desc). Default FIXO no initializer (NÃO ler localStorage aqui: o inbox
+  // passa por SSR e leitura síncrona daria hydration mismatch — ver inbox/page.tsx).
+  const [sortDir, setSortDir] = useState<SortDir | null>(null);
+  // Restaura a direção salva DEPOIS do mount (reconcilia sem hydration mismatch).
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(SORT_DIR_KEY);
+      // Hidratação pós-mount (intencional): reconcilia ao valor salvo após o SSR.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v === "asc" || v === "desc") setSortDir(v);
+    } catch {
+      // localStorage pode lançar em private browsing/sandbox.
+    }
   }, []);
 
   // Keep the latest callback in a ref so the fetch effect below can
@@ -215,8 +236,9 @@ export function ConversationList({
       });
     }
 
-    return sortByTab(result, effectiveTab);
-  }, [conversations, effectiveTab, search, now, user?.id, aiAgentIds]);
+    // sortDir (override do usuário) vence; null = default por aba.
+    return sortByTab(result, effectiveTab, sortDir ?? undefined);
+  }, [conversations, effectiveTab, search, now, user?.id, aiAgentIds, sortDir]);
 
   // Contadores de cada aba (badges em todas).
   const counts = useMemo(
@@ -238,6 +260,18 @@ export function ConversationList({
     [onSelect]
   );
 
+  // Inverte a direção a partir da efetiva da aba atual e persiste (best-effort,
+  // inline no handler — espelha inbox/page.tsx). Vale globalmente (todas as abas).
+  const handleToggleSort = useCallback(() => {
+    const next: SortDir = effectiveDir(effectiveTab, sortDir) === "asc" ? "desc" : "asc";
+    setSortDir(next);
+    try {
+      localStorage.setItem(SORT_DIR_KEY, next);
+    } catch {
+      // persistência best-effort.
+    }
+  }, [effectiveTab, sortDir]);
+
   return (
     // w-full on mobile so the list occupies the whole viewport when it's
     // the single pane showing; fixed 320px on desktop where it shares the
@@ -255,27 +289,48 @@ export function ConversationList({
           />
         </div>
 
-        {/* Abas: Fila / Minhas / SLA / Agente IA (admin+), cada uma com badge contador.
-            flex-nowrap + overflow-x-auto p/ não cortar em largura estreita (~360px). */}
-        <Tabs value={effectiveTab} onValueChange={(v) => setActiveTab(v as QueueTab)}>
-          <TabsList variant="line" className="w-full justify-start gap-1 overflow-x-auto">
-            {tabs.map((tab) => (
-              <TabsTrigger
-                key={tab}
-                value={tab}
-                title={tab === "sla" ? t("slaTooltip") : undefined}
-                className="shrink-0 grow-0 gap-1.5 px-2 text-xs"
-              >
-                {t(TAB_LABEL[tab])}
-                {counts[tab] > 0 && (
-                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-semibold text-primary">
-                    {counts[tab]}
-                  </span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        {/* Abas + ordenador. Abas: Fila / Minhas / SLA / Agente IA (admin+), cada uma
+            com badge. O botão à direita inverte a ordem por tempo (vale em todas). */}
+        <div className="flex items-center gap-1">
+          <Tabs
+            value={effectiveTab}
+            onValueChange={(v) => setActiveTab(v as QueueTab)}
+            className="min-w-0 flex-1"
+          >
+            <TabsList variant="line" className="w-full justify-start gap-1 overflow-x-auto">
+              {tabs.map((tab) => (
+                <TabsTrigger
+                  key={tab}
+                  value={tab}
+                  title={tab === "sla" ? t("slaTooltip") : undefined}
+                  className="shrink-0 grow-0 gap-1.5 px-2 text-xs"
+                >
+                  {t(TAB_LABEL[tab])}
+                  {counts[tab] > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-semibold text-primary">
+                      {counts[tab]}
+                    </span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          {/* Direção da ordenação por tempo (espelha template-manager.tsx:814-822). */}
+          <Button
+            variant="outline"
+            size="icon-sm"
+            className="shrink-0"
+            aria-label={t("sortAria")}
+            title={t("sortTooltip")}
+            onClick={handleToggleSort}
+          >
+            {effectiveDir(effectiveTab, sortDir) === "asc" ? (
+              <ArrowUp className="size-4" />
+            ) : (
+              <ArrowDown className="size-4" />
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Conversation Items.

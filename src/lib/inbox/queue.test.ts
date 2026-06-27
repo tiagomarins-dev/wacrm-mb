@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTab, sortByTab, countByTab } from "./queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir } from "./queue";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import type { Conversation } from "@/types";
 
@@ -94,6 +94,37 @@ describe("sortByTab", () => {
   it("minhas/geral DESC (mais recente primeiro), NULL afunda", () => {
     expect(sortByTab([b, a, n], "geral").map((c) => c.id)).toEqual(["a", "b", "n"]);
     expect(sortByTab([n, b, a], "minhas").map((c) => c.id)).toEqual(["a", "b", "n"]);
+  });
+
+  it("override dir vence o default da aba", () => {
+    // minhas é DESC por default; forçar asc inverte (mais antigo primeiro).
+    expect(sortByTab([a, b, n], "minhas", "asc").map((c) => c.id)).toEqual(["b", "a", "n"]);
+    // fila é ASC por default; forçar desc inverte (mais recente primeiro).
+    expect(sortByTab([a, b, n], "fila", "desc").map((c) => c.id)).toEqual(["a", "b", "n"]);
+  });
+
+  it("dir undefined ≡ sem dir (default por aba)", () => {
+    expect(sortByTab([a, b, n], "minhas", undefined).map((c) => c.id)).toEqual(["a", "b", "n"]);
+    expect(sortByTab([a, b, n], "fila", undefined).map((c) => c.id)).toEqual(["b", "a", "n"]);
+  });
+
+  it("NULL afunda nos dois sentidos", () => {
+    expect(sortByTab([a, n, b], "minhas", "asc").map((c) => c.id)).toEqual(["b", "a", "n"]);
+    expect(sortByTab([a, n, b], "minhas", "desc").map((c) => c.id)).toEqual(["a", "b", "n"]);
+  });
+});
+
+describe("effectiveDir", () => {
+  it("sem override → default da aba", () => {
+    expect(effectiveDir("fila", null)).toBe("asc");
+    expect(effectiveDir("sla", null)).toBe("asc");
+    expect(effectiveDir("minhas", null)).toBe("desc");
+    expect(effectiveDir("ia", null)).toBe("desc");
+    expect(effectiveDir("geral", null)).toBe("desc");
+  });
+  it("override vence o default", () => {
+    expect(effectiveDir("fila", "desc")).toBe("desc");
+    expect(effectiveDir("minhas", "asc")).toBe("asc");
   });
 });
 

@@ -48,10 +48,16 @@ export function classifyTab(
   }
 }
 
-// Ordena por aba: Fila/SLA ASC (mais antigo no topo, FIFO/mais estourada);
-// Minhas/Geral DESC. Conversa sem last_message_at SEMPRE afunda.
-export function sortByTab(list: Conversation[], tab: QueueTab): Conversation[] {
-  const asc = tab === "fila" || tab === "sla";
+// Ordena por aba. Direção: `dir` (override do usuário) vence; senão o default
+// por aba (Fila/SLA ASC = mais antigo no topo, FIFO/mais estourada; Minhas/IA/
+// Geral DESC). Conversa sem last_message_at SEMPRE afunda (independe da direção).
+// `dir` opcional mantém backward-compat com chamadas de 2 args.
+export function sortByTab(
+  list: Conversation[],
+  tab: QueueTab,
+  dir?: "asc" | "desc",
+): Conversation[] {
+  const asc = dir ? dir === "asc" : tab === "fila" || tab === "sla";
   return [...list].sort((a, b) => {
     const ta = a.last_message_at ? new Date(a.last_message_at).getTime() : null;
     const tb = b.last_message_at ? new Date(b.last_message_at).getTime() : null;
@@ -60,6 +66,15 @@ export function sortByTab(list: Conversation[], tab: QueueTab): Conversation[] {
     if (tb === null) return -1;
     return asc ? ta - tb : tb - ta;
   });
+}
+
+// Direção efetiva de uma aba: o override do usuário, ou o default da aba.
+// Fonte única usada pelo ícone do toggle e pelo handler (sem duplicar a fórmula).
+export function effectiveDir(
+  tab: QueueTab,
+  dir: "asc" | "desc" | null,
+): "asc" | "desc" {
+  return dir ?? (tab === "fila" || tab === "sla" ? "asc" : "desc");
 }
 
 // Contadores de cada aba (badges). Deriva da lista inteira em memória.
