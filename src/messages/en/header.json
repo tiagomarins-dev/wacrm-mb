@@ -1,5 +1,7 @@
 {
   "openMenu": "Open menu",
   "openAccountMenu": "Open account menu",
-  "avatarAlt": "Avatar"
+  "avatarAlt": "Avatar",
+  "collapseNav": "Collapse menu",
+  "expandNav": "Expand menu"
 }

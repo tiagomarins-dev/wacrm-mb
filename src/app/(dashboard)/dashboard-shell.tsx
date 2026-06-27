@@ -1,12 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ActiveConnectionProvider } from "@/hooks/use-active-connection";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { cn } from "@/lib/utils";
+
+// Chave de persistência do colapso do rail (desktop).
+const NAV_COLLAPSED_KEY = "wacrm:nav:collapsed";
 
 // Auth-gated dashboard shell. Extracted from the layout so the layout
 // itself can stay a server component and export metadata (noindex) —
@@ -25,6 +28,45 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   // always visible and this stays at `false` (ignored by the component).
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  // Colapso do rail (desktop). Default fixo `false` — NÃO ler localStorage no
+  // initializer (o shell passa por SSR; leitura síncrona daria hydration
+  // mismatch). A hidratação reconcilia pós-mount.
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(NAV_COLLAPSED_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v === "true" || v === "false") setNavCollapsed(v === "true");
+    } catch {
+      // localStorage pode lançar em private browsing/sandbox.
+    }
+  }, []);
+
+  // Auto-colapso: ao ENTRAR no inbox (transição false→true), colapsa UMA vez —
+  // assim o ajuste manual do usuário dentro do inbox "gruda". Não força ao sair
+  // nem persiste (só o toggle manual persiste).
+  const prevIsInbox = useRef(isInbox);
+  useEffect(() => {
+    if (isInbox && !prevIsInbox.current) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNavCollapsed(true);
+    }
+    prevIsInbox.current = isInbox;
+  }, [isInbox]);
+
+  // Toggle manual (persiste inline, best-effort).
+  const toggleNav = useCallback(() => {
+    setNavCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(NAV_COLLAPSED_KEY, String(next));
+      } catch {
+        // persistência best-effort.
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -49,11 +91,15 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
     // h-[100dvh] (não h-screen/100vh) acompanha a barra dinâmica do browser
     // mobile — sem isso o conteúdo fica atrás da chrome e o rodapé é cortado.
     <div className="flex h-[100dvh] overflow-hidden bg-background">
-      <Sidebar open={sidebarOpen} onClose={closeSidebar} />
+      <Sidebar open={sidebarOpen} onClose={closeSidebar} collapsed={navCollapsed} />
       {/* min-w-0 deixa a coluna encolher abaixo da largura do conteúdo —
           sem isso, um filho com truncate/nowrap força overflow horizontal. */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <Header onOpenSidebar={() => setSidebarOpen(true)} />
+        <Header
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onToggleNav={toggleNav}
+          navCollapsed={navCollapsed}
+        />
         {/* Inbox: sem padding e sem scroll (ele gerencia internamente).
             Demais páginas: padding + scroll vertical + guard anti-overflow. */}
         <main

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut, Menu, Settings as SettingsIcon, User } from "lucide-react";
+import { LogOut, Menu, PanelLeft, PanelLeftClose, Settings as SettingsIcon, User } from "lucide-react";
 import {
   Avatar,
   AvatarFallback,
@@ -25,10 +25,13 @@ import { ConnectionSwitcher } from "@/components/layout/connection-switcher";
 const pageTitleKeys: Record<string, string> = {
   "/dashboard": "dashboard",
   "/inbox": "inbox",
+  "/conversations": "conversations",
   "/contacts": "contacts",
   "/pipelines": "pipelines",
   "/broadcasts": "broadcasts",
   "/automations": "automations",
+  "/flows": "flows",
+  "/lead-score": "leadScore",
   "/settings": "settings",
 };
 
@@ -44,9 +47,12 @@ interface HeaderProps {
   /** Wired to the shell's drawer state. Used only on mobile — the
    *  hamburger button is hidden on lg+. */
   onOpenSidebar?: () => void;
+  /** Recolhe/expande o rail no desktop (lg+). Estado vem do shell. */
+  onToggleNav?: () => void;
+  navCollapsed?: boolean;
 }
 
-export function Header({ onOpenSidebar }: HeaderProps) {
+export function Header({ onOpenSidebar, onToggleNav, navCollapsed }: HeaderProps) {
   const pathname = usePathname();
   const { t } = useTranslation(["header", "nav", "common"]);
   const { profile, signOut } = useAuth();
@@ -63,6 +69,16 @@ export function Header({ onOpenSidebar }: HeaderProps) {
       className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border bg-background px-4 lg:px-6"
     >
       <div className="flex min-w-0 items-center gap-2">
+        {/* Toggle do rail — desktop (lg+). Espelha o hamburger mobile. */}
+        <button
+          type="button"
+          onClick={onToggleNav}
+          aria-label={t(navCollapsed ? "expandNav" : "collapseNav")}
+          title={t(navCollapsed ? "expandNav" : "collapseNav")}
+          className="hidden h-10 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
+        >
+          {navCollapsed ? <PanelLeft className="h-5 w-5" /> : <PanelLeftClose className="h-5 w-5" />}
+        </button>
         {/* Hamburger — mobile only. 44×44 hit target per Apple HIG. */}
         <button
           type="button"
