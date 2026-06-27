@@ -21,6 +21,7 @@ import {
 
 import { createClient } from "@/lib/supabase/client"
 import { useCan } from "@/hooks/use-can"
+import { useActiveConnection } from "@/hooks/use-active-connection"
 import type { Automation } from "@/types"
 import { Button } from "@/components/ui/button"
 import { GatedButton } from "@/components/ui/gated-button"
@@ -62,28 +63,45 @@ export default function AutomationsPage() {
   const { t } = useTranslation(["automations", "common"])
   const router = useRouter()
   const canCreate = useCan("send-messages")
+  // Multi-número (033): a lista segue a conexão ativa.
+  const { activeConnectionId } = useActiveConnection()
   const [automations, setAutomations] = useState<Automation[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Automation | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  async function load() {
+  // Carrega as automações da conexão ativa. `isCancelled` permite o effect
+  // descartar respostas atrasadas numa troca rápida de conexão (race).
+  async function load(isCancelled?: () => boolean) {
     try {
       const supabase = createClient()
-      const { data, error: fetchErr } = await supabase
+      let query = supabase
         .from("automations")
         .select("*")
         .order("created_at", { ascending: false })
+      // Sem conexão ativa (carga inicial) lista tudo até resolver.
+      if (activeConnectionId) query = query.eq("connection_id", activeConnectionId)
+      const { data, error: fetchErr } = await query
+      if (isCancelled?.()) return
       if (fetchErr) throw fetchErr
       setAutomations((data ?? []) as Automation[])
     } catch (err) {
+      if (isCancelled?.()) return
       setError(err instanceof Error ? err.message : t("loadFailed"))
     }
   }
 
+  // Refaz a busca ao trocar de conexão. setAutomations(null) volta ao loading
+  // (a página usa automations===null) durante a troca; cancelled evita race.
   useEffect(() => {
-    load()
-  }, [])
+    let cancelled = false
+    setAutomations(null)
+    load(() => cancelled)
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só refaz ao trocar de conexão; load/t via closure
+  }, [activeConnectionId])
 
   async function toggleActive(a: Automation, next: boolean) {
     // Optimistic flip so the switch feels instant.

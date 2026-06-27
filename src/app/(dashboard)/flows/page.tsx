@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { useCan } from "@/hooks/use-can";
+import { useActiveConnection } from "@/hooks/use-active-connection";
 import { Button } from "@/components/ui/button";
 import { GatedButton } from "@/components/ui/gated-button";
 import {
@@ -88,6 +89,9 @@ export default function FlowsPage() {
   const router = useRouter();
   const { t } = useTranslation(["flows", "common"]);
   const canCreate = useCan("send-messages");
+  // Multi-número (033): a lista segue a conexão ativa (a API /api/flows filtra
+  // pela conexão do cookie; refetch ao trocar).
+  const { activeConnectionId } = useActiveConnection();
   const [flows, setFlows] = useState<FlowRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
@@ -97,6 +101,7 @@ export default function FlowsPage() {
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true); // spinner durante a troca de conexão (não mostra a lista antiga)
     (async () => {
       try {
         const [flowsRes, tmplRes] = await Promise.all([
@@ -128,8 +133,8 @@ export default function FlowsPage() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- carrega só na montagem; `t` só aparece no toast de erro
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refetch ao trocar de conexão; `t` só aparece no toast de erro
+  }, [activeConnectionId]);
 
   async function handleCreate() {
     if (!newName.trim()) return;
