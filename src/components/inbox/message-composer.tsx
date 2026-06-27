@@ -106,6 +106,12 @@ interface MessageComposerProps {
   contact?: Contact | null;
   /** Respostas rápidas (account + pessoais), carregadas 1x no thread. */
   quickReplies?: QuickReply[];
+  /** Soft gate: conversa atribuída a OUTRO humano → mostra "Assumir" no lugar do input. */
+  assignedToOtherHuman?: boolean;
+  /** Nome do responsável atual (p/ o texto do overlay). */
+  assigneeName?: string | null;
+  /** Assume a conversa (reatribui a mim) — dispara o trigger de log. */
+  onAssume?: () => void;
 }
 
 function formatDuration(seconds: number): string {
@@ -129,7 +135,11 @@ export function MessageComposer({
   onClearReply,
   contact,
   quickReplies = [],
+  assignedToOtherHuman = false,
+  assigneeName = null,
+  onAssume,
 }: MessageComposerProps) {
+  const { t } = useTranslation("inbox");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -458,6 +468,24 @@ export function MessageComposer({
   }, []);
 
   // ---- Render --------------------------------------------------------
+
+  // Soft gate: conversa de OUTRO humano → overlay "Assumir" no lugar do input.
+  // Precedência: readOnly (viewer) mantém o fluxo normal abaixo; só intercepta
+  // quando o usuário PODE responder mas a conversa é de outro atendente.
+  if (assignedToOtherHuman && !readOnly) {
+    return (
+      <div className="shrink-0 border-t border-border bg-card p-3">
+        <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/40 px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">
+            {t("assignedToOther", { name: assigneeName ?? t("unknownAgent") })}
+          </p>
+          <Button size="sm" className="h-7 text-xs" onClick={() => onAssume?.()}>
+            {t("assumeConversation")}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative shrink-0 border-t border-border bg-card p-3">

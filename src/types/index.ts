@@ -384,6 +384,20 @@ export interface Conversation {
   connection_id?: string | null;
 }
 
+// Evento interno de transferência de conversa (mig 048). Gravado por trigger
+// quando assigned_agent_id muda; aparece na thread, nunca enviado ao cliente.
+export type ConversationEventType = 'assigned' | 'transferred' | 'unassigned';
+export interface ConversationEvent {
+  id: string;
+  account_id: string;
+  conversation_id: string;
+  type: ConversationEventType;
+  from_agent_id?: string | null;
+  to_agent_id?: string | null;
+  actor_user_id?: string | null;
+  created_at: string;
+}
+
 export type SenderType = 'customer' | 'agent' | 'bot';
 export type ContentType =
   | 'text'

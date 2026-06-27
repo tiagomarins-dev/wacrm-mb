@@ -39,5 +39,15 @@
   "readTranscription": "Ler transcrição",
   "hideTranscription": "Ocultar transcrição",
   "audioNoContent": "Áudio sem conteúdo",
-  "transcribing": "Transcrevendo…"
+  "transcribing": "Transcrevendo…",
+  "assumeConversation": "Assumir conversa",
+  "assignedToOther": "Atribuída a {{name}}",
+  "evtAssumed": "{{actor}} assumiu a conversa",
+  "evtTransferred": "{{actor}} transferiu para {{to}}",
+  "evtAssigned": "Atribuída a {{to}}",
+  "evtUnassignedIdle": "Desatribuída por inatividade",
+  "evtAiHandoff": "IA encaminhou para {{to}}",
+  "someone": "Um atendente",
+  "aiBotName": "Assistente IA",
+  "unknownAgent": "alguém"
 }

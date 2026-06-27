@@ -39,5 +39,15 @@
   "readTranscription": "Read transcription",
   "hideTranscription": "Hide transcription",
   "audioNoContent": "Audio without content",
-  "transcribing": "Transcribing…"
+  "transcribing": "Transcribing…",
+  "assumeConversation": "Take over",
+  "assignedToOther": "Assigned to {{name}}",
+  "evtAssumed": "{{actor}} took over",
+  "evtTransferred": "{{actor}} transferred to {{to}}",
+  "evtAssigned": "Assigned to {{to}}",
+  "evtUnassignedIdle": "Unassigned (idle)",
+  "evtAiHandoff": "AI handed off to {{to}}",
+  "someone": "A teammate",
+  "aiBotName": "AI Assistant",
+  "unknownAgent": "someone"
 }
