@@ -333,6 +333,7 @@ describe("ai_reply step", () => {
         connection_id: "conn-1",
         conversation_id: "conv-1",
         contact_id: "c1",
+        opening: true, // abertura: ai_reply marca a 1ª resposta sem handoff
       }),
     );
     expect(h.state.deletes).toHaveLength(1);

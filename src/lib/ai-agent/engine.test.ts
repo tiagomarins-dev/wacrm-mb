@@ -146,6 +146,57 @@ describe('runAiAgentForConversation', () => {
     expect((reassign?.payload as { assigned_agent_id: string }).assigned_agent_id).toBe('humano-9')
   })
 
+  // ----- Modo abertura (opening): cumprimenta+pergunta, sem handoff na 1ª resposta -----
+  const openingRow = { ...row, opening: true }
+
+  it('opening: envia o cumprimento e NÃO transfere mesmo com handoff do loop', async () => {
+    const { db, updates, inserts } = makeDb(baseTables())
+    holder.db = db
+    vi.mocked(runAgentLoop).mockResolvedValue({
+      reply: 'Oi Tiago! Como posso te ajudar hoje?',
+      topic: 'suporte',
+      handoff: { to: 'humano-9' },
+      telemetry: TEL,
+    })
+    await runAiAgentForConversation(openingRow)
+    expect(engineSendText).toHaveBeenCalledTimes(1)
+    // abertura suprime o handoff → NÃO reatribui a conversa
+    const reassign = updates.find(
+      (u) => u.table === 'conversations' && (u.payload as { assigned_agent_id?: string }).assigned_agent_id !== undefined,
+    )
+    expect(reassign).toBeUndefined()
+    expect(runRow(inserts).handoff).toBe(false)
+  })
+
+  it('opening: só-handoff-sem-reply → no_reply, nada enviado nem reatribuído', async () => {
+    const { db, updates, inserts } = makeDb(baseTables())
+    holder.db = db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: null, topic: 'suporte', handoff: { to: 'humano-9' }, telemetry: TEL })
+    await runAiAgentForConversation(openingRow)
+    expect(engineSendText).not.toHaveBeenCalled()
+    const reassign = updates.find(
+      (u) => u.table === 'conversations' && (u.payload as { assigned_agent_id?: string }).assigned_agent_id !== undefined,
+    )
+    expect(reassign).toBeUndefined()
+    expect(runRow(inserts).status).toBe('no_reply')
+  })
+
+  it('SEM opening: handoff do loop reatribui ao humano (regressão — cron intacto)', async () => {
+    const { db, updates } = makeDb(baseTables())
+    holder.db = db
+    vi.mocked(runAgentLoop).mockResolvedValue({
+      reply: 'Vou te transferir. Um momento!',
+      topic: 'suporte',
+      handoff: { to: 'humano-9' },
+      telemetry: TEL,
+    })
+    await runAiAgentForConversation(row) // SEM opening
+    const reassign = updates.find(
+      (u) => u.table === 'conversations' && (u.payload as { assigned_agent_id?: string }).assigned_agent_id !== undefined,
+    )
+    expect((reassign?.payload as { assigned_agent_id: string }).assigned_agent_id).toBe('humano-9')
+  })
+
   it('reply null sem handoff → não envia nem reatribui', async () => {
     const { db, updates } = makeDb(baseTables())
     holder.db = db

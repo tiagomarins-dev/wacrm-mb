@@ -65,6 +65,16 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('Mestres da UERJ')
     expect(p).toContain('JÁ É ALUNO') // cursos não-vazios → é aluno
   })
+
+  it('opening:true injeta a diretriz de abertura (cumprimenta, não transfere)', () => {
+    const p = buildSystemPrompt({ ...baseArgs, opening: true })
+    expect(p).toContain('ABERTURA DO ATENDIMENTO')
+    expect(p).toContain('NÃO chame transferir_humano')
+  })
+
+  it('sem opening → NÃO injeta a diretriz de abertura', () => {
+    expect(buildSystemPrompt(baseArgs)).not.toContain('ABERTURA DO ATENDIMENTO')
+  })
 })
 
 // Mock db: .select().eq().order().limit() resolve p/ {data, error}.

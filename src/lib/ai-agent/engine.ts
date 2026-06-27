@@ -5,6 +5,8 @@
 // (R1 — reusa o sender canônico: resolve conexão + decrypt + persiste
 // sender_type='bot' + retry phone-variant).
 // Espelha a estrutura de executeAutomation (automations/engine.ts:175).
+// Modo abertura (row.opening, via passo ai_reply): injeta a diretriz de
+// cumprimento no prompt e SUPRIME o handoff nesta 1ª resposta.
 // ============================================================
 import { supabaseAdmin } from '@/lib/automations/admin-client'
 import { engineSendText, engineSendTyping } from '@/lib/automations/meta-send'
@@ -24,6 +26,9 @@ export interface PendingRow {
   conversation_id: string
   contact_id: string
   last_inbound_message_id?: string | null // wamid p/ o "digitando..."
+  // Modo abertura — cumprimenta+pergunta, sem handoff na 1ª resposta. Ausente
+  // (caminho do cron) = comportamento normal.
+  opening?: boolean
 }
 
 // Executa o agente p/ uma conversa: monta contexto, roda o loop, aplica
@@ -91,6 +96,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
     contactName: contact?.name ?? null,
     contactEmail: contact?.email ?? null,
     studentCourses,
+    opening: row.opening ?? false, // abertura: injeta a diretriz de cumprimento
   })
 
   // Loop LLM com tool-calling. O LLM roteia o assunto via a tool que escolhe.
@@ -170,6 +176,16 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   if (still?.id !== profileId) {
     await recordAgentRun(db, buildRun('superseded'))
     return
+  }
+
+  // ABERTURA: na 1ª resposta a IA não transfere (mesmo que o loop tenha pedido).
+  // Zera ANTES do gate de handoff (:247) e da telemetria (handoff:!!result.handoff)
+  // → não reatribui e grava handoff:false. A conversa segue com a IA; a resposta
+  // SEGUINTE (cron, sem opening) pode encaminhar normalmente.
+  if (row.opening) result.handoff = null
+  // Observabilidade do risco aceito: abertura sem texto (modelo só quis transferir).
+  if (row.opening && !result.reply?.trim()) {
+    console.warn('[ai_agent] abertura sem texto (só handoff suprimido):', row.conversation_id)
   }
 
   // Grava o assunto detectado (analytics + roteamento de handoff).

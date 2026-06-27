@@ -508,6 +508,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         conversation_id: conversationId,
         contact_id: args.contactId,
         last_inbound_message_id: null, // wamid não está no AutomationContext (v1)
+        opening: true, // abertura: a IA cumprimenta e pergunta; não transfere nesta 1ª resposta
       })
 
       // Safeguard anti-duplo-envio: cancela um run do agente AINDA ENFILEIRADO pelo
