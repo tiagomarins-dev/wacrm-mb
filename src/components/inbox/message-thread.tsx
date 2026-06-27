@@ -15,6 +15,7 @@ import type {
   MessageTemplate,
   Profile,
   QuickReply,
+  ConversationEvent,
 } from "@/types";
 import {
   MessageSquare,
@@ -50,6 +51,9 @@ import {
 import { deleteAccountMedia } from "@/lib/storage/upload-media";
 import { TemplatePicker } from "./template-picker";
 import { buildReplyPreview } from "./reply-quote";
+import { resolveAssignee } from "@/lib/inbox/assignee";
+import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
+import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
 import { toast } from "sonner";
 
 interface ReplyDraft {
@@ -118,17 +122,19 @@ function formatDateSeparator(dateStr: string): string {
   return format(date, "MMMM d, yyyy");
 }
 
-function groupMessagesByDate(messages: Message[]) {
-  const groups: { date: string; messages: Message[] }[] = [];
+// Agrupa a timeline mesclada (mensagens + eventos internos de transferência)
+// por dia, mantendo a ordem cronológica.
+function groupThreadByDate(items: ThreadItem[]) {
+  const groups: { date: string; items: ThreadItem[] }[] = [];
   let currentDate = "";
 
-  for (const msg of messages) {
-    const day = format(new Date(msg.created_at), "yyyy-MM-dd");
+  for (const item of items) {
+    const day = format(new Date(item.created_at), "yyyy-MM-dd");
     if (day !== currentDate) {
       currentDate = day;
-      groups.push({ date: msg.created_at, messages: [msg] });
+      groups.push({ date: item.created_at, items: [item] });
     } else {
-      groups[groups.length - 1].messages.push(msg);
+      groups[groups.length - 1].items.push(item);
     }
   }
 
@@ -176,6 +182,8 @@ export function MessageThread({
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
+  // Eventos internos de transferência (mig 048) — exibidos como pill na thread.
+  const [events, setEvents] = useState<ConversationEvent[]>([]);
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
   // parent's resyncToken); the 700ms spin is just feedback so the click
@@ -388,6 +396,35 @@ export function MessageThread({
     };
   }, [conversationId, resyncToken]);
 
+  // Eventos de transferência — fetch separado (igual reactions) p/ o resyncToken
+  // refazer a busca sem derrubar o canal realtime.
+  useEffect(() => {
+    if (!conversationId) {
+      setEvents([]);
+      return;
+    }
+    const supabase = createClient();
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("conversation_events")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.error("Failed to fetch conversation events:", error);
+        return;
+      }
+      setEvents((data as ConversationEvent[]) ?? []);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, resyncToken]);
+
   // Reactions realtime subscription per conversation. Subscribing here
   // (not at the page level) keeps the channel scoped to the visible
   // conversation and avoids cross-conversation chatter on a busy inbox.
@@ -452,6 +489,21 @@ export function MessageThread({
           const old = payload.old as Partial<MessageReaction>;
           if (!old?.id) return;
           setReactions((prev) => prev.filter((r) => r.id !== old.id));
+        },
+      )
+      // Eventos de transferência (mig 048) — append idempotente; o OUTRO atendente
+      // vê o "assumiu"/"transferiu" na hora.
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversation_events",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as ConversationEvent;
+          setEvents((prev) => (prev.some((e) => e.id === row.id) ? prev : [...prev, row]));
         },
       )
       .subscribe();
@@ -727,6 +779,10 @@ export function MessageThread({
     return map;
   }, [reactions]);
 
+  // Timeline mesclada (mensagens + eventos internos) memoizada. Declarada aqui
+  // (antes de qualquer early-return) p/ não violar a ordem dos hooks.
+  const merged = useMemo(() => mergeThread(messages, events), [messages, events]);
+
   const contactDisplayName = contact?.name || contact?.phone || "Customer";
 
   // Author label for a quoted message: "You" when we sent the parent,
@@ -856,7 +912,13 @@ export function MessageThread({
   }
 
   const displayName = contact.name || contact.phone;
-  const messageGroups = groupMessagesByDate(messages);
+  const messageGroups = groupThreadByDate(merged);
+
+  // Soft gate: conversa atribuída a OUTRO humano → composer força "Assumir" antes
+  // de digitar (gera o evento de log). A mim / ninguém / IA → input normal.
+  const assignee = resolveAssignee(conversation.assigned_agent_id, profiles, aiProfiles);
+  const assignedToOtherHuman = assignee.kind === "human" && conversation.assigned_agent_id !== user?.id;
+  const assigneeName = assignee.kind === "human" ? assignee.name : null;
   const currentStatus = STATUS_OPTIONS.find(
     (s) => s.value === conversation.status
   );
@@ -1118,9 +1180,20 @@ export function MessageThread({
                     {formatDateSeparator(group.date)}
                   </span>
                 </div>
-                {/* Messages */}
+                {/* Messages + eventos internos */}
                 <div className="space-y-2">
-                  {group.messages.map((msg) => {
+                  {group.items.map((item) => {
+                    // Evento de transferência: pill central interno (sem bolha/reações).
+                    if (item.kind === "event") {
+                      return (
+                        <div key={item.id} className="flex items-center justify-center py-1">
+                          <span className="rounded-full bg-muted/60 px-3 py-1 text-[10px] font-medium text-muted-foreground">
+                            {conversationEventLabel(item.ev, profiles, aiProfiles, t)}
+                          </span>
+                        </div>
+                      );
+                    }
+                    const msg = item.msg;
                     const parent = msg.reply_to_message_id
                       ? messagesById.get(msg.reply_to_message_id)
                       : null;
@@ -1179,6 +1252,12 @@ export function MessageThread({
         onClearReply={() => setReplyTo(null)}
         contact={contact}
         quickReplies={quickReplies}
+        assignedToOtherHuman={assignedToOtherHuman}
+        assigneeName={assigneeName}
+        onAssume={() => {
+          if (!user?.id) return;
+          void handleAssignChange(user.id);
+        }}
       />
 
       <TemplatePicker
