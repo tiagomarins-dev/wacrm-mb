@@ -47,6 +47,8 @@ export interface AgentCtx {
   handoffRouting: Record<string, string> | null
   // Tools de domínio liberadas p/ o perfil (null = todas). Controle sempre entra.
   allowedTools: string[] | null
+  // Abertura: remove a tool transferir_humano (a IA não encaminha na 1ª resposta).
+  opening?: boolean
 }
 
 // Resolve a chave do OpenRouter da conta (reusa integrations_config, já
@@ -71,7 +73,7 @@ export async function runAgentLoop(
   ctx: AgentCtx,
 ): Promise<{ reply: string | null; topic: AgentTopic; handoff: { to: string | null } | null; telemetry: AgentTelemetry }> {
   const apiKey = await resolveOpenRouterKey(ctx.db, ctx.accountId)
-  const toolDefs = buildToolDefs(ctx.allowedTools)
+  const toolDefs = buildToolDefs(ctx.allowedTools, ctx.opening)
   const msgs: ChatMsg[] = [{ role: 'system', content: ctx.system }, ...ctx.messages]
   let topic: AgentTopic = null
   let handoff: { to: string | null } | null = null

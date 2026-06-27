@@ -41,6 +41,12 @@ describe('buildSystemPrompt', () => {
     expect(p).toContain('NÃO lidere pela')
   })
 
+  it('encerrar: guard contra encerrar calado diante de pergunta', () => {
+    const p = buildSystemPrompt(baseArgs)
+    expect(p).toContain('ENCERRAR')
+    expect(p).toContain('Nunca encerre calado')
+  })
+
   it('estilo: manda ser breve e quebrar em mensagens separadas', () => {
     const p = buildSystemPrompt(baseArgs)
     expect(p).toContain('ESTILO DE RESPOSTA')
@@ -68,12 +74,13 @@ describe('buildSystemPrompt', () => {
 
   it('opening:true injeta a diretriz de abertura (cumprimenta, não transfere)', () => {
     const p = buildSystemPrompt({ ...baseArgs, opening: true })
-    expect(p).toContain('ABERTURA DO ATENDIMENTO')
-    expect(p).toContain('NÃO chame transferir_humano')
+    expect(p).toContain('ABERTURA DE NOVA CONVERSA')
+    expect(p).toContain('transferir_humano')
+    expect(p).toContain('analista') // proíbe mencionar analista no texto
   })
 
   it('sem opening → NÃO injeta a diretriz de abertura', () => {
-    expect(buildSystemPrompt(baseArgs)).not.toContain('ABERTURA DO ATENDIMENTO')
+    expect(buildSystemPrompt(baseArgs)).not.toContain('ABERTURA DE NOVA CONVERSA')
   })
 })
 
