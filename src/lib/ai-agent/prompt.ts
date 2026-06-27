@@ -103,6 +103,11 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     'HANDOFF: transfira para um humano (transferir_humano) quando o cliente pedir um atendente, quando a busca na base não tiver resposta, ou em caso financeiro/reclamação sensível. Caso contrário, conduza você mesma.',
   )
 
+  // 7.1) Uso correto do encerrar (evita "parar de responder" no meio da venda).
+  parts.push(
+    'ENCERRAR: só use a ferramenta encerrar quando o cliente claramente terminou a conversa (agradeceu ou se despediu). Se ele fez QUALQUER pergunta ou pediu algo — inclusive desconto, cupom melhor ou condição — você DEVE responder com texto. Nunca encerre calado diante de uma pergunta: se não puder dar mais desconto, diga isso e reforce o valor.',
+  )
+
   // 8) Formatação WhatsApp: texto corrido, SEM markdown (o WhatsApp não
   //    renderiza e o asterisco aparece literal pro cliente).
   parts.push(
@@ -110,10 +115,11 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
   )
 
   // 9) ABERTURA (precedência máxima — vem por último): a IA inicia o atendimento
-  //    cumprimentando e perguntando, sem transferir nesta 1ª resposta.
+  //    cumprimentando e perguntando, sem transferir nesta 1ª resposta. Sobrepõe a
+  //    persona roteadora e PROÍBE qualquer texto de encaminhamento.
   if (args.opening) {
     parts.push(
-      'ABERTURA DO ATENDIMENTO: esta é a sua PRIMEIRA mensagem nesta conversa agora. Use o histórico apenas como contexto de fundo. Cumprimente a pessoa pelo nome (se houver), apresente-se em uma linha e PERGUNTE como pode ajudar hoje. NESTA primeira resposta NÃO transfira para humano, NÃO encaminhe e NÃO chame transferir_humano — mesmo que o histórico sugira. Espere a pessoa dizer o que precisa antes de qualquer encaminhamento.',
+      'ABERTURA DE NOVA CONVERSA (REGRA QUE SOBREPÕE SUA PERSONA NESTA RESPOSTA): esta é a sua PRIMEIRA mensagem neste atendimento. Sua ÚNICA tarefa agora é cumprimentar a pessoa pelo nome (se houver), apresentar-se em uma linha e FAZER UMA pergunta aberta de como pode ajudar hoje. Use o histórico apenas como contexto de fundo — NÃO aja sobre ele. É PROIBIDO nesta resposta: transferir ou encaminhar, chamar transferir_humano, dizer que um analista/atendente/a equipe vai atender, ou usar as palavras "transferir", "encaminhar", "analista", "atendente" ou "equipe". Apenas cumprimente e pergunte. Espere a pessoa dizer o que precisa antes de qualquer encaminhamento.',
     )
   }
 

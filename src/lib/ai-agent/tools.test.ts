@@ -79,6 +79,21 @@ describe('buildToolDefs', () => {
     const names = buildToolDefs(['nao_existe']).map((t) => t.function.name)
     expect(names).toEqual(['transferir_humano', 'encerrar'])
   })
+
+  it('opening → remove transferir_humano (não encaminha na 1ª resposta)', () => {
+    const names = buildToolDefs(null, true).map((t) => t.function.name)
+    expect(names).not.toContain('transferir_humano')
+    expect(names).toContain('encerrar') // controle não-transfer permanece
+    expect(names).toContain('get_curso')
+  })
+
+  it('opening + allowed_tools → filtra domínio E remove transferir_humano', () => {
+    const names = buildToolDefs(['get_curso'], true).map((t) => t.function.name)
+    expect(names).not.toContain('transferir_humano')
+    expect(names).toContain('get_curso')
+    expect(names).toContain('encerrar')
+    expect(names).not.toContain('buscar_suporte')
+  })
 })
 
 describe('get_curso', () => {

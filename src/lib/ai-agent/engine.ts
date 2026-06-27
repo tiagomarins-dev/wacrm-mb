@@ -160,6 +160,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       messages,
       handoffRouting: profile.handoff_routing,
       allowedTools: profile.allowed_tools,
+      opening: row.opening ?? false, // abertura: sem a tool transferir_humano
     })
   } catch (err) {
     // Falha antes/durante o loop sem telemetria (ex.: chave OpenRouter ausente).

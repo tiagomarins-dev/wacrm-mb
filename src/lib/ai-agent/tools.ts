@@ -38,8 +38,10 @@ const DOMAIN_TOOLS = new Set(['get_curso', 'enviar_link_venda', 'buscar_suporte'
 
 // Definições das ferramentas no formato OpenAI (tools[]). `allowedTools` (do
 // perfil) filtra SÓ as tools de domínio; null/vazio = todas. Tool desconhecida
-// no array é ignorada (no-op). transferir_humano/encerrar entram sempre.
-export function buildToolDefs(allowedTools?: string[] | null) {
+// no array é ignorada (no-op). transferir_humano/encerrar entram sempre — EXCETO
+// na abertura (`opening`): aí transferir_humano é removida de propósito, p/ a IA
+// não ter como encaminhar na 1ª resposta (cumprimenta+pergunta primeiro).
+export function buildToolDefs(allowedTools?: string[] | null, opening?: boolean) {
   const all = [
     {
       type: 'function',
@@ -100,15 +102,19 @@ export function buildToolDefs(allowedTools?: string[] | null) {
       type: 'function',
       function: {
         name: 'encerrar',
-        description: 'Finaliza o turno sem ação adicional (ex.: cliente só agradeceu).',
+        description:
+          'Finaliza o turno SEM enviar mensagem. Use SOMENTE quando o cliente claramente encerrou a conversa (só agradeceu ou se despediu) e não há nada a responder. NUNCA use se o cliente fez uma pergunta ou pediu algo (preço, desconto, cupom, link, informação) ou demonstrou interesse — nesses casos RESPONDA com texto, nunca fique calado.',
         parameters: { type: 'object', properties: { motivo: { type: 'string' } } },
       },
     },
   ]
-  // Sem allowed_tools = todas. Com lista: filtra só as de domínio; controle fica.
-  if (!allowedTools || allowedTools.length === 0) return all
+  // Abertura: remove transferir_humano p/ a IA não encaminhar na 1ª resposta.
+  const base = opening ? all.filter((t) => t.function.name !== 'transferir_humano') : all
+  // Sem allowed_tools = todas (já sem transfer se abertura). Com lista: filtra só
+  // as de domínio; controle fica.
+  if (!allowedTools || allowedTools.length === 0) return base
   const allow = new Set(allowedTools)
-  return all.filter((t) => !DOMAIN_TOOLS.has(t.function.name) || allow.has(t.function.name))
+  return base.filter((t) => !DOMAIN_TOOLS.has(t.function.name) || allow.has(t.function.name))
 }
 
 // Executa uma tool pedida pelo modelo e devolve o resultado + assunto detectado.
