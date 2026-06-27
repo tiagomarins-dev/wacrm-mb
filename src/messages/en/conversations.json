@@ -1,7 +1,7 @@
 {
   "title": "Conversations",
   "subtitle": "All conversations",
-  "searchPlaceholder": "Search by name or phone...",
+  "searchPlaceholder": "Search by name, phone or message...",
   "colDate": "Last message",
   "colName": "Name",
   "colPhone": "Phone",
@@ -12,6 +12,7 @@
   "statusPending": "Pending",
   "statusClosed": "Closed",
   "filterAllStatus": "All statuses",
+  "filterAllAgents": "All assignees",
   "unassigned": "Unassigned",
   "loading": "Loading...",
   "empty": "No conversations",

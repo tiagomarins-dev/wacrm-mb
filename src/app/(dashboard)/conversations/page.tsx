@@ -26,6 +26,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import {
   Search,
@@ -39,7 +40,8 @@ import { cn } from "@/lib/utils";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useFormat } from "@/lib/i18n/format";
 import { resolveAssignee, type Assignee } from "@/lib/inbox/assignee";
-import { AI_AGENT_LABEL } from "@/lib/ai-agent/constants";
+import { AI_AGENT_LABEL, AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
+import { buildSearchParams, type AgentFilter } from "@/lib/inbox/search-conversations-params";
 
 const PAGE_SIZE = 25;
 
@@ -86,6 +88,8 @@ export default function ConversationsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  // Filtro por responsável: 'all' / 'unassigned' / uuid (humano, perfil IA ou bot).
+  const [agentFilter, setAgentFilter] = useState<AgentFilter>("all");
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   // Mapas p/ resolver o responsável (carregados 1x). Espelha message-thread.tsx:206-242.
@@ -112,53 +116,28 @@ export default function ConversationsPage() {
     };
   }, []);
 
-  // Busca paginada das conversas. Busca por nome/telefone usa o fallback de 2
-  // passos (contatos casados → conversations.in('contact_id', ids)) — confiável,
-  // independente da sintaxe de filtro em tabela referenciada.
+  // Busca paginada das conversas via RPC `search_conversations`: filtro por
+  // conexão/status/responsável + busca (nome/telefone/última msg/conteúdo de
+  // mensagem/transcrição) + paginação + total, tudo no banco (RLS por conta).
+  // O termo de busca só vai pro banco com >= 3 chars (regra no buildSearchParams).
   const fetchConversations = useCallback(async () => {
     setLoading(true);
-    const from = page * PAGE_SIZE;
-    const to = from + PAGE_SIZE - 1;
-
-    // Passo 1 da busca: resolve os contatos que casam com o termo.
-    let contactIds: string[] | null = null;
-    if (search.trim()) {
-      const term = `%${search.trim()}%`;
-      const { data: cs } = await supabase
-        .from("contacts")
-        .select("id")
-        .or(`name.ilike.${term},phone.ilike.${term}`);
-      contactIds = (cs ?? []).map((c) => c.id);
-      if (contactIds.length === 0) {
-        // Nenhum contato casou → sem resultados, evita 2ª query.
-        setRows([]);
-        setTotalCount(0);
-        setLoading(false);
-        return;
-      }
-    }
-
-    let query = supabase
-      .from("conversations")
-      .select("*, contact:contacts(*)", { count: "exact" })
-      .order("last_message_at", { ascending: false, nullsFirst: false })
-      .range(from, to);
-
-    if (activeConnectionId) query = query.eq("connection_id", activeConnectionId);
-    if (statusFilter !== "all") query = query.eq("status", statusFilter);
-    if (contactIds) query = query.in("contact_id", contactIds);
-
-    const { data, count, error } = await query;
+    const { data, error } = await supabase.rpc(
+      "search_conversations",
+      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page })
+    );
 
     if (error) {
       toast.error(t("failedLoad"));
       setLoading(false);
       return;
     }
-    setTotalCount(count ?? 0);
-    setRows((data as Conversation[]) ?? []);
+    // A RPC devolve { data: <conversa+contato>, total_count } por linha.
+    const list = (data ?? []) as { data: Conversation; total_count: number }[];
+    setRows(list.map((r) => r.data));
+    setTotalCount(Number(list[0]?.total_count ?? 0));
     setLoading(false);
-  }, [supabase, page, search, statusFilter, activeConnectionId, t]);
+  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, t]);
 
   // Refetch a cada mudança de page/search/status/conexão. Disable espelha
   // contacts/page.tsx:185 (fetch faz setLoading síncrono no início).
@@ -167,10 +146,19 @@ export default function ConversationsPage() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Trocar de conexão zera o filtro de atendente (a pessoa pode não atender lá)
+  // e volta pra 1ª página — o atendente é específico de uma conexão.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAgentFilter("all");
+    setPage(0);
+  }, [activeConnectionId]);
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
-  const isFiltering = search.trim() !== "" || statusFilter !== "all";
+  const isFiltering =
+    search.trim() !== "" || statusFilter !== "all" || agentFilter !== "all";
 
   return (
     <div className="space-y-6">
@@ -217,6 +205,83 @@ export default function ConversationsPage() {
                 {s === "all" ? t("filterAllStatus") : t(STATUS_LABEL_KEY[s])}
               </DropdownMenuItem>
             ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Filtro por responsável: Todos / perfis IA / bot / humanos / Não atribuído.
+            Espelha o seletor de responsável do inbox (message-thread.tsx:1016-1090). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+            {agentFilter === "all"
+              ? t("filterAllAgents")
+              : agentFilter === "unassigned"
+                ? t("unassigned")
+                : assigneeLabel(resolveAssignee(agentFilter, profiles, aiProfiles), t)}
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="border-border bg-popover">
+            <DropdownMenuItem
+              onClick={() => {
+                setAgentFilter("all");
+                setPage(0);
+              }}
+              className={cn("text-sm", agentFilter === "all" ? "text-primary" : "text-popover-foreground")}
+            >
+              {t("filterAllAgents")}
+            </DropdownMenuItem>
+            {/* Perfis de IA */}
+            {aiProfiles.map((ap) => (
+              <DropdownMenuItem
+                key={ap.id}
+                onClick={() => {
+                  setAgentFilter(ap.id);
+                  setPage(0);
+                }}
+                className={cn("text-sm", agentFilter === ap.id ? "text-primary" : "text-popover-foreground")}
+              >
+                🤖 {ap.nome}
+              </DropdownMenuItem>
+            ))}
+            {/* Bot genérico (Assistente IA) */}
+            <DropdownMenuItem
+              onClick={() => {
+                setAgentFilter(AI_AGENT_USER_ID);
+                setPage(0);
+              }}
+              className={cn(
+                "text-sm",
+                agentFilter === AI_AGENT_USER_ID ? "text-primary" : "text-popover-foreground"
+              )}
+            >
+              🤖 {AI_AGENT_LABEL}
+            </DropdownMenuItem>
+            {profiles.length > 0 && <DropdownMenuSeparator className="bg-border" />}
+            {/* Membros humanos */}
+            {profiles.map((p) => (
+              <DropdownMenuItem
+                key={p.id}
+                onClick={() => {
+                  setAgentFilter(p.user_id);
+                  setPage(0);
+                }}
+                className={cn("text-sm", agentFilter === p.user_id ? "text-primary" : "text-popover-foreground")}
+              >
+                {p.full_name}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={() => {
+                setAgentFilter("unassigned");
+                setPage(0);
+              }}
+              className={cn(
+                "text-sm",
+                agentFilter === "unassigned" ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              {t("unassigned")}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -1,7 +1,7 @@
 {
   "title": "Conversas",
   "subtitle": "Todas as conversas",
-  "searchPlaceholder": "Buscar por nome ou telefone...",
+  "searchPlaceholder": "Buscar por nome, telefone ou mensagem...",
   "colDate": "Última mensagem",
   "colName": "Nome",
   "colPhone": "Telefone",
@@ -12,6 +12,7 @@
   "statusPending": "Pendente",
   "statusClosed": "Finalizada",
   "filterAllStatus": "Todos os status",
+  "filterAllAgents": "Todos os responsáveis",
   "unassigned": "Não atribuído",
   "loading": "Carregando...",
   "empty": "Nenhuma conversa",
