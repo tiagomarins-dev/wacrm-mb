@@ -2,7 +2,8 @@
 // Montagem do system prompt do agente + serialização do histórico.
 // Ordem anti prompt-injection: papel → persona (admin) → VOZ_MILLA
 // (guardrails têm precedência, vêm DEPOIS) → roteamento → catálogo →
-// contexto do contato → política de handoff.
+// contexto do contato → política de handoff → diretriz de abertura
+// (último, precedência máxima: cumprimenta+pergunta, sem transferir).
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { VOZ_MILLA } from './voz-milla'
@@ -26,6 +27,9 @@ interface BuildPromptArgs {
   contactName?: string | null
   contactEmail?: string | null
   studentCourses?: string[]
+  // Modo abertura (entrada via passo ai_reply): a IA inicia o atendimento
+  // cumprimentando e perguntando, SEM transferir nesta 1ª resposta.
+  opening?: boolean
 }
 
 // Monta o system prompt concatenando as camadas na ordem de precedência.
@@ -104,6 +108,14 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
   parts.push(
     'FORMATAÇÃO (WhatsApp): escreva texto corrido e simples, SEM markdown — nada de asteriscos (* ou **) para negrito, nada de #, hífens ou números como marcadores de lista, nem links entre colchetes. Escreva o link cru (https://...). Mensagens curtas, com quebra de linha entre as frases. Se um curso não tiver link de matrícula, NÃO diga que houve erro técnico — diga que a matrícula desse curso é feita pela equipe e ofereça transferir para um atendente.',
   )
+
+  // 9) ABERTURA (precedência máxima — vem por último): a IA inicia o atendimento
+  //    cumprimentando e perguntando, sem transferir nesta 1ª resposta.
+  if (args.opening) {
+    parts.push(
+      'ABERTURA DO ATENDIMENTO: esta é a sua PRIMEIRA mensagem nesta conversa agora. Use o histórico apenas como contexto de fundo. Cumprimente a pessoa pelo nome (se houver), apresente-se em uma linha e PERGUNTE como pode ajudar hoje. NESTA primeira resposta NÃO transfira para humano, NÃO encaminhe e NÃO chame transferir_humano — mesmo que o histórico sugira. Espere a pessoa dizer o que precisa antes de qualquer encaminhamento.',
+    )
+  }
 
   return parts.join('\n\n')
 }
