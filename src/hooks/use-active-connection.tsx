@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { pickActiveConnectionId } from "@/lib/connections/pick-active";
 import { useAuth } from "./use-auth";
 
 export const ACTIVE_CONNECTION_COOKIE = "active_connection_id";
@@ -30,6 +31,8 @@ export interface Connection {
   phone_number_id: string;
   status: "connected" | "disconnected";
   is_primary: boolean;
+  // Apelido (055) — rótulo de exibição preferido no dropdown (fallback no phone).
+  label?: string | null;
 }
 
 export const CONNECTIONS_CHANGED_EVENT = "wacrm:connections-changed";
@@ -81,18 +84,14 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
     const supabase = createClient();
     const { data } = await supabase
       .from("whatsapp_config")
-      .select("id, phone_number_id, status, is_primary")
+      .select("id, phone_number_id, status, is_primary, label")
       .eq("account_id", accountId);
     const list = (data ?? []) as Connection[];
     setConnections(list);
-    // Conexão ativa = cookie (se ainda na lista) → atual (se ainda na lista)
-    // → primária → 1ª.
-    setActiveConnectionId((prev) => {
-      const fromCookie = readCookie();
-      if (fromCookie && list.some((c) => c.id === fromCookie)) return fromCookie;
-      if (prev && list.some((c) => c.id === prev)) return prev;
-      return list.find((c) => c.is_primary)?.id ?? list[0]?.id ?? null;
-    });
+    // Conexão ativa: cookie → atual → primária → 1ª (lógica pura em pick-active).
+    setActiveConnectionId((prev) =>
+      pickActiveConnectionId(list, readCookie(), prev),
+    );
     setLoading(false);
   }, [accountId]);
 

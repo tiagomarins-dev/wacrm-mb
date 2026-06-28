@@ -1,0 +1,81 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendInteractiveButtons 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"interactive","interactive":{"type":"button","body":{"text":"B"},"action":{"buttons":[{"type":"reply","reply":{"id":"a","title":"A"}}]}}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendInteractiveList 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"interactive","interactive":{"type":"list","body":{"text":"B"},"action":{"button":"Abrir","sections":[{"title":"S","rows":[{"id":"r1","title":"R1"}]}]}}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendMedia (image link) 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"image","image":{"link":"https://x/i.jpg","caption":"c"}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendReaction 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"reaction","reaction":{"message_id":"wamid.T","emoji":"👍"}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendTemplate 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"template","template":{"name":"hello_world","language":{"code":"pt_BR"}}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendText 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"text","text":{"body":"Olá"}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendText com context (reply) 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","recipient_type":"individual","to":"5521999990000","type":"text","text":{"body":"Re"},"context":{"message_id":"wamid.PARENT"}}",
+}
+`;
+
+exports[`golden: wire Meta (baseline p/ Fase B) > sendTypingIndicator 1`] = `
+{
+  "authScheme": "Bearer",
+  "contentType": "application/json",
+  "method": "POST",
+  "path": "/v21.0/1555000111/messages",
+  "rawBody": "{"messaging_product":"whatsapp","status":"read","message_id":"wamid.LAST","typing_indicator":{"type":"text"}}",
+}
+`;

@@ -1,5 +1,5 @@
-import { sendTextMessage, sendTemplateMessage, sendTypingIndicator } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { createMessageProvider } from '@/lib/providers/factory'
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -31,11 +31,8 @@ export async function engineSendTyping(args: {
   try {
     const db = supabaseAdmin()
     const config = await resolveOutboundConfigForConversation(db, args.accountId, args.conversationId)
-    await sendTypingIndicator({
-      phoneNumberId: config.phone_number_id,
-      accessToken: decrypt(config.access_token),
-      messageId: args.inboundWamid,
-    })
+    const provider = createMessageProvider(config, decrypt(config.access_token))
+    await provider.sendTyping({ messageId: args.inboundWamid })
   } catch (err) {
     console.error('[ai_agent] typing failed:', err instanceof Error ? err.message : err)
   }
@@ -114,12 +111,12 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
   )
 
   const accessToken = decrypt(config.access_token)
+  // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
+  const provider = createMessageProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'template') {
-      const r = await sendTemplateMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const r = await provider.sendTemplate({
         to: phone,
         templateName: input.templateName,
         language: input.language,
@@ -127,9 +124,7 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
       })
       return r.messageId
     }
-    const r = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendText({
       to: phone,
       text: input.text,
     })

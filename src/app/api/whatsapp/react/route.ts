@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { sendReactionMessage } from '@/lib/whatsapp/meta-api';
+import { createMessageProvider } from '@/lib/providers/factory';
 import { decrypt } from '@/lib/whatsapp/encryption';
 import { resolveOutboundConfig } from '@/lib/connections/resolve';
 import { sanitizePhoneForMeta } from '@/lib/whatsapp/phone-utils';
@@ -126,11 +126,11 @@ export async function POST(request: Request) {
 
     const accessToken = decrypt(config.access_token);
     const sanitizedPhone = sanitizePhoneForMeta(contact.phone);
+    // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
+    const provider = createMessageProvider(config, accessToken);
 
     try {
-      await sendReactionMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      await provider.sendReaction({
         to: sanitizedPhone,
         targetMessageId: targetMessage.message_id,
         emoji,

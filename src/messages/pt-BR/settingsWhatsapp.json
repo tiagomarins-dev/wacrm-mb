@@ -1,4 +1,21 @@
 {
+  "provider": {
+    "meta": "Oficial (Meta)",
+    "evolution": "Não-oficial (Evolution)"
+  },
+  "evolution": {
+    "title": "Conexão Evolution (não-oficial)",
+    "description": "Conecte um WhatsApp comum via QR Code. Permite grupos e texto livre, mas viola os Termos do WhatsApp (risco de banir o número).",
+    "instanceLabel": "Nome da instância",
+    "instancePlaceholder": "ex.: vendas-2026",
+    "instanceRequired": "Informe o nome da instância.",
+    "create": "Gerar QR Code",
+    "creating": "Criando instância...",
+    "createError": "Falha ao criar a conexão Evolution.",
+    "scanQr": "Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho e escaneie:",
+    "waiting": "Aguardando leitura do QR...",
+    "connected": "Conexão Evolution conectada!"
+  },
   "panelTitle": "Conexão do WhatsApp",
   "panelDescription": "Conecte sua API do WhatsApp Business da Meta. Credenciais, webhook e etapas de configuração ficam todos aqui.",
   "loadConfigError": "Falha ao carregar a configuração do WhatsApp",
@@ -59,6 +76,8 @@
     "editTitle": "Editar conexão",
     "title": "Credenciais da API",
     "description": "Insira suas credenciais da API do WhatsApp Business da Meta.",
+    "labelLabel": "Apelido da conexão",
+    "labelPlaceholder": "ex.: Principal, Vendas, Suporte",
     "phoneNumberIdLabel": "ID do número de telefone",
     "phoneNumberIdPlaceholder": "ex.: 100234567890123",
     "wabaIdLabel": "ID da conta do WhatsApp Business",

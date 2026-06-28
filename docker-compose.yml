@@ -52,6 +52,8 @@ services:
       # Atribuição de venda (Fase 2): cadência longa (diária). O endpoint tem
       # no-op de 20h, então mesmo se o intervalo for menor não re-processa no dia.
       - SALES_CRON_INTERVAL=${SALES_CRON_INTERVAL:-86400}
+      # Inbound Evolution (fase D): cadência curta p/ latência baixa do recebimento.
+      - EVOLUTION_CRON_INTERVAL=${EVOLUTION_CRON_INTERVAL:-10}
     entrypoint:
       - /bin/sh
       - -c
@@ -67,6 +69,13 @@ services:
             curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/sales-cron" >/dev/null 2>&1 || true
             curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/classify-cron" >/dev/null 2>&1 || true
             sleep "$$SALES_CRON_INTERVAL"
+          done ) &
+        # Loop DEDICADO do inbound Evolution (poll curto p/ receber quase em
+        # tempo real). Path aninhado (/api/whatsapp/evolution/cron) não cabe no
+        # loop padrão $$p/cron, por isso loop próprio.
+        ( while true; do
+            curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/whatsapp/evolution/cron" >/dev/null 2>&1 || true
+            sleep "$$EVOLUTION_CRON_INTERVAL"
           done ) &
         # Loop PADRÃO para os demais crons (broadcasts, automations, flows,
         # conversations — sweep de desatribuição de conversa ociosa;
@@ -93,3 +102,70 @@ services:
       - app
     profiles:
       - tunnel
+
+  # ============================================================
+  # Evolution API (WhatsApp Web não-oficial, fase C). Container
+  # ISOLADO com MySQL/Redis próprios — não toca o Supabase. O app fala
+  # com evolution-api:8080 pela rede default do compose (igual o cron
+  # fala app:3000). mysql/redis ficam só na evolution-net (internal),
+  # sem porta no host. Auth = AUTHENTICATION_API_KEY (chave global).
+  # ============================================================
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: wacrm-evolution
+    restart: unless-stopped
+    # Opt-in: só sobe com `docker compose --profile evolution up` (evita
+    # restart-loop quando EVOLUTION_* não está setado). Espelha o cloudflared.
+    profiles:
+      - evolution
+    env_file:
+      - .env.local
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
+      - DATABASE_PROVIDER=mysql
+      - DATABASE_CONNECTION_URI=mysql://evo:${EVOLUTION_DB_PASS:-}@evolution-mysql:3306/evolution
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379
+      - DEL_INSTANCE=false
+      - QRCODE_LIMIT=6
+    depends_on:
+      - evolution-mysql
+      - evolution-redis
+    networks:
+      - default
+      - evolution-net
+
+  evolution-mysql:
+    image: mysql:8.0
+    container_name: wacrm-evolution-mysql
+    restart: unless-stopped
+    profiles:
+      - evolution
+    environment:
+      - MYSQL_DATABASE=evolution
+      - MYSQL_USER=evo
+      - MYSQL_PASSWORD=${EVOLUTION_DB_PASS:-}
+      - MYSQL_ROOT_PASSWORD=${EVOLUTION_DB_ROOT_PASS:-}
+    volumes:
+      - evolution-mysql-data:/var/lib/mysql
+    networks:
+      - evolution-net
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: wacrm-evolution-redis
+    restart: unless-stopped
+    profiles:
+      - evolution
+    networks:
+      - evolution-net
+
+volumes:
+  evolution-mysql-data:
+
+networks:
+  # Rede default do compose (app/cron/cloudflared anexam aqui por padrão).
+  default:
+  # Rede interna isolada do stack Evolution (mysql/redis sem porta no host).
+  evolution-net:
+    internal: true

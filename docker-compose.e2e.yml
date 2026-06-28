@@ -1,0 +1,40 @@
+# ============================================================
+# Stack Evolution SÓ para E2E local (@real-evolution). Sobe apenas
+# evolution-api + mysql + redis, com a porta 8686 exposta no host p/
+# o app local (fora do compose) e o Playwright acessarem a Evolution.
+# NÃO usar em produção (lá o stack vai no docker-compose.yml, sem porta).
+#   docker compose -f docker-compose.e2e.yml up -d
+# ============================================================
+services:
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: wacrm-evolution-e2e
+    restart: unless-stopped
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-e2e-evolution-key}
+      - DATABASE_PROVIDER=mysql
+      - DATABASE_CONNECTION_URI=mysql://evo:${EVOLUTION_DB_PASS:-evo}@evolution-mysql:3306/evolution
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379
+      - DEL_INSTANCE=false
+      - QRCODE_LIMIT=6
+    ports:
+      - "127.0.0.1:8686:8080"
+    depends_on:
+      - evolution-mysql
+      - evolution-redis
+
+  evolution-mysql:
+    image: mysql:8.0
+    container_name: wacrm-evolution-mysql-e2e
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=evolution
+      - MYSQL_USER=evo
+      - MYSQL_PASSWORD=${EVOLUTION_DB_PASS:-evo}
+      - MYSQL_ROOT_PASSWORD=${EVOLUTION_DB_ROOT_PASS:-evoroot}
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: wacrm-evolution-redis-e2e
+    restart: unless-stopped

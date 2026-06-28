@@ -8,6 +8,7 @@
 import { useRouter } from "next/navigation";
 import { Check, Smartphone } from "lucide-react";
 import { useActiveConnection } from "@/hooks/use-active-connection";
+import { connectionLabel } from "@/lib/connections/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,7 +24,8 @@ export function ConnectionSwitcher() {
   // Com 0 ou 1 conexão não há troca a fazer.
   if (connections.length <= 1) return null;
 
-  const label = activeConnection?.phone_number_id ?? "Conexão";
+  // Rótulo de exibição: apelido (label) com fallback no phone (helper único).
+  const label = activeConnection ? connectionLabel(activeConnection) : "Conexão";
 
   return (
     <DropdownMenu>
@@ -54,7 +56,7 @@ export function ConnectionSwitcher() {
             <span className="flex items-center gap-2 truncate">
               <Smartphone className="size-4 shrink-0" />
               <span className="truncate">
-                {c.phone_number_id}
+                {connectionLabel(c)}
                 {c.is_primary ? " · primária" : ""}
                 {c.status === "disconnected" ? " · desconectada" : ""}
               </span>

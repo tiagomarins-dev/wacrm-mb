@@ -7,6 +7,7 @@ import {
   verifyPhoneNumber,
 } from '@/lib/whatsapp/meta-api'
 import { encrypt, decrypt } from '@/lib/whatsapp/encryption'
+import { handleEvolutionConfig } from '@/lib/providers/evolution-config'
 
 /**
  * Resolve the caller's account_id from their profile. Inlined here
@@ -90,7 +91,7 @@ export async function GET() {
     // erraria com 2+ linhas.
     const { data: config, error: configError } = await supabase
       .from('whatsapp_config')
-      .select('phone_number_id, access_token, status')
+      .select('phone_number_id, access_token, status, provider')
       .eq('account_id', accountId)
       .eq('is_primary', true)
       .maybeSingle()
@@ -112,6 +113,15 @@ export async function GET() {
         },
         { status: 200 }
       )
+    }
+
+    // Evolution (fase C): não tem health check da Meta — o estado vem do
+    // status da conexão (atualizado pelo poll de QR em /evolution/connect).
+    if (config.provider === 'evolution') {
+      return NextResponse.json({
+        connected: config.status === 'connected',
+        provider: 'evolution',
+      })
     }
 
     // Try to decrypt the stored token with the current ENCRYPTION_KEY.
@@ -191,7 +201,14 @@ export async function POST(request: Request) {
     const body = await request.json()
     // `connection_id` (multi-número, 033): quando presente, edita ESSA
     // conexão; quando ausente, cria uma nova conexão para a conta.
-    const { connection_id, phone_number_id, waba_id, access_token, verify_token, pin } = body
+    const { connection_id, phone_number_id, waba_id, access_token, verify_token, pin, label, provider } = body
+
+    // Provider Evolution (fase C): cria instância + QR e grava a row.
+    // Pula TODO o fluxo Meta abaixo (guard de token/phone, dedup, verify,
+    // register, subscribe). Delegado a um helper p/ manter a rota magra.
+    if (provider === 'evolution') {
+      return await handleEvolutionConfig({ supabase, accountId, userId: user.id, body })
+    }
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
@@ -370,6 +387,8 @@ export async function POST(request: Request) {
     const baseRow = {
       phone_number_id,
       waba_id: waba_id || null,
+      // Apelido (055) — opcional; reusado no INSERT e no UPDATE via baseRow.
+      label: (typeof label === 'string' ? label.trim() : '') || null,
       access_token: encryptedAccessToken,
       verify_token: encryptedVerifyToken,
       status: registrationError ? 'disconnected' : 'connected',
