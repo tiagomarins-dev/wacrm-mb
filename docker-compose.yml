@@ -93,3 +93,62 @@ services:
       - app
     profiles:
       - tunnel
+
+  # ============================================================
+  # Evolution API (WhatsApp Web não-oficial, fase C). Container
+  # ISOLADO com MySQL/Redis próprios — não toca o Supabase. O app fala
+  # com evolution-api:8080 pela rede default do compose (igual o cron
+  # fala app:3000). mysql/redis ficam só na evolution-net (internal),
+  # sem porta no host. Auth = AUTHENTICATION_API_KEY (chave global).
+  # ============================================================
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: wacrm-evolution
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-}
+      - DATABASE_PROVIDER=mysql
+      - DATABASE_CONNECTION_URI=mysql://evo:${EVOLUTION_DB_PASS:-}@evolution-mysql:3306/evolution
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://evolution-redis:6379
+      - DEL_INSTANCE=false
+      - QRCODE_LIMIT=6
+    depends_on:
+      - evolution-mysql
+      - evolution-redis
+    networks:
+      - default
+      - evolution-net
+
+  evolution-mysql:
+    image: mysql:8.0
+    container_name: wacrm-evolution-mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_DATABASE=evolution
+      - MYSQL_USER=evo
+      - MYSQL_PASSWORD=${EVOLUTION_DB_PASS:-}
+      - MYSQL_ROOT_PASSWORD=${EVOLUTION_DB_ROOT_PASS:-}
+    volumes:
+      - evolution-mysql-data:/var/lib/mysql
+    networks:
+      - evolution-net
+
+  evolution-redis:
+    image: redis:7-alpine
+    container_name: wacrm-evolution-redis
+    restart: unless-stopped
+    networks:
+      - evolution-net
+
+volumes:
+  evolution-mysql-data:
+
+networks:
+  # Rede default do compose (app/cron/cloudflared anexam aqui por padrão).
+  default:
+  # Rede interna isolada do stack Evolution (mysql/redis sem porta no host).
+  evolution-net:
+    internal: true

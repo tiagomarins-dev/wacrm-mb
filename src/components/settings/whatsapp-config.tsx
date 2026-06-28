@@ -24,6 +24,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { SettingsPanelHead } from './settings-panel-head';
+import { EvolutionConnectionForm } from './evolution-connection-form';
 import {
   Accordion,
   AccordionItem,
@@ -72,6 +73,8 @@ export function WhatsAppConfig() {
   const [pin, setPin] = useState('');
   // Apelido da conexão (055) — rótulo exibido no dropdown/cards.
   const [label, setLabel] = useState('');
+  // Provedor selecionado no form (056/fase C): 'meta' (oficial) | 'evolution'.
+  const [provider, setProvider] = useState<'meta' | 'evolution'>('meta');
   const [tokenEdited, setTokenEdited] = useState(false);
 
   // True once /register has succeeded on Meta's side (timestamp set
@@ -106,12 +109,14 @@ export function WhatsAppConfig() {
       setWabaId(row.waba_id || '');
       setAccessToken(MASKED_TOKEN);
       setLabel(row.label || '');
+      setProvider((row.provider as 'meta' | 'evolution') ?? 'meta');
     } else {
       setConfig(null);
       setPhoneNumberId('');
       setWabaId('');
       setAccessToken('');
       setLabel('');
+      setProvider('meta');
     }
     setVerifyToken('');
     setPin('');
@@ -634,6 +639,31 @@ export function WhatsAppConfig() {
           </Card>
         )}
 
+        {/* Seletor de provedor (Meta oficial | Evolution não-oficial). */}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={provider === 'meta' ? 'default' : 'outline'}
+            onClick={() => setProvider('meta')}
+            className={provider === 'meta' ? '' : 'border-border text-muted-foreground hover:text-foreground'}
+          >
+            {t('provider.meta')}
+          </Button>
+          <Button
+            type="button"
+            variant={provider === 'evolution' ? 'default' : 'outline'}
+            onClick={() => setProvider('evolution')}
+            className={provider === 'evolution' ? '' : 'border-border text-muted-foreground hover:text-foreground'}
+          >
+            {t('provider.evolution')}
+          </Button>
+        </div>
+
+        {/* Evolution: form isolado (cria instância + QR). Meta: form abaixo. */}
+        {provider === 'evolution' ? (
+          <EvolutionConnectionForm onSaved={() => accountId && loadConnections(accountId)} />
+        ) : (
+        <>
         {/* API Credentials */}
         <Card>
           <CardHeader>
@@ -841,6 +871,8 @@ export function WhatsAppConfig() {
             </Button>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* Setup Instructions Sidebar */}

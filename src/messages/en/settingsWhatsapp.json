@@ -1,4 +1,21 @@
 {
+  "provider": {
+    "meta": "Official (Meta)",
+    "evolution": "Unofficial (Evolution)"
+  },
+  "evolution": {
+    "title": "Evolution connection (unofficial)",
+    "description": "Connect a regular WhatsApp via QR code. Allows groups and free text, but violates WhatsApp's Terms (risk of getting the number banned).",
+    "instanceLabel": "Instance name",
+    "instancePlaceholder": "e.g. sales-2026",
+    "instanceRequired": "Enter the instance name.",
+    "create": "Generate QR code",
+    "creating": "Creating instance...",
+    "createError": "Failed to create the Evolution connection.",
+    "scanQr": "Open WhatsApp on your phone → Linked devices → Link a device and scan:",
+    "waiting": "Waiting for QR scan...",
+    "connected": "Evolution connection connected!"
+  },
   "panelTitle": "WhatsApp connection",
   "panelDescription": "Connect your Meta WhatsApp Business API. Credentials, webhook, and setup steps all live here.",
   "loadConfigError": "Failed to load WhatsApp configuration",

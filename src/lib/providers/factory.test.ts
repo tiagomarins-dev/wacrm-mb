@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { WhatsAppConfig } from "@/types";
 import { createMessageProvider } from "./factory";
 import { ProviderCapabilityError, capabilitiesFor } from "./types";
 
 // Config mínima p/ os testes (só os campos que a factory lê).
-function cfg(provider?: "meta" | "evolution"): WhatsAppConfig {
+function cfg(
+  provider?: "meta" | "evolution",
+  extra?: Partial<WhatsAppConfig>,
+): WhatsAppConfig {
   return {
     id: "c1",
     account_id: "a1",
@@ -14,6 +17,7 @@ function cfg(provider?: "meta" | "evolution"): WhatsAppConfig {
     access_token: "enc",
     status: "connected",
     provider,
+    ...extra,
   } as WhatsAppConfig;
 }
 
@@ -26,10 +30,25 @@ describe("createMessageProvider — dispatch por provider", () => {
     expect(createMessageProvider(cfg(undefined), "tok").id).toBe("meta");
   });
 
-  it("provider 'evolution' → lança (fase C)", () => {
-    expect(() => createMessageProvider(cfg("evolution"), "tok")).toThrow(
-      ProviderCapabilityError,
-    );
+  it("provider 'evolution' com env + instance_name → adapter evolution", () => {
+    vi.stubEnv("EVOLUTION_API_URL", "http://evo.test:8080");
+    vi.stubEnv("EVOLUTION_API_KEY", "global-key");
+    try {
+      const p = createMessageProvider(
+        cfg("evolution", { instance_name: "inst1" }),
+        "tok",
+      );
+      expect(p.id).toBe("evolution");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("provider 'evolution' sem env/instance → lança", () => {
+    vi.unstubAllEnvs();
+    expect(() =>
+      createMessageProvider(cfg("evolution", { instance_name: null }), "tok"),
+    ).toThrow(ProviderCapabilityError);
   });
 });
 
