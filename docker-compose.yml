@@ -52,6 +52,8 @@ services:
       # Atribuição de venda (Fase 2): cadência longa (diária). O endpoint tem
       # no-op de 20h, então mesmo se o intervalo for menor não re-processa no dia.
       - SALES_CRON_INTERVAL=${SALES_CRON_INTERVAL:-86400}
+      # Inbound Evolution (fase D): cadência curta p/ latência baixa do recebimento.
+      - EVOLUTION_CRON_INTERVAL=${EVOLUTION_CRON_INTERVAL:-10}
     entrypoint:
       - /bin/sh
       - -c
@@ -67,6 +69,13 @@ services:
             curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/sales-cron" >/dev/null 2>&1 || true
             curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/classify-cron" >/dev/null 2>&1 || true
             sleep "$$SALES_CRON_INTERVAL"
+          done ) &
+        # Loop DEDICADO do inbound Evolution (poll curto p/ receber quase em
+        # tempo real). Path aninhado (/api/whatsapp/evolution/cron) não cabe no
+        # loop padrão $$p/cron, por isso loop próprio.
+        ( while true; do
+            curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/whatsapp/evolution/cron" >/dev/null 2>&1 || true
+            sleep "$$EVOLUTION_CRON_INTERVAL"
           done ) &
         # Loop PADRÃO para os demais crons (broadcasts, automations, flows,
         # conversations — sweep de desatribuição de conversa ociosa;

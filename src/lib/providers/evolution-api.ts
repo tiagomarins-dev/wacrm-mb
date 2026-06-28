@@ -72,6 +72,55 @@ export async function evoConnectionState(a: EvoBase): Promise<{ state: string }>
   return { state: data?.instance?.state ?? data?.state ?? 'close' }
 }
 
+// Shape (validado no container v2.3.7) de um record de /chat/findMessages.
+export interface EvoRecord {
+  // remoteJidAlt traz o telefone real (@s.whatsapp.net) quando o remoteJid
+  // vem como @lid (linked identity / privacidade nova do WhatsApp).
+  key?: {
+    id?: string
+    fromMe?: boolean
+    remoteJid?: string
+    remoteJidAlt?: string
+    addressingMode?: string
+  }
+  pushName?: string
+  messageType?: string
+  message?: {
+    conversation?: string
+    extendedTextMessage?: { text?: string }
+    imageMessage?: { caption?: string }
+    videoMessage?: { caption?: string }
+    documentMessage?: { caption?: string }
+    [k: string]: unknown
+  }
+  messageTimestamp?: number | string
+}
+
+// Busca mensagens da instância (Evolution persiste no MySQL próprio).
+// Retorna os records crus; o filtro (fromMe/since) e a normalização são
+// do chamador. Validado no container: { messages: { records: [...] } }.
+export async function evoFetchMessages(a: EvoBase): Promise<EvoRecord[]> {
+  const data = (await evoFetch(`${a.baseUrl}/chat/findMessages/${a.instance}`, a.apiKey, {
+    method: 'POST',
+    body: JSON.stringify({ where: {} }),
+  })) as { messages?: { records?: EvoRecord[] } } | null
+  return data?.messages?.records ?? []
+}
+
+// Baixa a mídia de uma mensagem como base64 (p/ subir no bucket).
+// ⚠️ endpoint/shape a validar no container: /chat/getBase64FromMediaMessage/{instance}.
+export async function evoBase64FromMedia(
+  a: EvoBase & { messageKeyId: string },
+): Promise<{ base64: string; mimetype: string } | null> {
+  const data = (await evoFetch(
+    `${a.baseUrl}/chat/getBase64FromMediaMessage/${a.instance}`,
+    a.apiKey,
+    { method: 'POST', body: JSON.stringify({ message: { key: { id: a.messageKeyId } } }) },
+  )) as { base64?: string; mimetype?: string } | null
+  if (!data?.base64) return null
+  return { base64: data.base64, mimetype: data.mimetype ?? 'application/octet-stream' }
+}
+
 // Envia texto 1:1. `number` = telefone só-dígitos. Retorna o id da msg.
 export async function evoSendText(
   a: EvoBase & { number: string; text: string },
