@@ -114,6 +114,10 @@ services:
     image: evoapicloud/evolution-api:v2.3.7
     container_name: wacrm-evolution
     restart: unless-stopped
+    # Opt-in: só sobe com `docker compose --profile evolution up` (evita
+    # restart-loop quando EVOLUTION_* não está setado). Espelha o cloudflared.
+    profiles:
+      - evolution
     env_file:
       - .env.local
     environment:
@@ -135,6 +139,8 @@ services:
     image: mysql:8.0
     container_name: wacrm-evolution-mysql
     restart: unless-stopped
+    profiles:
+      - evolution
     environment:
       - MYSQL_DATABASE=evolution
       - MYSQL_USER=evo
@@ -149,6 +155,8 @@ services:
     image: redis:7-alpine
     container_name: wacrm-evolution-redis
     restart: unless-stopped
+    profiles:
+      - evolution
     networks:
       - evolution-net
 
