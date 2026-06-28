@@ -49,6 +49,9 @@ services:
       # Cadência dedicada do agente de IA: bem mais curta que os demais crons
       # para a resposta sair quase em tempo real (latência ≈ debounce + isto).
       - AI_AGENT_CRON_INTERVAL=${AI_AGENT_CRON_INTERVAL:-8}
+      # Atribuição de venda (Fase 2): cadência longa (diária). O endpoint tem
+      # no-op de 20h, então mesmo se o intervalo for menor não re-processa no dia.
+      - SALES_CRON_INTERVAL=${SALES_CRON_INTERVAL:-86400}
     entrypoint:
       - /bin/sh
       - -c
@@ -57,6 +60,13 @@ services:
         ( while true; do
             curl -fsS -m 30 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/ai-agent/cron" >/dev/null 2>&1 || true
             sleep "$$AI_AGENT_CRON_INTERVAL"
+          done ) &
+        # Loop DEDICADO dos relatórios diários: atribuição de venda + classificação
+        # de intenção (Fase 3). -m 70 cobre a varredura. Ambos têm no-op de 20h.
+        ( while true; do
+            curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/sales-cron" >/dev/null 2>&1 || true
+            curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/classify-cron" >/dev/null 2>&1 || true
+            sleep "$$SALES_CRON_INTERVAL"
           done ) &
         # Loop PADRÃO para os demais crons (broadcasts, automations, flows,
         # conversations — sweep de desatribuição de conversa ociosa;

@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import {
+  BarChart3,
   Crown,
   GitBranch,
   LayoutDashboard,
@@ -114,6 +115,7 @@ const navCrescimento: NavItem[] = [
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/lead-score", labelKey: "leadScore", icon: TrendingUp },
+  { href: "/reports", labelKey: "reports", icon: BarChart3 },
 ];
 
 const bottomNavItems: NavItem[] = [

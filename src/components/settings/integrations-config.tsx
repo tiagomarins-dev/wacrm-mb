@@ -14,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import type { IntegrationsConfigPublic } from '@/types';
+import type { IntegrationsConfigPublic, MbPaidCourse } from '@/types';
 
 /**
  * Config admin das integrações (OpenRouter / Notion / Slack), account-level.
@@ -42,6 +42,9 @@ export function IntegrationsConfig() {
   const [transcriptionFormat, setTranscriptionFormat] = useState('');
   // Flags de "já configurado".
   const [sets, setSets] = useState({ openrouter: false, notion: false, slack: false, millaborges: false });
+  // Atribuição de venda (Fase 2): janela + cursos que contam como venda.
+  const [windowDays, setWindowDays] = useState(30);
+  const [courses, setCourses] = useState<MbPaidCourse[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -63,6 +66,10 @@ export function IntegrationsConfig() {
           slack: c.slack_set,
           millaborges: c.millaborges_set,
         });
+        setWindowDays(c.mb_attribution_window_days ?? 30);
+        // cursos vistos (admin) — não bloqueia o carregamento da config
+        const cr = await fetch('/api/integrations/mb-courses', { cache: 'no-store' });
+        if (cr.ok) setCourses(((await cr.json()) as { courses: MbPaidCourse[] }).courses);
       } catch {
         toast.error('Failed to load integrations');
       } finally {
@@ -70,6 +77,20 @@ export function IntegrationsConfig() {
       }
     })();
   }, []);
+
+  // Marca/desmarca um curso como pago (salva na hora; atualiza o estado local).
+  async function toggleCourse(course: MbPaidCourse, enabled: boolean) {
+    setCourses((prev) => prev.map((c) => (c.id_curso === course.id_curso ? { ...c, enabled } : c)));
+    const res = await fetch('/api/integrations/mb-courses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id_curso: course.id_curso, nome_curso: course.nome_curso, enabled }),
+    });
+    if (!res.ok) {
+      setCourses((prev) => prev.map((c) => (c.id_curso === course.id_curso ? { ...c, enabled: !enabled } : c)));
+      toast.error('Falha ao salvar o curso');
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -86,6 +107,7 @@ export function IntegrationsConfig() {
           transcription_model: transcriptionModel,
           transcription_fallback_model: transcriptionFallback,
           transcription_format_model: transcriptionFormat,
+          mb_attribution_window_days: windowDays,
           // tokens só vão se preenchidos
           openrouter_api_key: openrouterKey || undefined,
           notion_api_key: notionKey || undefined,
@@ -260,6 +282,42 @@ export function IntegrationsConfig() {
               className="border-border bg-background text-foreground"
             />
           </Field>
+        </Section>
+
+        {/* Atribuição de venda (Fase 2): conta matrículas reais por atendente. */}
+        <Section title="Atribuição de venda (matrículas)" connected={courses.some((c) => c.enabled)}>
+          <Field label="Janela de atribuição (dias)">
+            <Input
+              type="number"
+              min={1}
+              max={365}
+              value={windowDays}
+              onChange={(e) => setWindowDays(Number(e.target.value) || 30)}
+              className="w-32 border-border bg-background text-foreground"
+            />
+          </Field>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Cursos que contam como venda
+            </label>
+            {courses.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhum curso visto ainda — aparecem aqui conforme os alunos são consultados nas conversas.
+              </p>
+            ) : (
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {courses.map((c) => (
+                  <div key={c.id_curso} className="flex items-center justify-between px-3 py-2">
+                    <span className="text-sm text-foreground">
+                      {c.nome_curso || `Curso ${c.id_curso}`}
+                      <span className="ml-2 font-mono text-[10px] text-muted-foreground">#{c.id_curso}</span>
+                    </span>
+                    <Switch checked={c.enabled} onCheckedChange={(v) => toggleCourse(c, v)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </Section>
 
         <div className="border-t border-border pt-4">

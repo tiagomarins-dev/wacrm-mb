@@ -4,6 +4,7 @@
 // Email/telefone/nome completo NUNCA entram aqui (anexados depois, no
 // servidor, via contact-block). data_collection:'deny' = no-logging.
 // ============================================================
+import type { IntentLabel } from '@/types'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = 'openai/gpt-4o-mini'
@@ -141,4 +142,67 @@ export async function summarizeConversation(args: SummarizeArgs): Promise<string
   const text = data?.choices?.[0]?.message?.content?.trim()
   if (!text) throw new Error('OpenRouter returned an empty summary')
   return text
+}
+
+// ── Classificador de intenção (Fase 3 dos relatórios) ───────
+const CLASSIFY_PROMPT =
+  'Classifique a intenção primária da conversa abaixo em UMA palavra: ' +
+  '"vendas" (cliente quer comprar/matricular), "suporte" (dúvida/problema de quem já é aluno) ' +
+  'ou "outro". Responda só a palavra, sem pontuação.'
+
+/**
+ * Parse PURO da resposta do LLM (esperado 1 palavra) para o enum de intenção.
+ * Fora do enum / vazio → null (degrada: não grava nada).
+ */
+export function parseIntent(text: string | null | undefined): IntentLabel | null {
+  const t = (text ?? '').toLowerCase()
+  if (t.includes('venda')) return 'vendas'
+  if (t.includes('suporte')) return 'suporte'
+  if (t.includes('outro')) return 'outro'
+  return null
+}
+
+/**
+ * Classifica a intenção primária da conversa. Reusa o mesmo padrão de fetch do
+ * resumo (Bearer, X-Title, timeout, data_collection:'deny'); max_tokens baixo
+ * (resposta = 1 palavra). O caller deve ter redigido PII das mensagens antes.
+ * Lança em erro/timeout (sem vazar token).
+ */
+export async function classifyIntent(args: {
+  apiKey: string
+  model?: string | null
+  messages: SummaryMessage[]
+}): Promise<IntentLabel | null> {
+  const transcript = serializeMessages(args.messages)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.apiKey}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'wacrm',
+      },
+      body: JSON.stringify({
+        model: args.model || DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: CLASSIFY_PROMPT },
+          { role: 'user', content: transcript },
+        ],
+        max_tokens: 4,
+        provider: { data_collection: 'deny' },
+      }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw new Error('OpenRouter timed out')
+    throw new Error('OpenRouter request failed')
+  } finally {
+    clearTimeout(timeout)
+  }
+  if (!res.ok) throw new Error(`OpenRouter error ${res.status}`)
+  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
+  return parseIntent(data?.choices?.[0]?.message?.content)
 }
