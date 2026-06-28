@@ -87,7 +87,7 @@ export async function POST(request: Request) {
 
     const { data: conversation, error: convError } = await supabase
       .from('conversations')
-      .select('id, account_id, connection_id, contact:contacts(phone)')
+      .select('id, account_id, connection_id, is_group, contact:contacts(phone)')
       .eq('id', targetMessage.conversation_id)
       .eq('account_id', accountId)
       .maybeSingle();
@@ -96,6 +96,15 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Conversation not found' },
         { status: 404 },
+      );
+    }
+
+    // Reação em grupo não é suportada (Evolution reaction=false). Rejeita
+    // antes do branch de contact.phone (que é nulo em grupo). (058)
+    if (conversation.is_group) {
+      return NextResponse.json(
+        { error: 'Reações em grupo não suportadas' },
+        { status: 400 },
       );
     }
 

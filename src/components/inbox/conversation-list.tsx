@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search, ArrowDown, ArrowUp } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -15,6 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
 import { classifyTab, sortByTab, countByTab, effectiveDir, type QueueTab } from "@/lib/inbox/queue";
+import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { useTranslation } from "react-i18next";
 
@@ -380,7 +381,11 @@ function ConversationItem({
   const { i18n } = useTranslation("inbox");
   const dateLocale = i18n.language === "pt-BR" ? ptBR : undefined;
   const contact = conversation.contact;
-  const displayName = contact?.name || contact?.phone || "Unknown";
+  // Grupo (058): título via helper (sem contato); 1:1 usa nome/telefone.
+  const isGroup = Boolean(conversation.is_group);
+  const displayName = isGroup
+    ? conversationTitle(conversation)
+    : contact?.name || contact?.phone || "Unknown";
   const initials = displayName.charAt(0).toUpperCase();
 
   const handleClick = useCallback(() => {
@@ -403,9 +408,11 @@ function ConversationItem({
         isActive && "border-l-2 border-primary bg-muted/70"
       )}
     >
-      {/* Avatar */}
+      {/* Avatar — grupo (058) usa ícone de pessoas; 1:1 usa foto/iniciais. */}
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-        {contact?.avatar_url ? (
+        {isGroup ? (
+          <Users className="h-5 w-5 text-muted-foreground" />
+        ) : contact?.avatar_url ? (
           <img
             src={contact.avatar_url}
             alt={displayName}

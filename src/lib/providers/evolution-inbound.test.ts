@@ -72,8 +72,85 @@ describe("normalizeEvolutionInbound", () => {
     ).toBeNull();
   });
 
-  it("grupo (@g.us) → null (fase E)", () => {
-    expect(normalizeEvolutionInbound(rec({ key: { id: "G", remoteJid: "12036@g.us" } }))).toBeNull();
+  it("grupo (@g.us) → isGroup + chatId + senderName/Phone do participante", () => {
+    const n = normalizeEvolutionInbound(
+      rec({
+        key: {
+          id: "G1", fromMe: false,
+          remoteJid: "120363012345678901@g.us",
+          participant: "146862799614006@lid",
+          participantAlt: "5521994593232@s.whatsapp.net",
+        },
+        pushName: "Camilla Ramos",
+        message: { conversation: "Oi grupo" },
+      }),
+    )!;
+    expect(n.isGroup).toBe(true);
+    expect(n.chatId).toBe("120363012345678901@g.us");
+    expect(n.phone).toBe(""); // grupo não usa phone
+    expect(n.senderName).toBe("Camilla Ramos");
+    expect(n.senderPhone).toBe("5521994593232");
+    expect(n.contentText).toBe("Oi grupo");
+    expect(n.messageId).toBe("G1");
+  });
+
+  it("grupo sem participantAlt → senderName cai no pushName, senderPhone null", () => {
+    const n = normalizeEvolutionInbound(
+      rec({ key: { id: "G2", remoteJid: "120363@g.us" }, pushName: "Fulano" }),
+    )!;
+    expect(n.isGroup).toBe(true);
+    expect(n.senderName).toBe("Fulano");
+    expect(n.senderPhone).toBeNull();
+  });
+
+  it("1:1 mantém isGroup=false e campos de grupo nulos", () => {
+    const n = normalizeEvolutionInbound(rec({}))!;
+    expect(n.isGroup).toBe(false);
+    expect(n.chatId).toBeNull();
+    expect(n.senderName).toBeNull();
+    expect(n.senderPhone).toBeNull();
+  });
+
+  it("ephemeralMessage (1:1): desembrulha extendedTextMessage → text", () => {
+    const n = normalizeEvolutionInbound(
+      rec({
+        messageType: "ephemeralMessage",
+        message: { ephemeralMessage: { message: { extendedTextMessage: { text: "some efêmero" } } } },
+      }),
+    )!;
+    expect(n.contentType).toBe("text");
+    expect(n.contentText).toBe("some efêmero");
+  });
+
+  it("ephemeralMessage (grupo): desembrulha imageMessage + caption", () => {
+    const n = normalizeEvolutionInbound(
+      rec({
+        key: {
+          id: "GE1", fromMe: false,
+          remoteJid: "120363@g.us",
+          participantAlt: "5521994593232@s.whatsapp.net",
+        },
+        pushName: "Loja",
+        messageType: "ephemeralMessage",
+        message: { ephemeralMessage: { message: { imageMessage: { caption: "promo" } } } },
+      }),
+    )!;
+    expect(n.isGroup).toBe(true);
+    expect(n.contentType).toBe("image");
+    expect(n.hasMedia).toBe(true);
+    expect(n.contentText).toBe("promo");
+    expect(n.senderName).toBe("Loja");
+  });
+
+  it("ephemeralMessage com conteúdo não suportado → null", () => {
+    expect(
+      normalizeEvolutionInbound(
+        rec({
+          messageType: "ephemeralMessage",
+          message: { ephemeralMessage: { message: { locationMessage: {} } } },
+        }),
+      ),
+    ).toBeNull();
   });
 
   it("tipo não suportado → null", () => {

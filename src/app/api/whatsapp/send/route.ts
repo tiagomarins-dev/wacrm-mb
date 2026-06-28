@@ -5,6 +5,7 @@ import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { createMessageProvider } from '@/lib/providers/factory'
+import { capabilitiesFor } from '@/lib/providers/types'
 import { dispatchTranscription } from '@/lib/transcription/dispatch'
 import {
   sanitizePhoneForMeta,
@@ -147,21 +148,33 @@ export async function POST(request: Request) {
       )
     }
 
+    // Grupo (058): não há contato — o destino é o chat_id (@g.us). Em 1:1,
+    // exige telefone válido do contato.
+    const isGroup = Boolean(conversation.is_group)
     const contact = conversation.contact
-    if (!contact?.phone) {
-      return NextResponse.json(
-        { error: 'Contact phone number not found' },
-        { status: 400 }
-      )
-    }
-
-    // Sanitize and validate phone
-    const sanitizedPhone = sanitizePhoneForMeta(contact.phone)
-    if (!isValidE164(sanitizedPhone)) {
-      return NextResponse.json(
-        { error: 'Invalid phone number format' },
-        { status: 400 }
-      )
+    let sanitizedPhone = ''
+    if (isGroup) {
+      if (!conversation.chat_id) {
+        return NextResponse.json(
+          { error: 'chat_id do grupo ausente' },
+          { status: 400 }
+        )
+      }
+    } else {
+      if (!contact?.phone) {
+        return NextResponse.json(
+          { error: 'Contact phone number not found' },
+          { status: 400 }
+        )
+      }
+      // Sanitize and validate phone
+      sanitizedPhone = sanitizePhoneForMeta(contact.phone)
+      if (!isValidE164(sanitizedPhone)) {
+        return NextResponse.json(
+          { error: 'Invalid phone number format' },
+          { status: 400 }
+        )
+      }
     }
 
     // Conexão de envio = a da CONVERSA (multi-número, 033): responde pelo
@@ -175,6 +188,15 @@ export async function POST(request: Request) {
     if (!config) {
       return NextResponse.json(
         { error: 'WhatsApp not configured. Please set up your WhatsApp integration first.' },
+        { status: 400 }
+      )
+    }
+
+    // Grupo só é suportado em conexões com capability `groups` (Evolution).
+    // Meta rejeita (groups=false).
+    if (isGroup && !capabilitiesFor(config.provider).groups) {
+      return NextResponse.json(
+        { error: 'Envio em grupo não suportado nesta conexão' },
         { status: 400 }
       )
     }
@@ -314,7 +336,11 @@ export async function POST(request: Request) {
     }
 
     try {
-      const variants = phoneVariants(sanitizedPhone)
+      // Grupo: destino é o chat_id, sem variantes de telefone nem retry de
+      // recipient (não há contato p/ auto-corrigir).
+      const variants = isGroup
+        ? [conversation.chat_id as string]
+        : phoneVariants(sanitizedPhone)
       let lastError: unknown = null
 
       for (const variant of variants) {
@@ -349,7 +375,8 @@ export async function POST(request: Request) {
     // If a non-original variant succeeded, update the contact so future
     // sends go straight through. sanitizePhoneForMeta on workingPhone
     // will yield workingPhone itself, so re-storing preserves it.
-    if (workingPhone !== sanitizedPhone) {
+    // Grupo não tem contato → nunca auto-corrige.
+    if (!isGroup && workingPhone !== sanitizedPhone) {
       console.log(
         `[whatsapp/send] Auto-corrected contact phone: ${sanitizedPhone} → ${workingPhone}`
       )
@@ -423,7 +450,8 @@ export async function POST(request: Request) {
     // lets the agent or the 24h timeout sweep cleanly resolve the
     // run later. For accounts with no active runs the UPDATE matches
     // zero rows — cheap and harmless.
-    try {
+    // Grupo (058) não tem contato/flow → pula.
+    if (!isGroup && contact?.id) try {
       const { error: pauseErr } = await supabaseAdmin()
         .from('flow_runs')
         .update({

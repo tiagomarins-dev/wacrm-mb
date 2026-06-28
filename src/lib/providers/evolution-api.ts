@@ -72,6 +72,16 @@ export async function evoConnectionState(a: EvoBase): Promise<{ state: string }>
   return { state: data?.instance?.state ?? data?.state ?? 'close' }
 }
 
+// Conteúdo de uma mensagem (campos usados; o resto fica em [k]).
+export interface EvoMessageContent {
+  conversation?: string
+  extendedTextMessage?: { text?: string }
+  imageMessage?: { caption?: string }
+  videoMessage?: { caption?: string }
+  documentMessage?: { caption?: string }
+  [k: string]: unknown
+}
+
 // Shape (validado no container v2.3.7) de um record de /chat/findMessages.
 export interface EvoRecord {
   // remoteJidAlt traz o telefone real (@s.whatsapp.net) quando o remoteJid
@@ -82,16 +92,16 @@ export interface EvoRecord {
     remoteJid?: string
     remoteJidAlt?: string
     addressingMode?: string
+    // Grupo (@g.us): o remetente vem em participant (@lid) e o telefone
+    // real em participantAlt (@s.whatsapp.net). Validado no container.
+    participant?: string
+    participantAlt?: string
   }
   pushName?: string
   messageType?: string
-  message?: {
-    conversation?: string
-    extendedTextMessage?: { text?: string }
-    imageMessage?: { caption?: string }
-    videoMessage?: { caption?: string }
-    documentMessage?: { caption?: string }
-    [k: string]: unknown
+  message?: EvoMessageContent & {
+    // Wrapper de mensagem temporária: o conteúdo real fica aninhado aqui.
+    ephemeralMessage?: { message?: EvoMessageContent }
   }
   messageTimestamp?: number | string
 }
@@ -119,6 +129,23 @@ export async function evoBase64FromMedia(
   )) as { base64?: string; mimetype?: string } | null
   if (!data?.base64) return null
   return { base64: data.base64, mimetype: data.mimetype ?? 'application/octet-stream' }
+}
+
+// Nome (subject) de um grupo, best-effort (058). ⚠️ endpoint validado no
+// container: GET /group/findGroupInfos/{instance}?groupJid=<jid> → { subject }.
+// Falha (endpoint ausente/erro) → null e a UI cai no fallback "Grupo".
+export async function evoFetchGroupSubject(
+  a: EvoBase & { groupJid: string },
+): Promise<string | null> {
+  try {
+    const data = (await evoFetch(
+      `${a.baseUrl}/group/findGroupInfos/${a.instance}?groupJid=${encodeURIComponent(a.groupJid)}`,
+      a.apiKey,
+    )) as { subject?: string } | null
+    return data?.subject ?? null
+  } catch {
+    return null
+  }
 }
 
 // Envia texto 1:1. `number` = telefone só-dígitos. Retorna o id da msg.
