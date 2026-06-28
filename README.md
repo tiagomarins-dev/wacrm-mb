@@ -30,9 +30,24 @@ clone or fork it to run your own CRM.
 - **Sales pipelines** (Kanban) with deals linked to conversations.
 - **Broadcasts** with Meta-approved templates, delivery + read
   tracking, per-recipient variable substitution.
-- **No-code automations** — triggers on inbound messages, new
+- **No-code automations & flows** — triggers on inbound messages, new
   contacts, keywords, or schedule; conditional branches, waits,
-  tags, webhooks. Visual builder.
+  tags, webhooks, trackable links. Visual builder.
+- **AI agent** — auto-replies on WhatsApp driven by an OpenRouter model,
+  with per-agent profiles/instructions, a number allow-list, and a
+  debounce so it answers a burst of messages once. Opt-in per account.
+- **Audio transcription** — inbound voice notes transcribed to text in
+  the conversation (OpenRouter), with automatic retry.
+- **Multi-number connections** — run several WhatsApp numbers from one
+  account, each with its own templates, business hours, and routing.
+- **Lead scoring + student panel** — per-contact lead score with
+  configurable rules, plus an "Info Aluno" (Millaborges) side-panel that
+  pulls student data into the conversation.
+- **Conversation queue & SLA** — unassigned queue, "my conversations",
+  a 30-min SLA gate, idle auto-unassign, and transfer logging.
+- **Reports** — per-operator/admin response times (FRT/ART, clipped to
+  business hours), sales attribution (closed-loop via enrollment), and
+  conversation-intelligence classification.
 - **Real-time dashboard** — response times, daily volume, pipeline
   value, cross-module activity feed.
 - **Team accounts** — invite teammates by link, role-based access
@@ -75,6 +90,60 @@ npm run dev
 
 Open <http://localhost:3000>. You'll be redirected to `/login` (or
 `/dashboard` if already signed in).
+
+## 🐳 Self-host with Docker — one command
+
+The fastest way to a **fully working** install on your own machine or VPS
+is the bundled installer. It runs the whole stack (app + cron scheduler,
+plus an optional Cloudflare Tunnel) in Docker against a managed Supabase
+project — no Node, no psql, no reverse proxy to set up by hand.
+
+**Prerequisites:** Docker Desktop running, and a Supabase project
+(free tier is fine). Grab its URL, anon key, service-role key, and the
+Postgres connection string from the Supabase dashboard.
+
+```bash
+git clone https://github.com/<your-username>/wacrm.git
+cd wacrm
+./install.sh
+```
+
+The script walks you through everything interactively:
+
+1. **Checks Docker** is installed and running.
+2. **Collects env vars** (Supabase, Meta App Secret, optional OpenRouter
+   / Cloudflare Tunnel) and **writes `.env.local`** (perms `600`).
+   Secrets it can generate itself — `ENCRYPTION_KEY` and
+   `AUTOMATION_CRON_SECRET` — are created for you, no typing.
+3. **Applies all database migrations** in order via a throwaway
+   `postgres:16-alpine` container (idempotent — safe to re-run).
+4. **Creates the first admin user** (role `owner`) via the Supabase
+   Auth Admin API.
+5. **Builds the image and brings up the stack** on
+   `http://localhost:10300` (override with `APP_PORT=8080 ./install.sh`).
+6. **Prints a step-by-step guide** for the in-app config that turns on
+   the rest of the system (connect WhatsApp, set the webhook, paste the
+   OpenRouter key for AI/transcription, configure the AI agent, business
+   hours, templates).
+
+Re-deploy after pulling new code — reuses `.env.local`, re-runs the build:
+
+```bash
+git pull
+./install.sh --rebuild
+```
+
+```bash
+# logs / stop
+docker compose --env-file .env.local logs -f
+docker compose --env-file .env.local down
+```
+
+> The WhatsApp Business webhook **requires a public HTTPS URL**. Answer
+> "yes" to the Cloudflare Tunnel step during install to get one with no
+> open ports — or point any HTTPS domain at the app and set
+> `NEXT_PUBLIC_SITE_URL`. See [`.env.local.example`](./.env.local.example)
+> for every variable.
 
 ## 🚀 Deploy on Hostinger (recommended)
 
@@ -143,6 +212,10 @@ Key pages:
 - **App** — Next.js 16 (App Router), React 19, TypeScript, Tailwind v4.
 - **Data** — Supabase (Postgres + Auth + Storage + RLS).
 - **WhatsApp** — Meta Cloud API (official WhatsApp Business API).
+- **AI** — OpenRouter (conversation summaries, AI agent replies, audio
+  transcription); per-account token, configured in Settings → Integrations.
+- **Self-host** — Docker Compose (`install.sh`) with an in-container cron
+  scheduler and optional Cloudflare Tunnel.
 
 ## Contributing
 

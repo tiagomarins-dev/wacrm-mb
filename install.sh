@@ -163,13 +163,26 @@ read_env() {
   grep -E "^$1=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true
 }
 
+# Garante que AUTOMATION_CRON_SECRET exista no .env.local. .env.local antigos
+# (anteriores ao sidecar de cron) não têm o segredo — sem ele os crons
+# (agente IA, broadcasts agendados, automations, flows, transcrição, relatórios)
+# falham na autenticação. Gera e anexa se faltar. Usado no fluxo --rebuild.
+ensure_cron_secret() {
+  if [ -n "$(read_env AUTOMATION_CRON_SECRET)" ]; then return 0; fi
+  warn "AUTOMATION_CRON_SECRET ausente no $ENV_FILE — gerando (necessário p/ agente IA, agendamentos e relatórios)."
+  printf '\n# --- Segredo do cron (gerado por --rebuild) ---\nAUTOMATION_CRON_SECRET=%s\n' "$(gen_secret 32)" >> "$ENV_FILE"
+  ok "AUTOMATION_CRON_SECRET adicionado."
+}
+
 # Escapa string para uso seguro dentro de JSON (barra e aspas).
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 # ---- aplica as migrations no Supabase ----
-# Roda os .sql em ordem numérica via psql dentro de um container
-# postgres:16-alpine (sem exigir psql instalado no host). Idempotente —
-# os scripts usam IF NOT EXISTS / DROP IF EXISTS, seguro re-rodar.
+# Roda TODOS os .sql de supabase/migrations em ordem numérica (001, 002, …)
+# via psql dentro de um container postgres:16-alpine (sem exigir psql
+# instalado no host). Pega novas migrations automaticamente — o glob varre
+# a pasta, não há lista fixa. Idempotente: os scripts usam IF NOT EXISTS /
+# DROP IF EXISTS, seguro re-rodar numa base já migrada.
 apply_migrations() {
   local dir="supabase/migrations"
   [ -d "$dir" ] || { warn "Pasta $dir não encontrada — pulando migrations."; return 0; }
@@ -297,6 +310,49 @@ bring_up() {
   info "Parar: $COMPOSE --env-file $ENV_FILE $profiles down"
 }
 
+# ---- guia de próximos passos (config dentro do app) ----
+# O .env.local + migrations sobem o sistema; mas várias features (WhatsApp,
+# agente IA, transcrição, relatórios, dados do aluno) são ligadas DENTRO do
+# app pelo admin. Imprime o passo a passo pra deixar tudo 100% funcional.
+print_next_steps() {
+  local base="http://localhost:$APP_PORT"
+  # No --rebuild SITE_URL não foi coletado nesta execução — lê do .env.local.
+  SITE_URL="${SITE_URL:-$(read_env NEXT_PUBLIC_SITE_URL)}"
+  echo
+  echo "${BOLD}== Próximos passos (configurar dentro do app) ==${RESET}"
+  echo
+  info "1) Entre e faça login"
+  echo "   $base  →  use o e-mail/senha do admin que você criou."
+  echo
+  info "2) Conecte um número de WhatsApp  (Settings → Conexões)"
+  echo "   $base/settings?tab=whatsapp"
+  echo "   - Cole Phone Number ID, WABA ID e o token permanente da Meta."
+  echo "   - Configure o webhook no painel da Meta apontando para:"
+  echo "       ${SITE_URL:-<sua-URL-pública>}/api/whatsapp/webhook"
+  echo "     Verify token: o mesmo que você definir na tela de conexão."
+  warn "   Webhook exige HTTPS público — use o Cloudflare Tunnel ou outra URL HTTPS."
+  echo
+  info "3) Ative a IA  (Settings → Integrações)  — opcional, mas habilita várias features"
+  echo "   $base/settings?tab=integrations"
+  echo "   - Cole sua OpenRouter API key → liga: resumo IA ao compartilhar conversa,"
+  echo "     agente de IA (respostas automáticas) e transcrição de áudios."
+  echo "   - (MB) API \"Info Aluno\" (Millaborges): cole a key p/ o painel Dados do Aluno."
+  echo
+  info "4) Configure o agente de IA  (Settings → Agente IA)  — se for usar respostas automáticas"
+  echo "   $base/settings?tab=ai-agent"
+  echo "   - Defina perfil/instruções, allowlist de números e o debounce."
+  echo
+  info "5) Horário de atendimento + relatórios  (Settings → Horário)"
+  echo "   $base/settings?tab=business-hours"
+  echo "   - Define o expediente; os relatórios (FRT/ART) usam isso para clipar tempos."
+  echo
+  info "6) Templates e respostas rápidas"
+  echo "   $base/settings?tab=templates   |   $base/settings?tab=quick-replies"
+  echo
+  ok "O scheduler de cron (agente IA, agendamentos, automações, transcrição, relatórios)"
+  echo "   já está rodando no container ${BOLD}wacrm-cron${RESET} — nada a fazer."
+}
+
 # ============================================================
 # Execução
 # ============================================================
@@ -306,6 +362,7 @@ detect_docker
 if [ "${1:-}" = "--rebuild" ]; then
   [ -f "$ENV_FILE" ] || { err "$ENV_FILE não existe. Roda sem --rebuild primeiro."; exit 1; }
   ok "Reusando $ENV_FILE existente."
+  ensure_cron_secret
 else
   collect_and_write_env
   # Banco antes do usuário: o trigger handle_new_user (migration 001+017)
@@ -315,3 +372,4 @@ else
 fi
 
 bring_up
+print_next_steps
