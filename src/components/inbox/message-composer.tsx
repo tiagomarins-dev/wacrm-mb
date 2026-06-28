@@ -106,6 +106,8 @@ interface MessageComposerProps {
   contact?: Contact | null;
   /** Respostas rápidas (account + pessoais), carregadas 1x no thread. */
   quickReplies?: QuickReply[];
+  /** Conversa de grupo (058): esconde Templates (capability Evolution não tem). */
+  isGroup?: boolean;
   /** Soft gate: conversa atribuída a OUTRO humano → mostra "Assumir" no lugar do input. */
   assignedToOtherHuman?: boolean;
   /** Nome do responsável atual (p/ o texto do overlay). */
@@ -134,6 +136,7 @@ export function MessageComposer({
   replyTo,
   onClearReply,
   contact,
+  isGroup = false,
   quickReplies = [],
   assignedToOtherHuman = false,
   assigneeName = null,
@@ -507,7 +510,8 @@ export function MessageComposer({
           />
         </div>
       )}
-      {sessionExpired && (
+      {/* Banner de sessão 24h é conceito Meta — não aplica a grupo (Evolution). */}
+      {sessionExpired && !isGroup && (
         <div className="mb-2 flex items-center justify-between rounded-lg bg-amber-500/10 px-3 py-2">
           <p className="text-xs text-amber-400">
             24-hour session expired. Use a template to re-engage.
@@ -630,17 +634,20 @@ export function MessageComposer({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <GatedButton
-            variant="ghost"
-            size="sm"
-            canAct={!readOnly}
-            gateReason="send messages"
-            title={readOnly ? undefined : "Send template"}
-            className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-foreground"
-            onClick={onOpenTemplates}
-          >
-            <LayoutTemplate className="h-4 w-4" />
-          </GatedButton>
+          {/* Template é capability Meta — escondido em grupo (Evolution). */}
+          {!isGroup && (
+            <GatedButton
+              variant="ghost"
+              size="sm"
+              canAct={!readOnly}
+              gateReason="send messages"
+              title={readOnly ? undefined : "Send template"}
+              className="h-9 w-9 shrink-0 p-0 text-muted-foreground hover:text-foreground"
+              onClick={onOpenTemplates}
+            >
+              <LayoutTemplate className="h-4 w-4" />
+            </GatedButton>
+          )}
 
           <textarea
             ref={textareaRef}

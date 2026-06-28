@@ -387,6 +387,13 @@ export function MessageBubble({
             : "rounded-bl-md bg-muted text-foreground",
         )}
       >
+        {/* Grupo (058): nome do participante remetente acima da bolha inbound
+            (estilo WhatsApp). Só aparece em mensagens de cliente com sender_name. */}
+        {!isAgent && message.sender_name && (
+          <p className="mb-0.5 text-xs font-medium text-primary">
+            {message.sender_name}
+          </p>
+        )}
         {reply && (
           <ReplyQuote
             authorLabel={reply.authorLabel}

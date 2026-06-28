@@ -20,6 +20,8 @@ interface MessageActionsProps {
   message: Message;
   onReply: () => void;
   onReact: (emoji: string) => void;
+  /** Reação disponível? false em grupo (058) — Evolution reaction=false. */
+  canReact?: boolean;
   children: ReactNode;
 }
 
@@ -32,6 +34,7 @@ export function MessageActions({
   message,
   onReply,
   onReact,
+  canReact = true,
   children,
 }: MessageActionsProps) {
   // Touch devices have no hover. Long-press fires `contextmenu`; we capture
@@ -103,30 +106,33 @@ export function MessageActions({
           isAgent ? "right-3" : "left-3",
         )}
       >
-        <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
-          <PopoverTrigger
-            className="flex h-5 w-5 items-center justify-center rounded-full text-popover-foreground hover:bg-muted hover:text-foreground"
-            aria-label={t("react")}
-          >
-            <SmilePlus className="h-3.5 w-3.5" />
-          </PopoverTrigger>
-          <PopoverContent
-            className="flex w-auto flex-row gap-1 p-1.5"
-            sideOffset={6}
-          >
-            {QUICK_EMOJIS.map((e) => (
-              <button
-                key={e}
-                type="button"
-                onClick={() => handlePickEmoji(e)}
-                className="flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none transition-transform hover:scale-125 hover:bg-muted"
-                aria-label={`React with ${e}`}
-              >
-                {e}
-              </button>
-            ))}
-          </PopoverContent>
-        </Popover>
+        {/* Reação só quando suportado — escondida em grupo (058). */}
+        {canReact && (
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger
+              className="flex h-5 w-5 items-center justify-center rounded-full text-popover-foreground hover:bg-muted hover:text-foreground"
+              aria-label={t("react")}
+            >
+              <SmilePlus className="h-3.5 w-3.5" />
+            </PopoverTrigger>
+            <PopoverContent
+              className="flex w-auto flex-row gap-1 p-1.5"
+              sideOffset={6}
+            >
+              {QUICK_EMOJIS.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => handlePickEmoji(e)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-lg leading-none transition-transform hover:scale-125 hover:bg-muted"
+                  aria-label={`React with ${e}`}
+                >
+                  {e}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
+        )}
         <button
           type="button"
           onClick={handleReply}

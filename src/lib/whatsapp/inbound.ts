@@ -146,3 +146,61 @@ export async function findOrCreateConversation(
 
   return newConv
 }
+
+// Acha (por chat_id, escopado à conexão) ou cria a conversa de GRUPO (058).
+// Espelha findOrCreateConversation, mas keia por chat_id (@g.us), contact_id
+// NULL e is_group=true. O nome do grupo (best-effort) entra só no create como
+// preview; a UI cai no fallback "Grupo" quando não há.
+export async function findOrCreateGroupConversation(
+  db: SupabaseClient,
+  accountId: string,
+  configOwnerUserId: string,
+  connectionId: string,
+  chatId: string,
+  groupName: string | null,
+) {
+  const { data: existing } = await db
+    .from('conversations')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('connection_id', connectionId)
+    .eq('chat_id', chatId)
+    .eq('is_group', true)
+    .maybeSingle()
+
+  if (existing) return existing
+
+  const { data: created, error: createError } = await db
+    .from('conversations')
+    .insert({
+      account_id: accountId,
+      user_id: configOwnerUserId,
+      connection_id: connectionId,
+      contact_id: null,
+      is_group: true,
+      chat_id: chatId,
+      last_message_text: groupName ? `[grupo] ${groupName}` : null,
+    })
+    .select()
+    .single()
+
+  if (createError) {
+    // Mesma recuperação de race: índice único de grupo (058) rejeita a
+    // duplicata concorrente → re-resolve por chat_id.
+    if (isUniqueViolation(createError)) {
+      const { data: raced } = await db
+        .from('conversations')
+        .select('*')
+        .eq('account_id', accountId)
+        .eq('connection_id', connectionId)
+        .eq('chat_id', chatId)
+        .eq('is_group', true)
+        .maybeSingle()
+      if (raced) return raced
+    }
+    console.error('Error creating group conversation:', createError)
+    return null
+  }
+
+  return created
+}

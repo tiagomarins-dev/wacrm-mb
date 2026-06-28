@@ -370,8 +370,15 @@ export type ConversationStatus = 'open' | 'pending' | 'closed';
 
 export interface Conversation {
   id: string;
+  /** Conta dona da conversa (tenancy, 017). Grupos herdam o account_id. */
+  account_id?: string;
   user_id: string;
-  contact_id: string;
+  /** NULL em conversa de grupo (058): grupo não é 1 contato. */
+  contact_id?: string | null;
+  /** JID do grupo (@g.us) quando is_group (058). */
+  chat_id?: string | null;
+  /** True p/ conversa de grupo Evolution (058). */
+  is_group?: boolean;
   status: ConversationStatus;
   assigned_agent_id?: string;
   last_message_text?: string;
@@ -454,6 +461,8 @@ export interface Message {
   transcription?: string;
   /** Estado da fila de transcrição (migration 046). Só em content_type='audio'. */
   transcription_status?: TranscriptionStatus;
+  /** Nome do participante remetente em conversa de grupo (058). NULL em 1:1. */
+  sender_name?: string | null;
 }
 
 export type ReactionActor = 'customer' | 'agent';

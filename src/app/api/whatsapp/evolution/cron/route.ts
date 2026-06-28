@@ -2,9 +2,13 @@ import { timingSafeEqual, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/broadcast/admin-client'
-import { evoFetchMessages, evoBase64FromMedia } from '@/lib/providers/evolution-api'
+import { evoFetchMessages, evoBase64FromMedia, evoFetchGroupSubject } from '@/lib/providers/evolution-api'
 import { normalizeEvolutionInbound } from '@/lib/providers/evolution-inbound'
-import { findOrCreateContact, findOrCreateConversation } from '@/lib/whatsapp/inbound'
+import {
+  findOrCreateContact,
+  findOrCreateConversation,
+  findOrCreateGroupConversation,
+} from '@/lib/whatsapp/inbound'
 
 // node:crypto + service-role → runtime Node.
 export const runtime = 'nodejs'
@@ -92,17 +96,30 @@ export async function GET(request: Request) {
 
     for (const rec of records) {
       const norm = normalizeEvolutionInbound(rec)
-      // Pula grupo/tipo não suportado, eco próprio (fromMe) e já visto (cursor).
+      // Pula tipo não suportado, eco próprio (fromMe) e já visto (cursor).
       if (!norm || norm.fromMe) continue
       if (cursor && norm.timestamp <= cursor) continue
 
-      const contactOutcome = await findOrCreateContact(
-        admin, conn.account_id, conn.user_id, conn.id, norm.phone, norm.name,
-      )
-      if (!contactOutcome) continue
-      const conversation = await findOrCreateConversation(
-        admin, conn.account_id, conn.user_id, conn.id, contactOutcome.contact.id,
-      )
+      // Grupo (058): conversa por chat_id, sem contato. 1:1 segue o caminho
+      // de contato existente.
+      let conversation
+      if (norm.isGroup && norm.chatId) {
+        // Nome do grupo best-effort (não vem no record); fallback "Grupo" na UI.
+        const groupName = await evoFetchGroupSubject({
+          baseUrl, apiKey, instance: conn.instance_name, groupJid: norm.chatId,
+        })
+        conversation = await findOrCreateGroupConversation(
+          admin, conn.account_id, conn.user_id, conn.id, norm.chatId, groupName,
+        )
+      } else {
+        const contactOutcome = await findOrCreateContact(
+          admin, conn.account_id, conn.user_id, conn.id, norm.phone, norm.name,
+        )
+        if (!contactOutcome) continue
+        conversation = await findOrCreateConversation(
+          admin, conn.account_id, conn.user_id, conn.id, contactOutcome.contact.id,
+        )
+      }
       if (!conversation) continue
 
       // Dedup (idempotência): se a msg já existe nessa conversa, pula.
@@ -133,6 +150,8 @@ export async function GET(request: Request) {
       const { error: insErr } = await admin.from('messages').insert({
         conversation_id: conversation.id,
         sender_type: 'customer',
+        // Grupo: nome do participante remetente (058); NULL em 1:1.
+        sender_name: norm.senderName,
         content_type: norm.contentType,
         content_text: norm.contentText,
         media_url: mediaUrl,

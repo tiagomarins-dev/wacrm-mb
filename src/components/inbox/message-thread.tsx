@@ -29,6 +29,7 @@ import {
   PanelRightClose,
   FileText,
   Hash,
+  Users,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,7 @@ import { buildReplyPreview } from "./reply-quote";
 import { resolveAssignee } from "@/lib/inbox/assignee";
 import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
 import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
+import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { toast } from "sonner";
 
 interface ReplyDraft {
@@ -895,7 +897,8 @@ export function MessageThread({
   // Empty state — same WhatsApp-style doodle background as the active
   // thread below, so swapping between empty/selected doesn't change the
   // pattern under the user's eye.
-  if (!conversation || !contact) {
+  // Grupo (058) não tem contato — só exige conversa. 1:1 exige contato.
+  if (!conversation || (!contact && !conversation.is_group)) {
     return (
       <div className={cn("flex flex-1 flex-col items-center justify-center", DOODLE_BG_CLASSES)}>
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
@@ -911,7 +914,11 @@ export function MessageThread({
     );
   }
 
-  const displayName = contact.name || contact.phone;
+  // Grupo (058): título via helper (sem contato); subtítulo "Grupo".
+  const isGroup = Boolean(conversation.is_group);
+  const displayName = isGroup
+    ? conversationTitle(conversation)
+    : contact!.name || contact!.phone;
   const messageGroups = groupThreadByDate(merged);
 
   // Soft gate: conversa atribuída a OUTRO humano → composer força "Assumir" antes
@@ -960,11 +967,17 @@ export function MessageThread({
             </button>
           )}
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-            {displayName.charAt(0).toUpperCase()}
+            {isGroup ? (
+              <Users className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              displayName.charAt(0).toUpperCase()
+            )}
           </div>
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
-            <p className="truncate text-xs text-muted-foreground">{contact.phone}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {isGroup ? "Grupo" : contact!.phone}
+            </p>
           </div>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
@@ -1219,6 +1232,7 @@ export function MessageThread({
                       <MessageActions
                         key={msg.id}
                         message={msg}
+                        canReact={!isGroup}
                         onReply={() => handleStartReply(msg)}
                         onReact={(emoji) => {
                           if (emoji) void postReaction(msg.id, emoji);
@@ -1251,6 +1265,7 @@ export function MessageThread({
         replyTo={replyTo}
         onClearReply={() => setReplyTo(null)}
         contact={contact}
+        isGroup={isGroup}
         quickReplies={quickReplies}
         assignedToOtherHuman={assignedToOtherHuman}
         assigneeName={assigneeName}
