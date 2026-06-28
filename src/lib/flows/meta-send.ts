@@ -1,13 +1,10 @@
 import {
-  sendInteractiveButtons,
-  sendInteractiveList,
-  sendMediaMessage,
-  sendTextMessage,
   type InteractiveButton,
   type InteractiveListSection,
   type MediaKind,
 } from '@/lib/whatsapp/meta-api'
 import { decrypt } from '@/lib/whatsapp/encryption'
+import { createMessageProvider } from '@/lib/providers/factory'
 import {
   sanitizePhoneForMeta,
   isValidE164,
@@ -87,11 +84,11 @@ export async function engineSendText(
   )
 
   const accessToken = decrypt(config.access_token)
+  // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
+  const provider = createMessageProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendTextMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendText({
       to: phone,
       text: args.text,
     })
@@ -195,11 +192,11 @@ export async function engineSendMedia(
   )
 
   const accessToken = decrypt(config.access_token)
+  // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
+  const provider = createMessageProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
-    const r = await sendMediaMessage({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendMedia({
       to: phone,
       kind: args.kind,
       link: args.link,
@@ -345,12 +342,12 @@ async function sendInteractiveViaMeta(
   )
 
   const accessToken = decrypt(config.access_token)
+  // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
+  const provider = createMessageProvider(config, accessToken)
 
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'buttons') {
-      const r = await sendInteractiveButtons({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const r = await provider.sendInteractiveButtons({
         to: phone,
         bodyText: input.bodyText,
         buttons: input.buttons,
@@ -359,9 +356,7 @@ async function sendInteractiveViaMeta(
       })
       return r.messageId
     }
-    const r = await sendInteractiveList({
-      phoneNumberId: config.phone_number_id,
-      accessToken,
+    const r = await provider.sendInteractiveList({
       to: phone,
       bodyText: input.bodyText,
       buttonLabel: input.buttonLabel,

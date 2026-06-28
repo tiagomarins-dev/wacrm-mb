@@ -1,14 +1,10 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import {
-  sendTextMessage,
-  sendTemplateMessage,
-  sendMediaMessage,
-  type MediaKind,
-} from '@/lib/whatsapp/meta-api'
+import { type MediaKind } from '@/lib/whatsapp/meta-api'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import { createMessageProvider } from '@/lib/providers/factory'
 import { dispatchTranscription } from '@/lib/transcription/dispatch'
 import {
   sanitizePhoneForMeta,
@@ -276,11 +272,13 @@ export async function POST(request: Request) {
       templateRow = (data as MessageTemplate | null) ?? null
     }
 
+    // Roteia o envio pelo provider da conexão (Fase B). MetaAdapter
+    // repassa os args p/ meta-api.ts — wire idêntico ao envio direto.
+    const provider = createMessageProvider(config, accessToken)
+
     const attempt = async (phone: string): Promise<string> => {
       if (message_type === 'template') {
-        const result = await sendTemplateMessage({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
+        const result = await provider.sendTemplate({
           to: phone,
           templateName: template_name,
           language: template_language || 'en_US',
@@ -297,9 +295,7 @@ export async function POST(request: Request) {
         // content_text doubles as the caption (ignored for audio inside
         // sendMediaMessage). filename surfaces in the recipient's chat
         // for documents only.
-        const result = await sendMediaMessage({
-          phoneNumberId: config.phone_number_id,
-          accessToken,
+        const result = await provider.sendMedia({
           to: phone,
           kind: message_type as MediaKind,
           link: media_url,
@@ -309,9 +305,7 @@ export async function POST(request: Request) {
         })
         return result.messageId
       }
-      const result = await sendTextMessage({
-        phoneNumberId: config.phone_number_id,
-        accessToken,
+      const result = await provider.sendText({
         to: phone,
         text: content_text,
         contextMessageId,

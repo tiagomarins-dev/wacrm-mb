@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Loader2, PlugZap, Save } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
+import { connectionLabel } from '@/lib/connections/label';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,6 +23,7 @@ import {
 interface ConnRow {
   connection_id: string;
   phone_number_id: string | null;
+  label: string | null; // apelido (055) — preferido no rótulo de exibição
   is_primary: boolean;
   enabled: boolean;
   debounce_seconds: number;
@@ -47,7 +49,7 @@ export function AiConnectionConfig() {
     setLoading(true);
     const [cfgRes, connRes] = await Promise.all([
       supabase.from('ai_agent_config').select('connection_id, enabled, debounce_seconds, allowed_phones, auto_unassign_minutes'),
-      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary'),
+      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary, label'),
     ]);
     if (cfgRes.error) {
       toast.error(t('loadError'));
@@ -55,7 +57,7 @@ export function AiConnectionConfig() {
       return;
     }
     const conns =
-      (connRes.data as { id: string; phone_number_id: string | null; is_primary: boolean }[] | null) ?? [];
+      (connRes.data as { id: string; phone_number_id: string | null; is_primary: boolean; label: string | null }[] | null) ?? [];
     // Indexa o config por conexão e monta UMA linha por conexão (whatsapp_config),
     // não só pelas que já têm config — pra toda conexão ser editável (save = upsert).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -65,6 +67,7 @@ export function AiConnectionConfig() {
       return {
         connection_id: conn.id,
         phone_number_id: conn.phone_number_id ?? null,
+        label: conn.label ?? null,
         is_primary: conn.is_primary ?? false,
         enabled: c?.enabled ?? false,
         debounce_seconds: c?.debounce_seconds ?? 12,
@@ -144,7 +147,7 @@ export function AiConnectionConfig() {
             <div key={r.connection_id} className="space-y-3 rounded-lg border border-border bg-muted/30 p-4">
               <div className="flex items-center justify-between">
                 <p className="font-mono text-sm text-foreground">
-                  {r.phone_number_id ?? r.connection_id}
+                  {connectionLabel(r)}
                   {r.is_primary && (
                     <span className="ml-2 rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                       {t('connPrimary')}

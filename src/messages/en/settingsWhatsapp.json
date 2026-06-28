@@ -59,6 +59,8 @@
     "editTitle": "Edit connection",
     "title": "API Credentials",
     "description": "Enter your Meta WhatsApp Business API credentials.",
+    "labelLabel": "Connection nickname",
+    "labelPlaceholder": "e.g. Primary, Sales, Support",
     "phoneNumberIdLabel": "Phone Number ID",
     "phoneNumberIdPlaceholder": "e.g. 100234567890123",
     "wabaIdLabel": "WhatsApp Business Account ID",

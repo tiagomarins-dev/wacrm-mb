@@ -59,6 +59,8 @@
     "editTitle": "Editar conexão",
     "title": "Credenciais da API",
     "description": "Insira suas credenciais da API do WhatsApp Business da Meta.",
+    "labelLabel": "Apelido da conexão",
+    "labelPlaceholder": "ex.: Principal, Vendas, Suporte",
     "phoneNumberIdLabel": "ID do número de telefone",
     "phoneNumberIdPlaceholder": "ex.: 100234567890123",
     "wabaIdLabel": "ID da conta do WhatsApp Business",

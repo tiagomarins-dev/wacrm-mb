@@ -70,6 +70,8 @@ export function WhatsAppConfig() {
   const [accessToken, setAccessToken] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
   const [pin, setPin] = useState('');
+  // Apelido da conexão (055) — rótulo exibido no dropdown/cards.
+  const [label, setLabel] = useState('');
   const [tokenEdited, setTokenEdited] = useState(false);
 
   // True once /register has succeeded on Meta's side (timestamp set
@@ -103,11 +105,13 @@ export function WhatsAppConfig() {
       setPhoneNumberId(row.phone_number_id || '');
       setWabaId(row.waba_id || '');
       setAccessToken(MASKED_TOKEN);
+      setLabel(row.label || '');
     } else {
       setConfig(null);
       setPhoneNumberId('');
       setWabaId('');
       setAccessToken('');
+      setLabel('');
     }
     setVerifyToken('');
     setPin('');
@@ -228,6 +232,8 @@ export function WhatsAppConfig() {
         connection_id: selectedId ?? undefined,
         phone_number_id: phoneNumberId.trim(),
         waba_id: wabaId.trim() || null,
+        // Apelido (055) — opcional; null vira fallback no phone_number_id.
+        label: label.trim() || null,
         verify_token: verifyToken.trim() || null,
         // Optional — only sent when the user filled it in. The server
         // requires it on first save or when changing numbers; for a
@@ -639,6 +645,17 @@ export function WhatsAppConfig() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Apelido amigável — vira o rótulo no dropdown/cards (helper connectionLabel) */}
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">{t('credentials.labelLabel')}</Label>
+              <Input
+                placeholder={t('credentials.labelPlaceholder')}
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label className="text-muted-foreground">{t('credentials.phoneNumberIdLabel')}</Label>
               <Input

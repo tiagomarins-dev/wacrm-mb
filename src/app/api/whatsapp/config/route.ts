@@ -191,7 +191,7 @@ export async function POST(request: Request) {
     const body = await request.json()
     // `connection_id` (multi-número, 033): quando presente, edita ESSA
     // conexão; quando ausente, cria uma nova conexão para a conta.
-    const { connection_id, phone_number_id, waba_id, access_token, verify_token, pin } = body
+    const { connection_id, phone_number_id, waba_id, access_token, verify_token, pin, label } = body
 
     if (!access_token || !phone_number_id) {
       return NextResponse.json(
@@ -370,6 +370,8 @@ export async function POST(request: Request) {
     const baseRow = {
       phone_number_id,
       waba_id: waba_id || null,
+      // Apelido (055) — opcional; reusado no INSERT e no UPDATE via baseRow.
+      label: (typeof label === 'string' ? label.trim() : '') || null,
       access_token: encryptedAccessToken,
       verify_token: encryptedVerifyToken,
       status: registrationError ? 'disconnected' : 'connected',

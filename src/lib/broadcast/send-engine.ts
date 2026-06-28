@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
+import { capabilitiesFor } from '@/lib/providers/types'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import { sendRecipients, type BroadcastRecipientInput } from './send-batch'
 import {
@@ -92,6 +93,19 @@ export async function drainBroadcast(
       await admin
         .from('broadcast_recipients')
         .update({ status: 'failed', error_message: 'Failed to decrypt access token' })
+        .in('id', batch.map((r) => r.id))
+    }
+    await admin.from('broadcasts').update({ status: 'failed' }).eq('id', broadcast.id)
+    return { sent: 0, failed: batch.length, hasMore: false, finalized: true }
+  }
+
+  // Broadcast em massa é capability só do Meta (Evolution não dispara em
+  // massa — risco de ban). Conexão sem essa capability falha o lote.
+  if (!capabilitiesFor(config.provider).massBroadcast) {
+    if (batch.length > 0) {
+      await admin
+        .from('broadcast_recipients')
+        .update({ status: 'failed', error_message: 'Broadcast em massa não suportado neste provedor' })
         .in('id', batch.map((r) => r.id))
     }
     await admin.from('broadcasts').update({ status: 'failed' }).eq('id', broadcast.id)

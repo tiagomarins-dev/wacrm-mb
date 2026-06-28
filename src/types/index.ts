@@ -500,6 +500,17 @@ export interface WhatsAppConfig {
   subscribed_apps_at?: string;
   /** Last error from /register; cleared on success. */
   last_registration_error?: string;
+  /** Apelido amigável da conexão (055). NULL → UI cai no fallback
+   *  phone_number_id (helper connectionLabel). */
+  label?: string | null;
+  /** Provedor da conexão (056). 'meta' (Cloud API oficial) ou 'evolution'
+   *  (WhatsApp Web não-oficial, fase C). Ausente em linhas muito antigas
+   *  → factory trata como 'meta'. */
+  provider?: 'meta' | 'evolution';
+  /** Nome da instância Evolution (fase C). NULL p/ meta. */
+  instance_name?: string | null;
+  /** Base URL da Evolution por-conexão (fase C); senão usa EVOLUTION_API_URL. */
+  evolution_base_url?: string | null;
 }
 
 // Raw Meta status enum. We persist this verbatim from Meta (sync + webhook)
