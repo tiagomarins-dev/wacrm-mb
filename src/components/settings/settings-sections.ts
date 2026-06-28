@@ -1,5 +1,6 @@
 import {
   Bot,
+  Clock,
   Coins,
   FileText,
   LayoutGrid,
@@ -34,6 +35,7 @@ export const SETTINGS_SECTIONS = [
   'integrations',
   'lead-score',
   'ai-agent',
+  'business-hours',
   'fields',
   'deals',
   'members',
@@ -65,6 +67,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   integrations: { id: 'integrations', labelKey: 'integrations', icon: Zap, group: 'workspace', adminOnly: true },
   'lead-score': { id: 'lead-score', labelKey: 'leadScore', icon: TrendingUp, group: 'workspace', adminOnly: true },
   'ai-agent': { id: 'ai-agent', labelKey: 'aiAgent', icon: Bot, group: 'workspace', adminOnly: true },
+  'business-hours': { id: 'business-hours', labelKey: 'businessHours', icon: Clock, group: 'workspace', adminOnly: true },
   fields: { id: 'fields', labelKey: 'fields', icon: Tags, group: 'workspace' },
   deals: { id: 'deals', labelKey: 'deals', icon: Coins, group: 'workspace' },
   members: { id: 'members', labelKey: 'members', icon: UsersRound, group: 'workspace' },

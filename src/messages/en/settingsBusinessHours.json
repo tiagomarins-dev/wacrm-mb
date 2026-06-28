@@ -1,0 +1,22 @@
+{
+  "title": "Business hours",
+  "desc": "Set working hours per connection. Response-time reports subtract time outside these windows.",
+  "primary": "Primary",
+  "timezone": "Timezone",
+  "enabled": "Open",
+  "open": "Opens",
+  "close": "Closes",
+  "save": "Save",
+  "saved": "Hours saved",
+  "loadError": "Failed to load",
+  "saveError": "Failed to save",
+  "adminOnly": "Only admins can edit",
+  "empty": "No WhatsApp connection.",
+  "dow0": "Sunday",
+  "dow1": "Monday",
+  "dow2": "Tuesday",
+  "dow3": "Wednesday",
+  "dow4": "Thursday",
+  "dow5": "Friday",
+  "dow6": "Saturday"
+}

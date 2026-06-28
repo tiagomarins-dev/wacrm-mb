@@ -1,0 +1,22 @@
+{
+  "title": "Horário de atendimento",
+  "desc": "Defina o expediente por conexão. Os relatórios de tempo de resposta descontam o tempo fora destas janelas.",
+  "primary": "Principal",
+  "timezone": "Fuso horário",
+  "enabled": "Aberto",
+  "open": "Abre",
+  "close": "Fecha",
+  "save": "Salvar",
+  "saved": "Horário salvo",
+  "loadError": "Falha ao carregar",
+  "saveError": "Falha ao salvar",
+  "adminOnly": "Apenas administradores podem editar",
+  "empty": "Nenhuma conexão de WhatsApp.",
+  "dow0": "Domingo",
+  "dow1": "Segunda",
+  "dow2": "Terça",
+  "dow3": "Quarta",
+  "dow4": "Quinta",
+  "dow5": "Sexta",
+  "dow6": "Sábado"
+}

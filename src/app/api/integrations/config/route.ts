@@ -23,6 +23,8 @@ interface ConfigRow {
   transcription_model: string | null
   transcription_fallback_model: string | null
   transcription_format_model: string | null
+  // Janela de atribuição de venda em dias (Fase 2).
+  mb_attribution_window_days: number | null
 }
 
 function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
@@ -39,6 +41,7 @@ function toPublic(row: ConfigRow | null): IntegrationsConfigPublic {
     transcription_model: row?.transcription_model ?? null,
     transcription_fallback_model: row?.transcription_fallback_model ?? null,
     transcription_format_model: row?.transcription_format_model ?? null,
+    mb_attribution_window_days: row?.mb_attribution_window_days ?? 30,
   }
 }
 
@@ -81,6 +84,20 @@ export async function POST(request: Request) {
       return v ? encrypt(v) : currentEnc
     }
 
+    // Janela de atribuição: aceita int 1..365 quando enviado; ausente = mantém atual.
+    const windowField = (incoming: unknown, current: number): number | 'invalid' => {
+      if (incoming === undefined || incoming === null) return current
+      if (typeof incoming === 'number' && Number.isInteger(incoming) && incoming >= 1 && incoming <= 365) return incoming
+      return 'invalid'
+    }
+    const mbWindow = windowField(body.mb_attribution_window_days, cur?.mb_attribution_window_days ?? 30)
+    if (mbWindow === 'invalid') {
+      return NextResponse.json(
+        { error: 'Janela de atribuição deve ser um inteiro entre 1 e 365.' },
+        { status: 400 },
+      )
+    }
+
     const payload = {
       account_id: ctx.accountId,
       openrouter_api_key: tokenField(body.openrouter_api_key, cur?.openrouter_api_key ?? null),
@@ -98,6 +115,7 @@ export async function POST(request: Request) {
       transcription_model: str(body.transcription_model),
       transcription_fallback_model: str(body.transcription_fallback_model),
       transcription_format_model: str(body.transcription_format_model),
+      mb_attribution_window_days: mbWindow,
     }
 
     // Validação leve: token sem o campo-companheiro não adianta.

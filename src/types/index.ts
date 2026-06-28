@@ -178,6 +178,8 @@ export interface IntegrationsConfigPublic {
   transcription_model: string | null;
   transcription_fallback_model: string | null;
   transcription_format_model: string | null;
+  /** Janela de atribuição de venda em dias (Fase 2; default 30). */
+  mb_attribution_window_days: number;
 }
 
 // ============================================================
@@ -822,4 +824,89 @@ export interface AutomationLog {
   error_message?: string | null;
   created_at: string;
   contact?: Contact;
+}
+
+// ── Relatórios de atendimento (Fase 1) ──────────────────────
+// Horário de atendimento por conexão (mig 049). dow 0=dom..6=sáb; open/close 'HH:MM'.
+export type BusinessScheduleEntry = { dow: number; enabled: boolean; open: string; close: string };
+export interface BusinessHours {
+  id: string;
+  account_id: string;
+  connection_id: string;
+  timezone: string;
+  schedule: BusinessScheduleEntry[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Retorno da RPC agent_response_time (FRT/ART em minutos, clipado ao horário).
+export interface AgentResponseTime {
+  agent_id: string;
+  frt_median: number | null;
+  frt_avg: number | null;
+  art_median: number | null;
+  art_avg: number | null;
+  samples: number;
+}
+
+// Retorno da RPC agent_volume.
+export interface AgentVolume {
+  agent_id: string;
+  conversas_atendidas: number;
+  msgs_enviadas: number;
+  transferencias: number;
+  handoffs_ia: number;
+}
+
+// Operador no dropdown do relatório (admin).
+export interface ReportMember {
+  user_id: string;
+  full_name: string | null;
+  account_role: AccountRole;
+}
+
+// Vendas atribuídas por atendente (RPC agent_sales — Fase 2).
+export interface AgentSales {
+  agent_id: string;
+  vendas: number;
+}
+
+// Curso da MB marcável como pago (conta como venda) — Fase 2.
+export interface MbPaidCourse {
+  id_curso: number;
+  nome_curso: string | null;
+  enabled: boolean;
+}
+
+// ── Inteligência de relatórios (Fase 3) ─────────────────────
+export type SaleType = 'ativa' | 'passiva';
+export type IntentLabel = 'vendas' | 'suporte' | 'outro';
+
+// Retorno da RPC report_coverage (cobertura de match MB + classificação).
+export interface ReportCoverage {
+  matched: number;
+  no_match: number;
+  ambiguous: number;
+  convs_total: number;
+  convs_classified: number;
+}
+
+// Linha da RPC report_attributed_sales (lista admin p/ override).
+export interface AttributedSaleRow {
+  id: string;
+  contact_name: string | null;
+  nome_curso: string | null;
+  atendente_id: string | null;
+  data_matricula: string;
+  status: string;
+  confidence: string;
+  sale_type: SaleType | null;
+}
+
+// Corpo do POST /api/reports/override.
+export interface OverrideBody {
+  sale_id: string;
+  action: 'cancel' | 'reassign';
+  new_agent_id?: string;
+  reason?: string;
 }
