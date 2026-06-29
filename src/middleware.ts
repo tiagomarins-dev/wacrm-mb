@@ -60,9 +60,15 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // API routes that need auth (not webhooks)
-  if (!user && request.nextUrl.pathname.startsWith('/api/whatsapp/') &&
-      !request.nextUrl.pathname.includes('/webhook')) {
+  // API routes that need auth (not webhooks, not o cron de inbound Evolution).
+  // Allowlist ANCORADA por caminho exato (não substring): só estas duas rotas
+  // ficam isentas da sessão. O webhook valida assinatura Meta; o cron valida
+  // x-cron-secret (constant-time). Substring solta deixaria
+  // `/api/whatsapp/evolution/cron-qualquer` furar a auth.
+  const p = request.nextUrl.pathname
+  const isWebhook = p === '/api/whatsapp/webhook' || p.startsWith('/api/whatsapp/webhook/')
+  const isEvolutionCron = p === '/api/whatsapp/evolution/cron'
+  if (!user && p.startsWith('/api/whatsapp/') && !isWebhook && !isEvolutionCron) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
