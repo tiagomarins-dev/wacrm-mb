@@ -501,7 +501,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       // Roda o agente inline. id='' é seguro: runAiAgentForConversation NÃO usa
       // row.id (a telemetria grava por account/connection/conversation/contact/
       // profile — sem FK p/ ai_agent_pending).
-      await runAiAgentForConversation({
+      const agentStatus = await runAiAgentForConversation({
         id: '',
         account_id: args.automation.account_id,
         connection_id: connectionId,
@@ -514,7 +514,9 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
       // Safeguard anti-duplo-envio: cancela um run do agente AINDA ENFILEIRADO pelo
       // dispatch normal do mesmo inbound. NÃO aborta um run já drenado/em execução.
       await db.from('ai_agent_pending').delete().eq('conversation_id', conversationId)
-      return 'ai reply enviado'
+      // Detalhe HONESTO: reflete o desfecho real do agente (ok/blocked/skipped:*),
+      // não uma string fixa — o log do step deixa de mascarar no-ops.
+      return `ai_reply: ${agentStatus}`
     }
 
     case 'update_contact_field': {

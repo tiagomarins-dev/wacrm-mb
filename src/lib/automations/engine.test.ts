@@ -14,6 +14,7 @@ const h = vi.hoisted(() => ({
     // ai_reply: conversa devolvida pelo lookup de connection_id + deletes capturados.
     conversation: null as Record<string, unknown> | null,
     deletes: [] as { table: string; filters: [string, string, unknown][] }[],
+    logs: [] as unknown[],
   },
 }));
 
@@ -59,8 +60,9 @@ vi.mock("./admin-client", () => {
     }
     if (table === "automations") return { data: state.automations, error: null };
     if (table === "automation_logs") {
-      if (type === "insert") return { data: { id: "log1" }, error: null };
-      if (type === "update") return { data: null, error: null };
+      // Captura insert+update p/ asserir o steps_executed (detail honesto do ai_reply).
+      if (type === "insert") { state.logs.push(ops.payload); return { data: { id: "log1" }, error: null }; }
+      if (type === "update") { state.logs.push(ops.payload); return { data: null, error: null }; }
       return { data: { steps_executed: [], status: "success" }, error: null };
     }
     if (table === "automation_steps") return { data: state.steps, error: null };
@@ -111,7 +113,7 @@ vi.mock("./meta-send", () => ({
 
 // Engine do agente + gate de perfil mockados — o step ai_reply só os orquestra.
 vi.mock("@/lib/ai-agent/engine", () => ({
-  runAiAgentForConversation: vi.fn(async () => {}),
+  runAiAgentForConversation: vi.fn(async () => "ok"),
 }));
 vi.mock("@/lib/ai-agent/dispatch", () => ({
   resolveAssignedProfile: vi.fn(async () => null),
@@ -133,6 +135,7 @@ beforeEach(() => {
   h.state.upsertCalls = [];
   h.state.conversation = null;
   h.state.deletes = [];
+  h.state.logs = [];
   vi.mocked(runAiAgentForConversation).mockClear();
   vi.mocked(resolveAssignedProfile).mockResolvedValue(null);
 });
@@ -342,6 +345,27 @@ describe("ai_reply step", () => {
       "conversation_id",
       "conv-1",
     ]);
+  });
+
+  it("loga o desfecho REAL do agente no detail do step (R3 — log honesto)", async () => {
+    setup();
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+    // Agente no-opa por falta de config → desfecho 'skipped:disabled'.
+    vi.mocked(runAiAgentForConversation).mockResolvedValueOnce("skipped:disabled" as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    // O steps_executed (no insert ou update do log) carrega o detail honesto.
+    const stepDetails = h.state.logs
+      .flatMap((l) => ((l as { steps_executed?: { detail?: string }[] })?.steps_executed) ?? [])
+      .map((s) => s.detail);
+    expect(stepDetails).toContain("ai_reply: skipped:disabled");
+    expect(stepDetails).not.toContain("ai reply enviado");
   });
 
   it("NÃO chama o agente quando a conversa não está atribuída a um perfil de IA", async () => {
