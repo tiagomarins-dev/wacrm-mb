@@ -301,7 +301,7 @@ describe('runAiAgentForConversation', () => {
     const { db } = makeDb(baseTables(), { insertThrows: true })
     holder.db = db
     vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: 'vendas', handoff: null, telemetry: TEL })
-    await expect(runAiAgentForConversation(row)).resolves.toBeUndefined()
+    await expect(runAiAgentForConversation(row)).resolves.toBe('ok')
     expect(engineSendText).toHaveBeenCalledTimes(1)
   })
 })
@@ -314,6 +314,65 @@ describe('extractStudentCourses', () => {
   it('não aluno / payload sem cursos → []', () => {
     expect(extractStudentCourses(null)).toEqual([])
     expect(extractStudentCourses({ payload: { aluno: {} } })).toEqual([])
+  })
+})
+
+// R3: o retorno (desfecho) é o que o passo ai_reply loga — assertar o VALOR,
+// não só os efeitos colaterais.
+describe('runAiAgentForConversation — desfecho retornado (R3)', () => {
+  it('sem perfil atribuído → skipped:no_profile', async () => {
+    vi.mocked(resolveAssignedProfile).mockReset()
+    vi.mocked(resolveAssignedProfile).mockResolvedValue(null)
+    holder.db = makeDb(baseTables()).db
+    expect(await runAiAgentForConversation(row)).toBe('skipped:no_profile')
+  })
+
+  it('config ausente/desabilitada → skipped:disabled', async () => {
+    const t = baseTables()
+    t.ai_agent_config = { ...t.ai_agent_config, enabled: false }
+    holder.db = makeDb(t).db
+    expect(await runAiAgentForConversation(row)).toBe('skipped:disabled')
+  })
+
+  it('sem histórico → skipped:no_history', async () => {
+    const t = baseTables()
+    t.messages = []
+    holder.db = makeDb(t).db
+    expect(await runAiAgentForConversation(row)).toBe('skipped:no_history')
+  })
+
+  it('loop LLM lança → error', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockRejectedValue(new Error('OpenRouter key ausente'))
+    expect(await runAiAgentForConversation(row)).toBe('error')
+  })
+
+  it('reatribuíram no meio (recheck) → superseded', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    vi.mocked(resolveAssignedProfile).mockReset()
+    vi.mocked(resolveAssignedProfile).mockResolvedValueOnce(PROFILE).mockResolvedValueOnce(null)
+    expect(await runAiAgentForConversation(row)).toBe('superseded')
+  })
+
+  it('caminho feliz → ok', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'Você pode comprar agora', topic: 'vendas', handoff: null, telemetry: TEL })
+    expect(await runAiAgentForConversation(row)).toBe('ok')
+  })
+
+  it('contato fora da allowlist → blocked', async () => {
+    const t = baseTables()
+    t.ai_agent_config = { ...t.ai_agent_config, allowed_phones: ['5511999999999'] }
+    holder.db = makeDb(t).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    expect(await runAiAgentForConversation(row)).toBe('blocked')
+  })
+
+  it('reply null → no_reply', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: null, topic: null, handoff: null, telemetry: TEL })
+    expect(await runAiAgentForConversation(row)).toBe('no_reply')
   })
 })
 

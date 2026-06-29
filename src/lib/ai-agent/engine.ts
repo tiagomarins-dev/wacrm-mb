@@ -31,15 +31,23 @@ export interface PendingRow {
   opening?: boolean
 }
 
+// Desfecho de uma execução do agente — retornado p/ o chamador logar o
+// resultado REAL (o passo ai_reply antes gravava string fixa, mascarando
+// no-ops). Espelha o enum de status da telemetria + os early-returns que
+// saem antes de gravar run.
+export type AiAgentOutcome =
+  | 'ok' | 'no_reply' | 'blocked' | 'error' | 'superseded'
+  | 'skipped:no_profile' | 'skipped:disabled' | 'skipped:no_history'
+
 // Executa o agente p/ uma conversa: monta contexto, roda o loop, aplica
-// guardrail, recheca controle humano e envia a resposta.
-export async function runAiAgentForConversation(row: PendingRow): Promise<void> {
+// guardrail, recheca controle humano e envia a resposta. Retorna o desfecho.
+export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgentOutcome> {
   const db = supabaseAdmin()
 
   // Perfil de IA responsável pela conversa — persona/modelo/tools/handoff vêm
   // DELE. null = não há perfil ativo atribuído (humano/órfão) → não atua.
   const profile = await resolveAssignedProfile(db, row.account_id, row.conversation_id)
-  if (!profile) return
+  if (!profile) return 'skipped:no_profile'
   const profileId = profile.id // capturado p/ o recheck (M1)
 
   // Config por conexão: só o kill-switch + allowlist (compartilhados entre os
@@ -51,11 +59,11 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
     .eq('connection_id', row.connection_id)
     .maybeSingle()
   const cfg = cfgRow as Pick<AiAgentConfig, 'enabled' | 'allowed_phones'> | null
-  if (!cfg?.enabled) return
+  if (!cfg?.enabled) return 'skipped:disabled'
 
   // Histórico recente (chat) + se é aluno (student_info) → sinal de roteamento.
   const messages = await serializeRecentMessages(db, row.conversation_id)
-  if (messages.length === 0) return // nada a responder
+  if (messages.length === 0) return 'skipped:no_history' // nada a responder
 
   // Refresca o "digitando..." agora que o engine assumiu (cobre o tempo do LLM).
   if (row.last_inbound_message_id) {
@@ -166,7 +174,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
     // Falha antes/durante o loop sem telemetria (ex.: chave OpenRouter ausente).
     console.error('[ai_agent] loop failed:', err instanceof Error ? err.message : err)
     await recordAgentRun(db, buildRun('error', { error_phase: 'auth' }))
-    return
+    return 'error'
   }
 
   // RECHECK (M1): a conversa ainda é do MESMO perfil que iniciou o run? Se um
@@ -176,7 +184,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
   const still = await resolveAssignedProfile(db, row.account_id, row.conversation_id)
   if (still?.id !== profileId) {
     await recordAgentRun(db, buildRun('superseded'))
-    return
+    return 'superseded'
   }
 
   // ABERTURA: na 1ª resposta a IA não transfere (mesmo que o loop tenha pedido).
@@ -279,6 +287,8 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<void> 
       handoff: !!result.handoff,
     }),
   )
+  // Desfecho real (ok/no_reply/blocked/error) p/ o chamador logar.
+  return status
 }
 
 // Divide a resposta do bot em mensagens separadas (bolhas do WhatsApp), quebrando
