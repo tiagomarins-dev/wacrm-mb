@@ -89,7 +89,7 @@ describe('runAgentLoop', () => {
   })
 
   it('erro HTTP do OpenRouter → encerra sem reply', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ error: { message: 'messages: roles must alternate' } }) })
     vi.stubGlobal('fetch', fetchMock)
     const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
     expect(r.reply).toBeNull()
@@ -124,12 +124,17 @@ describe('runAgentLoop', () => {
     expect(r.telemetry.toolsUsed).toContain('get_curso')
   })
 
-  it('erro HTTP → telemetry.error.phase=llm (sem body cru)', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({}) })
+  it('erro HTTP → telemetry.error.phase=llm; razão NÃO vaza p/ telemetria (PII-safe)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 500,
+      json: async () => ({ error: { message: 'messages: roles must alternate' } }),
+    })
     vi.stubGlobal('fetch', fetchMock)
     const r = await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' })))
     expect(r.telemetry.error?.phase).toBe('llm')
+    // Só o status na telemetria — a reason fica só no console (PII-safe).
     expect(r.telemetry.error?.message).toBe('OpenRouter 500')
+    expect(r.telemetry.error?.message).not.toContain('roles must alternate')
   })
 
   it('resposta sem usage → tokens null sem crash', async () => {

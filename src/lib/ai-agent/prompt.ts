@@ -182,8 +182,34 @@ export async function serializeRecentMessages(
   }
   // Veio em ordem decrescente p/ pegar as N mais recentes; reinverte p/ cronológica.
   const rows = (data as DbMessage[]).slice().reverse()
-  return rows.map((m) => ({
-    role: m.sender_type === 'customer' ? 'user' : 'assistant',
-    content: bodyOf(m),
-  }))
+  return coalesceHistory(
+    rows.map((m) => ({
+      role: m.sender_type === 'customer' ? 'user' : 'assistant',
+      content: bodyOf(m),
+    })),
+  )
+}
+
+// Normaliza o histórico p/ provedores estritos (Anthropic via OpenRouter):
+// (1) descarta conteúdo vazio; (2) dropa o PREFIXO que não seja 'user' (a 1ª
+// mensagem após o system tem que ser do usuário); (3) mescla mensagens
+// CONSECUTIVAS do mesmo papel juntando o texto (multi-bolha do bot vira 1 turn
+// assistant); (4) dropa o SUFIXO non-user (a IA vai gerar o assistant → o
+// histórico termina no turno do usuário). Sem isso, 'assistant' adjacentes ou
+// sufixo assistant → 400 da Anthropic. Histórico sem nenhum 'user' → [] (o
+// engine trata como skipped:no_history).
+export function coalesceHistory(msgs: ChatMsg[]): ChatMsg[] {
+  const out: ChatMsg[] = []
+  for (const m of msgs) {
+    if (!m.content || !m.content.trim()) continue            // (1) vazio
+    if (out.length === 0 && m.role !== 'user') continue       // (2) prefixo non-user
+    const prev = out[out.length - 1]
+    if (prev && prev.role === m.role) {
+      prev.content = `${prev.content}\n${m.content}`           // (3) mescla consecutivos
+    } else {
+      out.push({ role: m.role, content: m.content })
+    }
+  }
+  while (out.length && out[out.length - 1].role !== 'user') out.pop() // (4) termina em user
+  return out
 }

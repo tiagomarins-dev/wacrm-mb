@@ -117,7 +117,14 @@ export async function runAgentLoop(
       tel.requests++
       tel.llmMs += Date.now() - t0
       if (!res.ok) {
-        console.error('[ai_agent] OpenRouter error', res.status)
+        // Razão NOMEADA (PII-safe): o body de erro da OpenRouter pode ecoar o
+        // array messages (PID do aluno) → nunca dumpar cru. Só error.message,
+        // truncado. A telemetria NÃO recebe a razão (mantém PII-safe).
+        const reason = await res
+          .json()
+          .then((b) => (b as { error?: { message?: string } })?.error?.message ?? null)
+          .catch(() => null)
+        console.error('[ai_agent] OpenRouter error', res.status, (reason ?? '').slice(0, 200))
         tel.error = { phase: 'llm', message: `OpenRouter ${res.status}` } // sem body cru (segurança)
         break
       }
