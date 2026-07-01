@@ -260,10 +260,14 @@ export default function InboxPage() {
       }
 
       if (event.eventType === "UPDATE") {
-        // Update message status
-        setMessages((prev) =>
-          prev.map((m) => (m.id === newMsg.id ? { ...m, ...newMsg } : m))
-        );
+        // Update message status. A assinatura realtime é table-wide (sem
+        // filtro de conversa): se a msg não é da conversa aberta, NÃO recria
+        // o array — senão a nova referência dispararia o auto-scroll do thread
+        // por atividade de OUTRA conversa. Espelha o guard do ramo INSERT.
+        setMessages((prev) => {
+          if (!prev.some((m) => m.id === newMsg.id)) return prev;
+          return prev.map((m) => (m.id === newMsg.id ? { ...m, ...newMsg } : m));
+        });
       }
     },
     [activeConversation, hydrateConversation]
