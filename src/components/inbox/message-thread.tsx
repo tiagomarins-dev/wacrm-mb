@@ -56,6 +56,7 @@ import { resolveAssignee } from "@/lib/inbox/assignee";
 import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
 import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
+import { isNearBottom, NEAR_BOTTOM_PX } from "@/lib/inbox/scroll";
 import { toast } from "sonner";
 
 interface ReplyDraft {
@@ -180,6 +181,10 @@ export function MessageThread({
   const { t } = useTranslation("inbox");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Rastreia se o usuário está colado no fim (atualizado no onScroll do
+  // container). O auto-scroll só puxa pro fim quando isto é true — senão
+  // respeita a leitura do histórico.
+  const nearBottomRef = useRef(true);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([]);
@@ -542,11 +547,21 @@ export function MessageThread({
       });
   }, [conversationId, hasUnread]);
 
-  // Auto-scroll to bottom on new messages
+  // Abertura da conversa: rola pro fim SEMPRE (abre na última msg).
+  // Incondicional → não depende da ordem vs. a chegada de `messages` do
+  // fetch. Reseta o "near bottom" p/ true (usuário começa colado no fim).
   useEffect(() => {
     if (scrollRef.current) {
-      const el = scrollRef.current;
-      el.scrollTop = el.scrollHeight;
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      nearBottomRef.current = true;
+    }
+  }, [conversationId]);
+
+  // Atualização (nova msg / status): só cola no fim se o usuário JÁ estava
+  // no fim — senão respeita a leitura do histórico (não puxa pra baixo).
+  useEffect(() => {
+    if (nearBottomRef.current && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
@@ -1171,7 +1186,13 @@ export function MessageThread({
           abaixo da altura do conteúdo, cresce além do container e empurra
           o composer pra fora (cortado embaixo). Com min-h-0, ele encolhe
           e rola internamente, mantendo o composer fixo no fundo. */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+      <div
+        ref={scrollRef}
+        onScroll={(e) => {
+          nearBottomRef.current = isNearBottom(e.currentTarget, NEAR_BOTTOM_PX);
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+      >
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
