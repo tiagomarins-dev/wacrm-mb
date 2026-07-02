@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, Fragment } from "react";
+import type { ReactNode } from "react";
 import { toast } from "sonner";
 import { Loader2, Sparkles, Copy } from "lucide-react";
 import {
@@ -17,6 +18,80 @@ interface BriefingModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conversationId: string;
+}
+
+// Renderiza os trechos **negrito** de uma linha como <strong>; o resto vira texto.
+// Subset de markdown: o briefing só usa **negrito** inline (sem links/itálico).
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={`${keyPrefix}-${i}`} className="font-semibold text-foreground">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <Fragment key={`${keyPrefix}-${i}`}>{part}</Fragment>;
+  });
+}
+
+/**
+ * Renderer leve do markdown que a IA devolve no briefing (evita dep de
+ * react-markdown p/ um subset conhecido): headers (linha toda em **negrito**),
+ * bullets (-, *, •) agrupados em lista, negrito inline e parágrafos.
+ */
+function FormattedBriefing({ text }: { text: string }) {
+  const blocks: ReactNode[] = [];
+  let bullets: string[] = [];
+
+  // Fecha a lista pendente de bullets em um <ul> antes de emitir outro bloco.
+  const flushBullets = () => {
+    if (bullets.length === 0) return;
+    const items = bullets;
+    bullets = [];
+    blocks.push(
+      <ul
+        key={`ul-${blocks.length}`}
+        className="my-1 list-disc space-y-1 pl-5 text-muted-foreground"
+      >
+        {items.map((it, i) => (
+          <li key={i}>{renderInline(it, `li-${blocks.length}-${i}`)}</li>
+        ))}
+      </ul>,
+    );
+  };
+
+  text.split("\n").forEach((raw) => {
+    const line = raw.trim();
+    if (!line) {
+      flushBullets();
+      return;
+    }
+    // Bullet: começa com -, * ou • seguido de espaço (o ** de header não casa).
+    const bullet = line.match(/^[-*•]\s+(.*)$/);
+    if (bullet) {
+      bullets.push(bullet[1]);
+      return;
+    }
+    flushBullets();
+    // Header: linha inteira em negrito (ex.: "**1) Resumo em 1 linha**").
+    const isHeading = /^\*\*.+\*\*$/.test(line);
+    blocks.push(
+      <p
+        key={`p-${blocks.length}`}
+        className={
+          isHeading
+            ? "mt-3 font-semibold text-foreground first:mt-0"
+            : "text-muted-foreground"
+        }
+      >
+        {renderInline(line, `p-${blocks.length}`)}
+      </p>,
+    );
+  });
+  flushBullets();
+
+  return <div className="space-y-1 text-sm leading-relaxed">{blocks}</div>;
 }
 
 /**
@@ -84,7 +159,7 @@ export function BriefingModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="w-[92vw] sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4" /> Briefing da conversa
@@ -102,8 +177,8 @@ export function BriefingModal({
           <p className="py-4 text-sm text-red-400">{error}</p>
         ) : (
           <>
-            <div className="max-h-[50vh] overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/50 p-3 text-sm">
-              {summary}
+            <div className="max-h-[65vh] overflow-y-auto rounded-md bg-muted/50 p-4">
+              <FormattedBriefing text={summary} />
             </div>
             {truncated && (
               <p className="mt-1 text-xs text-muted-foreground">
