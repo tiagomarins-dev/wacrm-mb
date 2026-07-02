@@ -63,6 +63,22 @@ describe('summarizeConversation', () => {
     expect(userMsg).not.toMatch(/\d{8,}/)
   })
 
+  it('respeita messageLimit no transcript enviado ao LLM', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const many: SummaryMessage[] = Array.from({ length: 40 }, (_, i) => ({
+      sender_type: 'customer',
+      content_text: `m${i}`,
+    }))
+    await summarizeConversation({ apiKey: 'k', messages: many, topic: 'X', messageLimit: 5 })
+    const userMsg = JSON.parse(fetchMock.mock.calls[0][1].body as string).messages[1].content as string
+    // Só as 5 últimas entram (m35..m39); m34 e anteriores ficam de fora.
+    expect(userMsg).toContain('m39')
+    expect(userMsg).not.toContain('m34')
+  })
+
   it('erro de API → lança', async () => {
     vi.stubGlobal(
       'fetch',
