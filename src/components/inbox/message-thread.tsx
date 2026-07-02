@@ -30,6 +30,7 @@ import {
   FileText,
   Hash,
   Users,
+  Sparkles,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +58,7 @@ import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
 import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { isNearBottom, NEAR_BOTTOM_PX } from "@/lib/inbox/scroll";
+import { BriefingModal } from "./briefing-modal";
 import { toast } from "sonner";
 
 interface ReplyDraft {
@@ -287,6 +289,8 @@ export function MessageThread({
   // Compartilhamento (Notion/Slack) — modal + provedor selecionado.
   const [shareOpen, setShareOpen] = useState(false);
   const [shareProvider, setShareProvider] = useState<ShareProvider | null>(null);
+  // Briefing da conversa (resumo IA on-demand) — modal.
+  const [briefingOpen, setBriefingOpen] = useState(false);
   const openShare = useCallback((p: ShareProvider) => {
     setShareProvider(p);
     setShareOpen(true);
@@ -1078,6 +1082,17 @@ export function MessageThread({
             <Hash className="h-3.5 w-3.5" />
           </button>
 
+          {/* Briefing da conversa (resumo IA p/ o novo atendente assumir) */}
+          <button
+            type="button"
+            onClick={() => setBriefingOpen(true)}
+            aria-label="Briefing da conversa"
+            title="Resumo/Briefing"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
+
           {/* Status dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger className={cn(
@@ -1309,6 +1324,12 @@ export function MessageThread({
         provider={shareProvider}
         conversationId={conversation.id}
         contactName={contact?.name}
+      />
+
+      <BriefingModal
+        open={briefingOpen}
+        onOpenChange={setBriefingOpen}
+        conversationId={conversation.id}
       />
     </div>
   );

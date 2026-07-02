@@ -13,6 +13,19 @@ const TIMEOUT_MS = 30_000
 /** Quantas mensagens do fim da conversa entram no resumo. */
 export const SHARE_MESSAGE_LIMIT = 30
 
+/** Teto de mensagens do briefing (conversa "toda", com trava de custo/token). */
+export const BRIEFING_MESSAGE_LIMIT = 500
+
+// Prompt dedicado do briefing (handoff p/ novo atendente). Estrutura fixa —
+// diferente do resumo de compartilhar (DEFAULT_SUMMARY_PROMPT).
+export const BRIEFING_SUMMARY_PROMPT =
+  'Você é um assistente de atendimento. Gere um BRIEFING da conversa abaixo para ' +
+  'um NOVO atendente assumir, em português, objetivo. Estruture em tópicos: ' +
+  '1) Resumo em 1 linha; 2) O que o cliente quer / relatou; 3) O que já foi ' +
+  'feito/respondido; 4) O que foi PROMETIDO ao cliente (prazos, valores, retornos); ' +
+  '5) Pendências / próximo passo; 6) Tom e urgência do cliente. ' +
+  'Use só o que está na conversa — NÃO invente dados. Se algo não apareceu, escreva "não informado".'
+
 export const DEFAULT_SUMMARY_PROMPT =
   'Você é um assistente de atendimento. Resuma a conversa abaixo de forma ' +
   'objetiva e em português, focando no ASSUNTO informado. Liste: (1) o que o ' +
@@ -34,6 +47,8 @@ export interface SummarizeArgs {
   topic: string
   /** Opcional — só o 1º nome, para personalizar ("Tiago relatou…"). */
   firstName?: string | null
+  /** Nº máx. de mensagens (do fim) no resumo. Default SHARE_MESSAGE_LIMIT. */
+  messageLimit?: number
 }
 
 /**
@@ -81,8 +96,8 @@ export function serializeMessages(
  * tratada em falha/timeout (sem vazar token).
  */
 export async function summarizeConversation(args: SummarizeArgs): Promise<string> {
-  const { apiKey, model, systemPrompt, messages, topic, firstName } = args
-  const transcript = serializeMessages(messages)
+  const { apiKey, model, systemPrompt, messages, topic, firstName, messageLimit } = args
+  const transcript = serializeMessages(messages, messageLimit ?? SHARE_MESSAGE_LIMIT)
   const sys = systemPrompt?.trim() || DEFAULT_SUMMARY_PROMPT
   const userContent = [
     `Assunto: ${topic}`,
