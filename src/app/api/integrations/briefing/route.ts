@@ -9,6 +9,7 @@ import {
   type SummaryMessage,
 } from '@/lib/integrations/openrouter'
 import { redactPII } from '@/lib/integrations/redact'
+import { buildContactBlock } from '@/lib/integrations/contact-block'
 
 // node:crypto (decrypt) → runtime Node.
 export const runtime = 'nodejs'
@@ -96,7 +97,15 @@ export async function POST(request: Request) {
       messageLimit: BRIEFING_MESSAGE_LIMIT,
     })
 
-    return NextResponse.json({ summary, truncated })
+    // URL absoluta da conversa (deep-link ?c=) — igual share/route.ts:132.
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+    const conversationUrl = siteUrl ? `${siteUrl}/inbox?c=${conversationId}` : null
+    // Bloco de contato p/ o handoff (Nome/Telefone/Conversa) — PII real, montada
+    // DEPOIS da chamada ao LLM, então nunca entra no payload do OpenRouter.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const contactBlock = buildContactBlock(contact as any, conversationUrl)
+
+    return NextResponse.json({ summary, truncated, contactBlock })
   } catch (error) {
     return toErrorResponse(error)
   }

@@ -107,6 +107,8 @@ export function BriefingModal({
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState("");
   const [truncated, setTruncated] = useState(false);
+  // Bloco de contato (Nome/Telefone/link) — server-side; entra só no clipboard.
+  const [contactBlock, setContactBlock] = useState("");
   const [error, setError] = useState("");
 
   // Gera o briefing (chamado ao abrir e no "Regenerar").
@@ -124,6 +126,8 @@ export function BriefingModal({
       if (!res.ok) throw new Error(data.error ?? "Falha ao gerar o briefing");
       setSummary(data.summary ?? "");
       setTruncated(Boolean(data.truncated));
+      // ?? "" mantém compat se um endpoint antigo (sem contactBlock) estiver em cache.
+      setContactBlock(data.contactBlock ?? "");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Falha ao gerar o briefing");
     } finally {
@@ -138,12 +142,14 @@ export function BriefingModal({
 
   // Copiar com fallback: navigator.clipboard falha em HTTP puro (self-host por IP).
   const copy = useCallback(async () => {
+    // Cabeçalho de handoff (contato + link) vai só no clipboard — a tela mostra só o briefing.
+    const copyText = contactBlock ? `${contactBlock}\n\n---\n${summary}` : summary;
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(summary);
+        await navigator.clipboard.writeText(copyText);
       } else {
         const ta = document.createElement("textarea");
-        ta.value = summary;
+        ta.value = copyText;
         ta.style.position = "fixed";
         ta.style.opacity = "0";
         document.body.appendChild(ta);
@@ -155,7 +161,7 @@ export function BriefingModal({
     } catch {
       toast.error("Não foi possível copiar");
     }
-  }, [summary]);
+  }, [summary, contactBlock]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
