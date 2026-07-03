@@ -8,7 +8,6 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { WifiOff, ArrowLeft } from "lucide-react";
@@ -76,6 +75,16 @@ export default function InboxPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [contactMobileOpen]);
+
+  // A11y: Esc fecha o painel destacado (desktop).
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
 
   // Traduções da inbox (namespace dedicado do react-i18next).
   const { t } = useTranslation("inbox");
@@ -632,6 +641,14 @@ export default function InboxPage() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
+        {/* Escurece o fundo quando um painel está destacado (desktop). */}
+        {expanded && (
+          <div
+            className="fixed inset-0 z-40 hidden bg-black/60 lg:block"
+            onClick={() => setExpanded(null)}
+            aria-hidden
+          />
+        )}
         {/* Left panel: Conversation list.
             Hidden on mobile when a conversation is selected so the
             thread can occupy the full width. Always visible on lg+. */}
@@ -661,25 +678,50 @@ export default function InboxPage() {
             its share and pushes the contact-sidebar panel off-screen
             on the right. Issue #165. */}
         <div
+          role={expanded === "thread" ? "dialog" : undefined}
+          aria-modal={expanded === "thread" || undefined}
+          aria-label={expanded === "thread" ? "Conversa" : undefined}
           className={cn(
             "flex h-full min-w-0 flex-1 lg:flex",
             hasActiveConv ? "flex" : "hidden lg:flex",
+            // Destacado: vira um painel grande sobre a tela. MESMA instância —
+            // o thread NÃO remonta (senão o canal de realtime recria e estoura).
+            // h-auto/flex-none vencem h-full/flex-1 (senão brigam com o inset-y).
+            expanded === "thread" &&
+              "fixed inset-2 z-50 h-auto flex-none overflow-hidden rounded-xl border border-border bg-card shadow-2xl lg:inset-x-[4vw] lg:inset-y-[4vh]",
           )}
         >
-          {/* Some da coluna quando destacado no modal (não fica nos dois lugares). */}
-          {expanded === "thread" ? null : renderThread()}
+          {/* SEMPRE renderiza (nunca null) — trocar de lugar remontaria o thread. */}
+          {renderThread()}
         </div>
 
         {/* Right panel: Contact sidebar — desktop only, and only when the
             agent hasn't collapsed it via the thread-header toggle (#258).
             On mobile it's always hidden (the `lg:block` below), so the
             toggle — which is itself desktop-only — never affects it. */}
-        {contactPanelOpen && expanded !== "contact" && (
+        {contactPanelOpen && (
           // h-full + min-h-0: limita a altura do painel ao row → o ScrollArea
           // interno rola (senão o conteúdo, ex. muitos cursos, fica cortado).
-          // Some da coluna quando destacado no modal (não duplica).
-          <div className="hidden h-full min-h-0 lg:block">
-            <ContactSidebar contact={activeContact} />
+          <div
+            role={expanded === "contact" ? "dialog" : undefined}
+            aria-modal={expanded === "contact" || undefined}
+            aria-label={expanded === "contact" ? "Detalhes do contato" : undefined}
+            className={cn(
+              "hidden h-full min-h-0 lg:block",
+              // Destacado: overlay grande (mesma instância, sem remontar).
+              expanded === "contact" &&
+                "fixed inset-2 z-50 h-auto overflow-hidden rounded-xl border border-border bg-card shadow-2xl lg:inset-x-[18vw] lg:inset-y-[4vh]",
+            )}
+          >
+            {/* onToggleExpand faz o botão Maximizar aparecer na coluna (abre). */}
+            <ContactSidebar
+              contact={activeContact}
+              widthClassName={expanded === "contact" ? "w-full" : "w-70"}
+              expanded={expanded === "contact"}
+              onToggleExpand={() =>
+                setExpanded((e) => (e === "contact" ? null : "contact"))
+              }
+            />
           </div>
         )}
 
@@ -709,39 +751,6 @@ export default function InboxPage() {
             </div>
           </div>
         )}
-
-        {/* Conversa "destacada" num modal quase full-screen (desktop). Mesma
-            instância lógica do thread (renderThread). Guarda !!activeConversation
-            → fecha se a conversa sumir. lg:flex é load-bearing (filho flex-1
-            preenche a altura); max-w-none sobrescreve o default sm:max-w-sm. */}
-        <Dialog
-          open={expanded === "thread" && !!activeConversation}
-          onOpenChange={(o) => !o && setExpanded(null)}
-        >
-          <DialogContent className="hidden max-w-none p-0 lg:flex lg:h-[90vh] lg:w-[92vw]">
-            {/* Título oculto — convenção do repo + evita warning a11y do base-ui. */}
-            <DialogTitle className="sr-only">Conversa</DialogTitle>
-            {renderThread()}
-          </DialogContent>
-        </Dialog>
-
-        {/* Info do aluno "destacada" (desktop). */}
-        <Dialog
-          open={expanded === "contact" && !!activeContact}
-          onOpenChange={(o) => !o && setExpanded(null)}
-        >
-          <DialogContent className="hidden max-w-none p-0 lg:flex lg:h-[90vh] lg:w-[80vw]">
-            <DialogTitle className="sr-only">Detalhes do contato</DialogTitle>
-            {activeContact && (
-              <ContactSidebar
-                contact={activeContact}
-                widthClassName="w-full"
-                expanded
-                onToggleExpand={() => setExpanded(null)}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
     </div>
   );
