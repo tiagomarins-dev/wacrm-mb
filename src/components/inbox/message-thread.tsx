@@ -31,6 +31,8 @@ import {
   Hash,
   Users,
   Sparkles,
+  MoreVertical,
+  ChevronRight,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -118,6 +120,12 @@ interface MessageThreadProps {
    */
   contactPanelOpen?: boolean;
   onToggleContactPanel?: () => void;
+  /**
+   * Abre o painel de detalhes do contato. Usado só no mobile (o nome no
+   * header vira um botão que chama isso); no desktop a sidebar já fica
+   * fixa. Opcional pra callers existentes seguirem funcionando.
+   */
+  onOpenContact?: () => void;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -178,6 +186,7 @@ export function MessageThread({
   onRefresh,
   contactPanelOpen,
   onToggleContactPanel,
+  onOpenContact,
 }: MessageThreadProps) {
   const { user } = useAuth();
   const { t } = useTranslation("inbox");
@@ -985,19 +994,31 @@ export function MessageThread({
               <ArrowLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
-            {isGroup ? (
-              <Users className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              displayName.charAt(0).toUpperCase()
-            )}
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
-            <p className="truncate text-xs text-muted-foreground">
-              {isGroup ? "Grupo" : contact!.phone}
-            </p>
-          </div>
+          {/* Identidade (avatar + nome) — no mobile é um botão que abre o
+              painel de detalhes; no desktop fica inerte (lg:pointer-events-none),
+              pois lá a sidebar já está fixa. */}
+          <button
+            type="button"
+            onClick={onOpenContact}
+            aria-label="Ver detalhes do contato"
+            className="flex min-w-0 items-center gap-2 text-left sm:gap-3 lg:pointer-events-none"
+          >
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium text-foreground">
+              {isGroup ? (
+                <Users className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                displayName.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold text-foreground">{displayName}</h2>
+              <p className="truncate text-xs text-muted-foreground">
+                {isGroup ? "Grupo" : contact!.phone}
+              </p>
+            </div>
+            {/* Dica visual de que dá pra tocar — só no mobile. */}
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground lg:hidden" />
+          </button>
           {/* Session timer badge — hidden on the narrowest phones so
               the name + back arrow keep their room. */}
           <Badge
@@ -1040,6 +1061,9 @@ export function MessageThread({
             </button>
           )}
 
+          {/* Ações secundárias — inline só em sm+. No mobile elas somem
+              daqui e vão pro kebab (⋮) abaixo, liberando largura pro nome. */}
+          <div className="hidden items-center gap-2 sm:flex">
           {/* Manual refresh — forces a refetch of the messages + the
               conversation list (the parent bumps its resyncToken). Useful
               when realtime missed an event or the agent just wants to be
@@ -1092,6 +1116,35 @@ export function MessageThread({
           >
             <Sparkles className="h-3.5 w-3.5" />
           </button>
+          </div>
+
+          {/* Kebab overflow — só no mobile (sm:hidden). Junta as ações
+              secundárias (Refresh/Notion/Slack/Briefing) num menu, reusando
+              os mesmos handlers. Status + Assign seguem inline (primárias). */}
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Mais ações"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:hidden"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="border-border bg-popover">
+              {onRefresh && (
+                <DropdownMenuItem onClick={handleRefreshClick} className="text-sm">
+                  <RefreshCw className="mr-2 h-3.5 w-3.5" /> {t("refreshConversation")}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => openShare("notion")} className="text-sm">
+                <FileText className="mr-2 h-3.5 w-3.5" /> Compartilhar no Notion
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openShare("slack")} className="text-sm">
+                <Hash className="mr-2 h-3.5 w-3.5" /> Compartilhar no Slack
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setBriefingOpen(true)} className="text-sm">
+                <Sparkles className="mr-2 h-3.5 w-3.5" /> Resumo/Briefing
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Status dropdown */}
           <DropdownMenu>

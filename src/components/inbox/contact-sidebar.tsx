@@ -33,9 +33,11 @@ import { format } from "date-fns";
 
 interface ContactSidebarProps {
   contact: Contact | null;
+  /** Largura do painel. Default w-70 (desktop); overlay mobile passa w-full. */
+  widthClassName?: string;
 }
 
-export function ContactSidebar({ contact }: ContactSidebarProps) {
+export function ContactSidebar({ contact, widthClassName = "w-70" }: ContactSidebarProps) {
   const { t } = useTranslation('inbox');
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
@@ -147,7 +149,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
 
   if (!contact) {
     return (
-      <div className="flex h-full w-70 items-center justify-center border-l border-border bg-card">
+      <div className={`flex h-full ${widthClassName} items-center justify-center border-l border-border bg-card`}>
         <p className="text-sm text-muted-foreground">{t('selectConversation')}</p>
       </div>
     );
@@ -157,7 +159,7 @@ export function ContactSidebar({ contact }: ContactSidebarProps) {
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className="flex h-full min-h-0 w-70 flex-col border-l border-border bg-card">
+    <div className={`flex h-full min-h-0 ${widthClassName} flex-col border-l border-border bg-card`}>
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-4">
           {/* Contact Info */}
