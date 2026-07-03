@@ -8,6 +8,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { ConversationList } from "@/components/inbox/conversation-list";
 import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { WifiOff, ArrowLeft } from "lucide-react";
@@ -55,6 +56,8 @@ export default function InboxPage() {
   const [contactPanelOpen, setContactPanelOpen] = useState(true);
   // Detalhes do contato como tela cheia no mobile (3ª "tela" além de lista/thread).
   const [contactMobileOpen, setContactMobileOpen] = useState(false);
+  // Painel "destacado" num modal full-screen (desktop). Um por vez.
+  const [expanded, setExpanded] = useState<"thread" | "contact" | null>(null);
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CONTACT_PANEL_STORAGE_KEY);
@@ -587,6 +590,31 @@ export default function InboxPage() {
     };
   }, [hasActiveConv]);
 
+  // Render único do thread — usado na coluna OU no modal destacado (mesmas props).
+  // Extrair evita duplicar a lista de props entre os dois call-sites.
+  const renderThread = () => (
+    <MessageThread
+      conversation={activeConversation}
+      contact={activeContact}
+      messages={messages}
+      onMessagesLoaded={handleMessagesLoaded}
+      onNewMessage={handleNewMessage}
+      onUpdateMessage={handleUpdateMessage}
+      onStatusChange={handleStatusChange}
+      onAssignChange={handleAssignChange}
+      onBack={handleCloseConversation}
+      resyncToken={resyncToken}
+      onRefresh={handleManualRefresh}
+      contactPanelOpen={contactPanelOpen}
+      onToggleContactPanel={handleToggleContactPanel}
+      onOpenContact={() => setContactMobileOpen(true)}
+      expanded={expanded === "thread"}
+      onToggleExpand={() =>
+        setExpanded((e) => (e === "thread" ? null : "thread"))
+      }
+    />
+  );
+
   return (
     // h-full preenche o <main> (flex-1, sem padding p/ inbox no shell). Sem
     // viewport-math nem margens negativas — flex puro, à prova de device:
@@ -638,31 +666,18 @@ export default function InboxPage() {
             hasActiveConv ? "flex" : "hidden lg:flex",
           )}
         >
-          <MessageThread
-            conversation={activeConversation}
-            contact={activeContact}
-            messages={messages}
-            onMessagesLoaded={handleMessagesLoaded}
-            onNewMessage={handleNewMessage}
-            onUpdateMessage={handleUpdateMessage}
-            onStatusChange={handleStatusChange}
-            onAssignChange={handleAssignChange}
-            onBack={handleCloseConversation}
-            resyncToken={resyncToken}
-            onRefresh={handleManualRefresh}
-            contactPanelOpen={contactPanelOpen}
-            onToggleContactPanel={handleToggleContactPanel}
-            onOpenContact={() => setContactMobileOpen(true)}
-          />
+          {/* Some da coluna quando destacado no modal (não fica nos dois lugares). */}
+          {expanded === "thread" ? null : renderThread()}
         </div>
 
         {/* Right panel: Contact sidebar — desktop only, and only when the
             agent hasn't collapsed it via the thread-header toggle (#258).
             On mobile it's always hidden (the `lg:block` below), so the
             toggle — which is itself desktop-only — never affects it. */}
-        {contactPanelOpen && (
+        {contactPanelOpen && expanded !== "contact" && (
           // h-full + min-h-0: limita a altura do painel ao row → o ScrollArea
           // interno rola (senão o conteúdo, ex. muitos cursos, fica cortado).
+          // Some da coluna quando destacado no modal (não duplica).
           <div className="hidden h-full min-h-0 lg:block">
             <ContactSidebar contact={activeContact} />
           </div>
@@ -694,6 +709,39 @@ export default function InboxPage() {
             </div>
           </div>
         )}
+
+        {/* Conversa "destacada" num modal quase full-screen (desktop). Mesma
+            instância lógica do thread (renderThread). Guarda !!activeConversation
+            → fecha se a conversa sumir. lg:flex é load-bearing (filho flex-1
+            preenche a altura); max-w-none sobrescreve o default sm:max-w-sm. */}
+        <Dialog
+          open={expanded === "thread" && !!activeConversation}
+          onOpenChange={(o) => !o && setExpanded(null)}
+        >
+          <DialogContent className="hidden max-w-none p-0 lg:flex lg:h-[90vh] lg:w-[92vw]">
+            {/* Título oculto — convenção do repo + evita warning a11y do base-ui. */}
+            <DialogTitle className="sr-only">Conversa</DialogTitle>
+            {renderThread()}
+          </DialogContent>
+        </Dialog>
+
+        {/* Info do aluno "destacada" (desktop). */}
+        <Dialog
+          open={expanded === "contact" && !!activeContact}
+          onOpenChange={(o) => !o && setExpanded(null)}
+        >
+          <DialogContent className="hidden max-w-none p-0 lg:flex lg:h-[90vh] lg:w-[80vw]">
+            <DialogTitle className="sr-only">Detalhes do contato</DialogTitle>
+            {activeContact && (
+              <ContactSidebar
+                contact={activeContact}
+                widthClassName="w-full"
+                expanded
+                onToggleExpand={() => setExpanded(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

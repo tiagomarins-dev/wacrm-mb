@@ -33,6 +33,8 @@ import {
   Sparkles,
   MoreVertical,
   ChevronRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +128,10 @@ interface MessageThreadProps {
    * fixa. Opcional pra callers existentes seguirem funcionando.
    */
   onOpenContact?: () => void;
+  /** Modo "destacado" (dentro do modal). Troca o ícone e dá respiro pro X. */
+  expanded?: boolean;
+  /** Se fornecido, mostra o botão de destacar/restaurar (só desktop). */
+  onToggleExpand?: () => void;
 }
 
 function formatDateSeparator(dateStr: string): string {
@@ -187,6 +193,8 @@ export function MessageThread({
   contactPanelOpen,
   onToggleContactPanel,
   onOpenContact,
+  expanded,
+  onToggleExpand,
 }: MessageThreadProps) {
   const { user } = useAuth();
   const { t } = useTranslation("inbox");
@@ -1033,7 +1041,20 @@ export function MessageThread({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-2", expanded && "lg:pr-8")}>
+          {/* Destacar a conversa num modal (desktop). Maximize2 na coluna abre;
+              Minimize2 no modal restaura. Só lg (no mobile já é tela cheia). */}
+          {onToggleExpand && (
+            <button
+              type="button"
+              onClick={onToggleExpand}
+              aria-label={expanded ? "Restaurar conversa" : "Expandir conversa"}
+              title={expanded ? "Restaurar" : "Expandir"}
+              className="hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex"
+            >
+              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+          )}
           {/* Contact-panel toggle — desktop only. The contact sidebar
               eats a chunk of horizontal width that crowds the thread on
               smaller laptops; this lets agents reclaim it when they just

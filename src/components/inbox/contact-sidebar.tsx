@@ -19,6 +19,8 @@ import {
   GraduationCap,
   Loader2,
   Plus,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 
 // Resposta da rota /api/integrations/student-info (panorama + flags de estado).
@@ -35,9 +37,18 @@ interface ContactSidebarProps {
   contact: Contact | null;
   /** Largura do painel. Default w-70 (desktop); overlay mobile passa w-full. */
   widthClassName?: string;
+  /** Modo "destacado" (dentro do modal). Troca o ícone do botão. */
+  expanded?: boolean;
+  /** Se fornecido, mostra o botão de destacar/restaurar (só desktop). */
+  onToggleExpand?: () => void;
 }
 
-export function ContactSidebar({ contact, widthClassName = "w-70" }: ContactSidebarProps) {
+export function ContactSidebar({
+  contact,
+  widthClassName = "w-70",
+  expanded,
+  onToggleExpand,
+}: ContactSidebarProps) {
   const { t } = useTranslation('inbox');
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
@@ -159,7 +170,24 @@ export function ContactSidebar({ contact, widthClassName = "w-70" }: ContactSide
   const initials = displayName.charAt(0).toUpperCase();
 
   return (
-    <div className={`flex h-full min-h-0 ${widthClassName} flex-col border-l border-border bg-card`}>
+    <div className={cn("relative flex h-full min-h-0 flex-col border-l border-border bg-card", widthClassName)}>
+      {/* Destacar o painel num modal (desktop). Ausente no overlay mobile
+          (que não passa onToggleExpand). Quando destacado, desloca pra
+          right-10 pra não colidir com o X do Dialog. */}
+      {onToggleExpand && (
+        <button
+          type="button"
+          onClick={onToggleExpand}
+          aria-label={expanded ? "Restaurar painel" : "Expandir painel"}
+          title={expanded ? "Restaurar" : "Expandir"}
+          className={cn(
+            "absolute top-2 z-10 hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex",
+            expanded ? "right-10" : "right-2",
+          )}
+        >
+          {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
+      )}
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-4">
           {/* Contact Info */}
