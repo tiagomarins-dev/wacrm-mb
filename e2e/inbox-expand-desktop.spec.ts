@@ -11,7 +11,7 @@ import { test, expect } from "@playwright/test";
 test.describe("expand desktop", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("maximizar a conversa abre modal e Esc fecha", async ({ page }) => {
+  test("maximizar a conversa abre overlay e Esc fecha", async ({ page }) => {
     await page.goto("/inbox");
     // Abre a 1ª conversa da lista.
     await page
@@ -22,7 +22,21 @@ test.describe("expand desktop", () => {
     // Botão Expandir conversa no header do thread.
     await page.getByRole("button", { name: /expandir conversa/i }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
-    // Esc fecha o modal.
+    // Esc fecha o overlay.
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("maximizar a info do aluno abre overlay e Esc fecha", async ({ page }) => {
+    await page.goto("/inbox");
+    await page
+      .getByRole("button")
+      .filter({ hasNotText: /whatsapp|settings/i })
+      .first()
+      .click();
+    // Botão Expandir painel no topo do ContactSidebar (bug 3 corrigido).
+    await page.getByRole("button", { name: /expandir painel/i }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });

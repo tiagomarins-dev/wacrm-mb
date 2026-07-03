@@ -1041,9 +1041,9 @@ export function MessageThread({
           </Badge>
         </div>
 
-        <div className={cn("flex items-center gap-2", expanded && "lg:pr-8")}>
-          {/* Destacar a conversa num modal (desktop). Maximize2 na coluna abre;
-              Minimize2 no modal restaura. Só lg (no mobile já é tela cheia). */}
+        <div className="flex items-center gap-2">
+          {/* Destacar a conversa num overlay (desktop). Maximize2 na coluna abre;
+              Minimize2 no overlay restaura. Só lg (no mobile já é tela cheia). */}
           {onToggleExpand && (
             <button
               type="button"

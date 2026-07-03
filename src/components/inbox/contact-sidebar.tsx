@@ -171,19 +171,15 @@ export function ContactSidebar({
 
   return (
     <div className={cn("relative flex h-full min-h-0 flex-col border-l border-border bg-card", widthClassName)}>
-      {/* Destacar o painel num modal (desktop). Ausente no overlay mobile
-          (que não passa onToggleExpand). Quando destacado, desloca pra
-          right-10 pra não colidir com o X do Dialog. */}
+      {/* Destacar o painel num overlay (desktop). Ausente no overlay mobile
+          (que não passa onToggleExpand). */}
       {onToggleExpand && (
         <button
           type="button"
           onClick={onToggleExpand}
           aria-label={expanded ? "Restaurar painel" : "Expandir painel"}
           title={expanded ? "Restaurar" : "Expandir"}
-          className={cn(
-            "absolute top-2 z-10 hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex",
-            expanded ? "right-10" : "right-2",
-          )}
+          className="absolute right-2 top-2 z-10 hidden h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:inline-flex"
         >
           {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
         </button>
