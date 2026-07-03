@@ -10,7 +10,7 @@ import { MessageThread } from "@/components/inbox/message-thread";
 import { ContactSidebar } from "@/components/inbox/contact-sidebar";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { WifiOff } from "lucide-react";
+import { WifiOff, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Remembers the agent's show/hide choice for the desktop contact panel
@@ -53,6 +53,8 @@ export default function InboxPage() {
    * below reconciles to the stored value right after mount instead.
    */
   const [contactPanelOpen, setContactPanelOpen] = useState(true);
+  // Detalhes do contato como tela cheia no mobile (3ª "tela" além de lista/thread).
+  const [contactMobileOpen, setContactMobileOpen] = useState(false);
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CONTACT_PANEL_STORAGE_KEY);
@@ -61,6 +63,16 @@ export default function InboxPage() {
       // localStorage can throw in private-browsing / sandboxed contexts.
     }
   }, []);
+
+  // A11y: Esc fecha o overlay de detalhes do contato (mobile).
+  useEffect(() => {
+    if (!contactMobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setContactMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contactMobileOpen]);
 
   // Traduções da inbox (namespace dedicado do react-i18next).
   const { t } = useTranslation("inbox");
@@ -493,6 +505,8 @@ export default function InboxPage() {
     setActiveConversation(null);
     setActiveContact(null);
     setMessages([]);
+    // Fecha o overlay de detalhes (mobile) ao trocar/fechar conversa.
+    setContactMobileOpen(false);
     // Clearing the ref lets the deep-link auto-selector fire again if
     // the user later visits /inbox?c=<same-id> — desirable UX.
     autoSelectedForDeepLinkRef.current = null;
@@ -638,6 +652,7 @@ export default function InboxPage() {
             onRefresh={handleManualRefresh}
             contactPanelOpen={contactPanelOpen}
             onToggleContactPanel={handleToggleContactPanel}
+            onOpenContact={() => setContactMobileOpen(true)}
           />
         </div>
 
@@ -650,6 +665,33 @@ export default function InboxPage() {
           // interno rola (senão o conteúdo, ex. muitos cursos, fica cortado).
           <div className="hidden h-full min-h-0 lg:block">
             <ContactSidebar contact={activeContact} />
+          </div>
+        )}
+
+        {/* Overlay full-screen SÓ no mobile (lg:hidden): 3ª "tela" com o mesmo
+            ContactSidebar do desktop, alcançável tocando no nome no header.
+            Espelha a alternância de painéis por hasActiveConv (lista↔thread). */}
+        {contactMobileOpen && activeContact && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Detalhes do contato"
+            className="fixed inset-0 z-50 flex flex-col bg-background lg:hidden"
+          >
+            <div className="flex shrink-0 items-center gap-2 border-b border-border bg-card px-3 py-3">
+              <button
+                type="button"
+                onClick={() => setContactMobileOpen(false)}
+                aria-label="Voltar"
+                className="flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <span className="text-sm font-semibold">Detalhes do contato</span>
+            </div>
+            <div className="min-h-0 flex-1">
+              <ContactSidebar contact={activeContact} widthClassName="w-full" />
+            </div>
           </div>
         )}
       </div>
