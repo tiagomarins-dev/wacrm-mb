@@ -631,7 +631,7 @@ export function MessageComposer({
               onClick={() => setNoteMode(true)}
               className={cn(
                 "rounded px-2 py-0.5 transition-colors",
-                noteMode ? "bg-yellow-300/20 text-yellow-200" : "text-muted-foreground hover:text-foreground",
+                noteMode ? "bg-amber-200 text-amber-900 dark:bg-yellow-300/20 dark:text-yellow-200" : "text-muted-foreground hover:text-foreground",
               )}
             >
               {t("noteMode")}
@@ -719,7 +719,7 @@ export function MessageComposer({
             className={cn(
               "flex-1 resize-none rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary/50",
               noteMode
-                ? "border-yellow-400/40 bg-yellow-300/10 text-yellow-100 placeholder-yellow-200/50"
+                ? "border-amber-300 bg-amber-100 text-amber-950 placeholder-amber-700/60 dark:border-yellow-400/40 dark:bg-yellow-300/10 dark:text-yellow-100 dark:placeholder-yellow-200/50"
                 : "border-border bg-muted text-foreground placeholder-muted-foreground",
               (readOnly || (!noteMode && sessionExpired)) && "cursor-not-allowed opacity-50"
             )}

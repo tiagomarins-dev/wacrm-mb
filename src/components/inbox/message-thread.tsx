@@ -1392,9 +1392,11 @@ export function MessageThread({
                       const author = profiles.find((p) => p.user_id === item.note.user_id);
                       return (
                         <div key={item.id} className="flex justify-start py-1">
-                          <div className="max-w-[80%] rounded-lg border border-yellow-400/40 bg-yellow-300/15 px-3 py-2 text-sm text-yellow-100">
+                          {/* Post-it: sólido no modo claro (texto escuro legível);
+                              translúcido no escuro (dark:). */}
+                          <div className="max-w-[80%] rounded-lg border border-amber-300 bg-amber-100 px-3 py-2 text-sm text-amber-950 dark:border-yellow-400/40 dark:bg-yellow-300/15 dark:text-yellow-100">
                             <p className="whitespace-pre-wrap">{item.note.body}</p>
-                            <p className="mt-1 text-[10px] text-yellow-200/70">
+                            <p className="mt-1 text-[10px] text-amber-800 dark:text-yellow-200/70">
                               {author?.full_name ?? t("note")} ·{" "}
                               {format(new Date(item.note.created_at), "HH:mm")}
                             </p>
