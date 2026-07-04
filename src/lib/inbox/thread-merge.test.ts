@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { mergeThread } from "./thread-merge";
-import type { Message, ConversationEvent } from "@/types";
+import type { Message, ConversationEvent, ConversationNote } from "@/types";
 
 const msg = (id: string, at: string): Message =>
   ({ id, created_at: at, conversation_id: "c", sender_type: "customer", content_type: "text", status: "delivered" } as Message);
 const evt = (id: string, at: string): ConversationEvent =>
   ({ id, created_at: at, account_id: "a", conversation_id: "c", type: "transferred" });
+const note = (id: string, at: string): ConversationNote =>
+  ({ id, created_at: at, account_id: "a", conversation_id: "c", user_id: "u", body: "nota" });
 
 describe("mergeThread", () => {
   it("evento entre mensagens fica no meio (ordem cronológica)", () => {
@@ -29,5 +31,15 @@ describe("mergeThread", () => {
   it("só eventos / só mensagens", () => {
     expect(mergeThread([], [evt("e1", "2026-06-27T00:00:00Z")]).map((i) => i.kind)).toEqual(["event"]);
     expect(mergeThread([msg("m1", "2026-06-27T00:00:00Z")], []).map((i) => i.kind)).toEqual(["message"]);
+  });
+
+  it("nota interna intercalada por tempo entra na posição certa", () => {
+    const r = mergeThread(
+      [msg("m1", "2026-06-27T00:00:00Z"), msg("m2", "2026-06-27T00:00:02Z")],
+      [],
+      [note("n1", "2026-06-27T00:00:01Z")],
+    );
+    expect(r.map((i) => i.id)).toEqual(["m1", "n1", "m2"]);
+    expect(r[1].kind).toBe("note");
   });
 });
