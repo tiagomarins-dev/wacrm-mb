@@ -16,6 +16,7 @@ import type {
   Profile,
   QuickReply,
   ConversationEvent,
+  ConversationNote,
 } from "@/types";
 import {
   MessageSquare,
@@ -196,7 +197,7 @@ export function MessageThread({
   expanded,
   onToggleExpand,
 }: MessageThreadProps) {
-  const { user } = useAuth();
+  const { user, accountId } = useAuth();
   const { t } = useTranslation("inbox");
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -210,6 +211,8 @@ export function MessageThread({
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
   // Eventos internos de transferência (mig 048) — exibidos como pill na thread.
   const [events, setEvents] = useState<ConversationEvent[]>([]);
+  // Notas internas (mig 059) — post-it amarelo no fluxo; nunca vai ao cliente.
+  const [notes, setNotes] = useState<ConversationNote[]>([]);
   // Purely visual spin state for the manual-refresh button. The actual
   // refetch is fire-and-forget through `onRefresh` (which bumps the
   // parent's resyncToken); the 700ms spin is just feedback so the click
@@ -453,6 +456,35 @@ export function MessageThread({
     };
   }, [conversationId, resyncToken]);
 
+  // Notas internas — fetch separado (igual events) p/ o resyncToken refazer a
+  // busca sem derrubar o canal realtime.
+  useEffect(() => {
+    if (!conversationId) {
+      setNotes([]);
+      return;
+    }
+    const supabase = createClient();
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from("conversation_notes")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("created_at", { ascending: true });
+      if (cancelled) return;
+      if (error) {
+        console.error("Failed to fetch conversation notes:", error);
+        return;
+      }
+      setNotes((data as ConversationNote[]) ?? []);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, resyncToken]);
+
   // Reactions realtime subscription per conversation. Subscribing here
   // (not at the page level) keeps the channel scoped to the visible
   // conversation and avoids cross-conversation chatter on a busy inbox.
@@ -532,6 +564,21 @@ export function MessageThread({
         (payload) => {
           const row = payload.new as ConversationEvent;
           setEvents((prev) => (prev.some((e) => e.id === row.id) ? prev : [...prev, row]));
+        },
+      )
+      // Notas internas (mig 059) — append idempotente; chega na hora pra quem
+      // estiver com a conversa aberta noutra aba/atendente.
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "conversation_notes",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as ConversationNote;
+          setNotes((prev) => (prev.some((n) => n.id === row.id) ? prev : [...prev, row]));
         },
       )
       .subscribe();
@@ -641,6 +688,28 @@ export function MessageThread({
       }
     },
     [conversation, onNewMessage, onUpdateMessage]
+  );
+
+  // Cria uma NOTA INTERNA: insere em conversation_notes (RLS agent+) e NÃO
+  // dispara envio ao WhatsApp (não vira `messages`). O realtime devolve a
+  // linha (dedupe por id no listener). Guard de accountId/user null (R5).
+  const handleSendNote = useCallback(
+    async (body: string) => {
+      const text = body.trim();
+      if (!text || !accountId || !user?.id || !conversation) return;
+      const supabase = createClient();
+      const { error } = await supabase.from("conversation_notes").insert({
+        account_id: accountId,
+        conversation_id: conversation.id,
+        user_id: user.id,
+        body: text,
+      });
+      if (error) {
+        console.error("Failed to insert note:", error);
+        toast.error(t("noteFailed"));
+      }
+    },
+    [accountId, user?.id, conversation, t]
   );
 
   const handleSendMedia = useCallback(
@@ -819,7 +888,7 @@ export function MessageThread({
 
   // Timeline mesclada (mensagens + eventos internos) memoizada. Declarada aqui
   // (antes de qualquer early-return) p/ não violar a ordem dos hooks.
-  const merged = useMemo(() => mergeThread(messages, events), [messages, events]);
+  const merged = useMemo(() => mergeThread(messages, events, notes), [messages, events, notes]);
 
   const contactDisplayName = contact?.name || contact?.phone || "Customer";
 
@@ -1316,6 +1385,23 @@ export function MessageThread({
                         </div>
                       );
                     }
+                    // Nota interna: post-it amarelo, só a equipe vê. Autor por
+                    // p.user_id (referencia auth.users). Ramo ANTES de `item.msg`
+                    // pro TS estreitar o union corretamente.
+                    if (item.kind === "note") {
+                      const author = profiles.find((p) => p.user_id === item.note.user_id);
+                      return (
+                        <div key={item.id} className="flex justify-start py-1">
+                          <div className="max-w-[80%] rounded-lg border border-yellow-400/40 bg-yellow-300/15 px-3 py-2 text-sm text-yellow-100">
+                            <p className="whitespace-pre-wrap">{item.note.body}</p>
+                            <p className="mt-1 text-[10px] text-yellow-200/70">
+                              {author?.full_name ?? t("note")} ·{" "}
+                              {format(new Date(item.note.created_at), "HH:mm")}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
                     const msg = item.msg;
                     const parent = msg.reply_to_message_id
                       ? messagesById.get(msg.reply_to_message_id)
@@ -1370,6 +1456,7 @@ export function MessageThread({
         conversationId={conversation.id}
         sessionExpired={sessionInfo.expired}
         onSend={handleSend}
+        onSendNote={handleSendNote}
         onSendMedia={handleSendMedia}
         onOpenTemplates={handleOpenTemplates}
         replyTo={replyTo}

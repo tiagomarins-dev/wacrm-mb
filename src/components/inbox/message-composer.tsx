@@ -98,6 +98,8 @@ interface MessageComposerProps {
   conversationId: string;
   sessionExpired: boolean;
   onSend: (text: string, replyToId?: string) => void;
+  /** Cria uma nota interna (post-it, não vai ao cliente). */
+  onSendNote?: (body: string) => void;
   onSendMedia: (payload: SendMediaPayload) => void;
   onOpenTemplates: () => void;
   replyTo?: ReplyDraft | null;
@@ -131,6 +133,7 @@ export function MessageComposer({
   conversationId,
   sessionExpired,
   onSend,
+  onSendNote,
   onSendMedia,
   onOpenTemplates,
   replyTo,
@@ -145,6 +148,9 @@ export function MessageComposer({
   const { t } = useTranslation("inbox");
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  // Modo "Nota interna" (estilo Chatwoot): o input vira post-it e o envio cria
+  // uma nota (não manda pro cliente). Só quando o pai fornece onSendNote.
+  const [noteMode, setNoteMode] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Quick replies (menu do "/"). `qrQuery` é o texto após a "/"; `qrIndex`
@@ -221,8 +227,19 @@ export function MessageComposer({
 
   const handleSend = useCallback(async () => {
     const trimmed = text.trim();
-    if (!trimmed || sending || sessionExpired) return;
+    if (!trimmed || sending) return;
 
+    // Modo nota: cria nota interna e limpa. Não passa pelo guard de sessão 24h
+    // (nota é interna — sempre permitida, mesmo com a janela expirada).
+    if (noteMode) {
+      onSendNote?.(trimmed);
+      setText("");
+      setQrOpen(false);
+      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      return;
+    }
+
+    if (sessionExpired) return;
     setSending(true);
     try {
       onSend(trimmed, replyTo?.id);
@@ -234,7 +251,7 @@ export function MessageComposer({
     } finally {
       setSending(false);
     }
-  }, [text, sending, sessionExpired, onSend, replyTo?.id]);
+  }, [text, sending, sessionExpired, onSend, onSendNote, noteMode, replyTo?.id]);
 
   // Substitui o token "/query" no cursor pela quick reply (com variáveis
   // do contato resolvidas), reposiciona o cursor e fecha o menu.
@@ -594,8 +611,36 @@ export function MessageComposer({
           </Button>
         </div>
       ) : (
+        <>
+        {/* Toggle Responder | Nota (estilo Chatwoot). Só quando o pai fornece
+            onSendNote. Em modo nota o input vira post-it amarelo. */}
+        {onSendNote && (
+          <div className="mb-2 inline-flex rounded-md border border-border p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setNoteMode(false)}
+              className={cn(
+                "rounded px-2 py-0.5 transition-colors",
+                !noteMode ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("replyMode")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setNoteMode(true)}
+              className={cn(
+                "rounded px-2 py-0.5 transition-colors",
+                noteMode ? "bg-yellow-300/20 text-yellow-200" : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t("noteMode")}
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2">
-          {/* Attach menu — photo / video / document / voice. */}
+          {/* Attach menu — photo / video / document / voice. Escondido em modo nota. */}
+          {!noteMode && (
           <DropdownMenu>
             <DropdownMenuTrigger
               disabled={inputsDisabled || busy}
@@ -633,9 +678,10 @@ export function MessageComposer({
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          )}
 
-          {/* Template é capability Meta — escondido em grupo (Evolution). */}
-          {!isGroup && (
+          {/* Template é capability Meta — escondido em grupo (Evolution) e em modo nota. */}
+          {!isGroup && !noteMode && (
             <GatedButton
               variant="ghost"
               size="sm"
@@ -657,19 +703,25 @@ export function MessageComposer({
             placeholder={
               readOnly
                 ? "Read-only — viewers can browse but not reply"
-                : sessionExpired
-                  ? "Session expired - use a template"
-                  : "Type a message... (Shift+Enter for new line)"
+                : noteMode
+                  ? t("notePlaceholder")
+                  : sessionExpired
+                    ? "Session expired - use a template"
+                    : "Type a message... (Shift+Enter for new line)"
             }
-            disabled={sessionExpired || readOnly}
+            // Nota é interna — sempre permitida (não desabilita por sessão expirada).
+            disabled={readOnly || (!noteMode && sessionExpired)}
             rows={1}
             // Textarea keeps its own inline title — the GatedButton
             // wrapping pattern doesn't apply to non-button inputs.
             // The placeholder text also surfaces the read-only state.
             title={readOnly ? "Read-only — your role can't send messages" : undefined}
             className={cn(
-              "flex-1 resize-none rounded-xl border border-border bg-muted px-4 py-2.5 text-sm text-foreground placeholder-muted-foreground outline-none transition-colors focus:border-primary/50",
-              (sessionExpired || readOnly) && "cursor-not-allowed opacity-50"
+              "flex-1 resize-none rounded-xl border px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary/50",
+              noteMode
+                ? "border-yellow-400/40 bg-yellow-300/10 text-yellow-100 placeholder-yellow-200/50"
+                : "border-border bg-muted text-foreground placeholder-muted-foreground",
+              (readOnly || (!noteMode && sessionExpired)) && "cursor-not-allowed opacity-50"
             )}
           />
 
@@ -677,13 +729,14 @@ export function MessageComposer({
             size="sm"
             canAct={!readOnly}
             gateReason="send messages"
-            disabled={!text.trim() || sessionExpired || sending}
+            disabled={!text.trim() || sending || (!noteMode && sessionExpired)}
             onClick={handleSend}
             className="h-9 w-9 shrink-0 bg-primary p-0 hover:bg-primary/90 disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
           </GatedButton>
         </div>
+        </>
       )}
 
     </div>

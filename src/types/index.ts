@@ -407,6 +407,17 @@ export interface ConversationEvent {
   created_at: string;
 }
 
+// Nota interna de uma conversa (mig 059) — post-it no fluxo, só a equipe vê,
+// nunca enviada ao cliente. user_id referencia auth.users (autor).
+export interface ConversationNote {
+  id: string;
+  account_id: string;
+  conversation_id: string;
+  user_id?: string | null;
+  body: string;
+  created_at: string;
+}
+
 export type SenderType = 'customer' | 'agent' | 'bot';
 export type ContentType =
   | 'text'
