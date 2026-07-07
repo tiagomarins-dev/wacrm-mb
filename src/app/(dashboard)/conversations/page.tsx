@@ -41,7 +41,7 @@ import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useFormat } from "@/lib/i18n/format";
 import { resolveAssignee, type Assignee } from "@/lib/inbox/assignee";
 import { AI_AGENT_LABEL, AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
-import { buildSearchParams, type AgentFilter } from "@/lib/inbox/search-conversations-params";
+import { buildSearchParams, type AgentFilter, type DateRange } from "@/lib/inbox/search-conversations-params";
 
 const PAGE_SIZE = 25;
 
@@ -60,6 +60,8 @@ const STATUS_LABEL_KEY: Record<ConversationStatus, string> = {
 // Filtro de status: 'all' + os valores de DB (NUNCA o rótulo traduzido — vai pro .eq).
 type StatusFilter = "all" | ConversationStatus;
 const STATUS_FILTERS: StatusFilter[] = ["all", "open", "pending", "closed"];
+// Presets do filtro de data (custom entra via 2 inputs, fora deste array).
+const DATE_RANGES: DateRange[] = ["today", "week", "month", "6m", "12m", "all"];
 
 // Traduz o discriminador do responsável p/ exibição.
 function assigneeLabel(a: Assignee, t: (k: string) => string): string {
@@ -90,6 +92,11 @@ export default function ConversationsPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   // Filtro por responsável: 'all' / 'unassigned' / uuid (humano, perfil IA ou bot).
   const [agentFilter, setAgentFilter] = useState<AgentFilter>("all");
+  // Filtro de data (por last_message_at). Padrão "Esse mês" — não puxa TODAS as
+  // conversas de cara. customFrom/To só valem quando dateRange === "custom".
+  const [dateRange, setDateRange] = useState<DateRange>("month");
+  const [customFrom, setCustomFrom] = useState<Date | null>(null);
+  const [customTo, setCustomTo] = useState<Date | null>(null);
   const [page, setPage] = useState(0);
   const [totalCount, setTotalCount] = useState(0);
   // Mapas p/ resolver o responsável (carregados 1x). Espelha message-thread.tsx:206-242.
@@ -124,7 +131,7 @@ export default function ConversationsPage() {
     setLoading(true);
     const { data, error } = await supabase.rpc(
       "search_conversations",
-      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page })
+      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo })
     );
 
     if (error) {
@@ -137,7 +144,7 @@ export default function ConversationsPage() {
     setRows(list.map((r) => r.data));
     setTotalCount(Number(list[0]?.total_count ?? 0));
     setLoading(false);
-  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, t]);
+  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, dateRange, customFrom, customTo, t]);
 
   // Refetch a cada mudança de page/search/status/conexão. Disable espelha
   // contacts/page.tsx:185 (fetch faz setLoading síncrono no início).
@@ -158,7 +165,12 @@ export default function ConversationsPage() {
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
   const isFiltering =
-    search.trim() !== "" || statusFilter !== "all" || agentFilter !== "all";
+    search.trim() !== "" ||
+    statusFilter !== "all" ||
+    agentFilter !== "all" ||
+    dateRange !== "month" ||
+    !!customFrom ||
+    !!customTo;
 
   return (
     <div className="space-y-6">
@@ -207,6 +219,68 @@ export default function ConversationsPage() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* Filtro de data (por last_message_at). Padrão "Esse mês" → reduz a
+            carga; "Personalizado" abre 2 inputs de data (fuso local). */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+            {t(`date_${dateRange}`)}
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="border-border bg-popover">
+            {DATE_RANGES.map((r) => (
+              <DropdownMenuItem
+                key={r}
+                onClick={() => {
+                  setDateRange(r);
+                  setPage(0);
+                }}
+                className={cn(
+                  "text-sm",
+                  dateRange === r ? "text-primary" : "text-popover-foreground"
+                )}
+              >
+                {t(`date_${r}`)}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator className="bg-border" />
+            <DropdownMenuItem
+              onClick={() => {
+                setDateRange("custom");
+                setPage(0);
+              }}
+              className={cn(
+                "text-sm",
+                dateRange === "custom" ? "text-primary" : "text-popover-foreground"
+              )}
+            >
+              {t("date_custom")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {/* Range personalizado: inputs nativos (sem Calendar no projeto).
+            "T00:00" sem Z → interpretado no fuso local, casa com resolveDateRange. */}
+        {dateRange === "custom" && (
+          <div className="flex items-center gap-1">
+            <input
+              type="date"
+              className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+              onChange={(e) => {
+                setCustomFrom(e.target.value ? new Date(e.target.value + "T00:00") : null);
+                setPage(0);
+              }}
+            />
+            <span className="text-xs text-muted-foreground">→</span>
+            <input
+              type="date"
+              className="h-9 rounded-md border border-border bg-card px-2 text-sm text-foreground"
+              onChange={(e) => {
+                setCustomTo(e.target.value ? new Date(e.target.value + "T00:00") : null);
+                setPage(0);
+              }}
+            />
+          </div>
+        )}
 
         {/* Filtro por responsável: Todos / perfis IA / bot / humanos / Não atribuído.
             Espelha o seletor de responsável do inbox (message-thread.tsx:1016-1090). */}
