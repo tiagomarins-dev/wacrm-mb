@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import type { Conversation, ConversationStatus } from "@/types";
-import { Search, ArrowDown, ArrowUp, Users } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users, Bot } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -209,17 +209,20 @@ export function ConversationList({
     };
   }, [canManageMembers, accountId, resyncToken]);
 
-  // Abas visíveis: "Agente IA" só p/ admin/owner (canManageMembers), espelhando
-  // o gate das configs de IA (ai_profiles é admin+).
-  const tabs = useMemo<QueueTab[]>(
-    () => ["fila", "minhas", "sla", ...(canManageMembers ? ["ia" as const] : [])],
-    [canManageMembers]
-  );
+  // Abas humanas (row de tabs): Fila / Minhas / SLA. "Agente IA" saiu do row e
+  // virou um chip separado (é uma lente distinta: conversa tratada por bot, não
+  // fila humana) — só p/ admin/owner (canManageMembers), espelhando o gate das
+  // configs de IA (ai_profiles é admin+).
+  const tabs = useMemo<QueueTab[]>(() => ["fila", "minhas", "sla"], []);
+  const canSeeIa = canManageMembers;
 
-  // Aba efetivamente exibida: se o activeTab não está em `tabs` (ex.: era "ia" e
-  // a permissão caiu), cai pra "fila" — sem setState (evita aba órfã/empty
-  // fantasma de forma derivada, não imperativa).
-  const effectiveTab = tabs.includes(activeTab) ? activeTab : "fila";
+  // Aba efetivamente exibida: aceita o chip "ia" (fora do row) quando admin;
+  // senão, se o activeTab não está em `tabs`, cai pra "fila" (derivado, sem
+  // setState — evita aba órfã/empty fantasma).
+  const effectiveTab =
+    tabs.includes(activeTab) || (activeTab === "ia" && canSeeIa)
+      ? activeTab
+      : "fila";
 
   const filtered = useMemo(() => {
     // Classifica pela aba ativa (fila/minhas/sla/ia/geral), aplica a busca e ordena.
@@ -316,6 +319,36 @@ export function ConversationList({
               ))}
             </TabsList>
           </Tabs>
+          {/* Agente IA — lente separada das abas humanas (bot, não fila humana).
+              Chip toggle: liga → activeTab "ia"; desliga → volta pra "fila".
+              Só admin+ (canSeeIa). Mantém a contagem visível como as abas. */}
+          {canSeeIa && (
+            <Button
+              variant={effectiveTab === "ia" ? "default" : "outline"}
+              size="sm"
+              className="shrink-0 gap-1.5 px-2 text-xs"
+              aria-pressed={effectiveTab === "ia"}
+              aria-label={t("tabIa")}
+              title={t("tabIa")}
+              onClick={() =>
+                setActiveTab(effectiveTab === "ia" ? "fila" : "ia")
+              }
+            >
+              <Bot className="size-3.5" />
+              {counts.ia > 0 && (
+                <span
+                  className={cn(
+                    "flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold",
+                    effectiveTab === "ia"
+                      ? "bg-primary-foreground/20 text-primary-foreground"
+                      : "bg-primary/15 text-primary"
+                  )}
+                >
+                  {counts.ia}
+                </span>
+              )}
+            </Button>
+          )}
           {/* Direção da ordenação por tempo (espelha template-manager.tsx:814-822). */}
           <Button
             variant="outline"
