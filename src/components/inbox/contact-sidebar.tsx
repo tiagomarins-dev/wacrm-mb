@@ -7,6 +7,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import type { Contact, Deal, ContactNote, Tag } from "@/types";
 import type { StudentInfoResponse } from "@/lib/integrations/student-info";
+import { agrupaRedacoesPorBanca } from "@/lib/inbox/redacoes";
+import { fundeCursos } from "@/lib/inbox/student-courses";
 import {
   Phone,
   Mail,
@@ -450,65 +452,85 @@ function StudentBlock({
         <p className="text-muted-foreground">Nasc.: {fmtDate(a.data_nascimento)}</p>
       </div>
 
-      {/* Cursos matriculados */}
-      <div>
-        <p className="mb-1 px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-          Cursos
-        </p>
-        {(student.cursos_matriculados ?? []).length === 0 ? (
-          <p className="px-1 text-muted-foreground">Sem curso ativo.</p>
-        ) : (
-          <div className="space-y-1">
-            {student.cursos_matriculados!.map((curso) => (
-              <div key={curso.id_curso} className="rounded-lg bg-muted px-3 py-1.5">
-                <p className="font-medium text-foreground">{curso.nome_curso}</p>
-                <p className="text-muted-foreground">
-                  Matrícula: {fmtDate(curso.data_matricula)}
-                  {curso.tag ? ` · ${curso.tag}` : ""}
-                </p>
+      {/* Cursos (matrícula + progresso fundidos por id_curso — sem duplicata). */}
+      {(() => {
+        // Só binding local + JSX — a fusão das duas fontes mora na lib pura.
+        const cursos = fundeCursos(student.cursos_matriculados, prog);
+        return (
+          <div>
+            <div className="mb-1 flex items-center justify-between px-1">
+              <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                Cursos
+              </span>
+              {prog && <span className="text-foreground">{Math.round(prog.percentual_geral)}%</span>}
+            </div>
+            {cursos.length === 0 ? (
+              <p className="px-1 text-muted-foreground">Sem curso ativo.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {cursos.map((curso) => (
+                  <div key={curso.id_curso} className="rounded-lg bg-muted px-3 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-medium text-foreground">{curso.nome_curso}</span>
+                      {curso.progresso && (
+                        <span className="shrink-0 text-muted-foreground">
+                          {curso.progresso.aulas_concluidas}/{curso.progresso.total_aulas} aulas
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-muted-foreground">
+                      Matrícula: {fmtDate(curso.data_matricula ?? undefined)}
+                      {curso.tag ? ` · ${curso.tag}` : ""}
+                    </p>
+                    {curso.progresso && (
+                      <>
+                        {/* Barra = % de aulas concluídas (rotulada p/ não confundir com vídeo). */}
+                        <div className="mt-1 flex items-center gap-2">
+                          <div className="flex-1">
+                            <Bar pct={curso.progresso.percentual_concluidas} />
+                          </div>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {Math.round(curso.progresso.percentual_concluidas)}% aulas
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Vídeo assistido: {Math.round(curso.progresso.media_video_assistido)}%
+                        </p>
+                      </>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
+        );
+      })()}
 
-      {/* Progresso de uso */}
-      {prog && (
-        <div>
-          <div className="mb-1 flex items-center justify-between px-1">
-            <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Progresso
-            </span>
-            <span className="text-foreground">{Math.round(prog.percentual_geral)}%</span>
-          </div>
-          <Bar pct={prog.percentual_geral} />
-          <div className="mt-2 space-y-1.5">
-            {(prog.por_curso ?? []).map((pc) => (
-              <div key={pc.id_curso} className="rounded-lg bg-muted px-3 py-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-foreground">{pc.nome_curso}</span>
-                  <span className="text-muted-foreground">
-                    {pc.aulas_concluidas}/{pc.total_aulas}
+      {/* Redações do ano atual, agrupadas por banca (ENEM/UERJ/FUVEST/…). */}
+      {student.redacoes && (() => {
+        // Só binding local + JSX — a agregação (filter/reduce/sort) mora na lib pura.
+        const ano = new Date().getFullYear();
+        const bancas = agrupaRedacoesPorBanca(student.redacoes, ano);
+        return (
+          <div className="px-1 text-muted-foreground">
+            <p className="mb-0.5 text-[10px] font-medium uppercase tracking-wider">
+              Redações {ano}
+            </p>
+            {bancas.length === 0 ? (
+              <p>Nenhuma redação em {ano}.</p>
+            ) : (
+              <p>
+                {bancas.map(([banca, n], i) => (
+                  <span key={banca}>
+                    {i > 0 ? " · " : ""}
+                    {banca}: <span className="text-foreground">{n}</span>
                   </span>
-                </div>
-                <div className="mt-1">
-                  <Bar pct={pc.percentual_concluidas} />
-                </div>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">
-                  Vídeo assistido: {Math.round(pc.media_video_assistido)}%
-                </p>
-              </div>
-            ))}
+                ))}
+              </p>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Redações */}
-      {student.redacoes && (
-        <p className="px-1 text-muted-foreground">
-          Redações: <span className="text-foreground">{student.redacoes.total}</span>
-        </p>
-      )}
+        );
+      })()}
     </div>
   );
 }
