@@ -54,5 +54,8 @@
   "evtAiHandoff": "IA encaminhou para {{to}}",
   "someone": "Um atendente",
   "aiBotName": "Assistente IA",
-  "unknownAgent": "alguém"
+  "unknownAgent": "alguém",
+  "statusOpen": "Aberta",
+  "statusPending": "Pendente",
+  "statusClosed": "Finalizada"
 }

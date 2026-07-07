@@ -54,5 +54,8 @@
   "evtAiHandoff": "AI handed off to {{to}}",
   "someone": "A teammate",
   "aiBotName": "AI Assistant",
-  "unknownAgent": "someone"
+  "unknownAgent": "someone",
+  "statusOpen": "Open",
+  "statusPending": "Pending",
+  "statusClosed": "Closed"
 }

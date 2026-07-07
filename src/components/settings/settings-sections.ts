@@ -1,5 +1,6 @@
 import {
   Bot,
+  CircleDot,
   Clock,
   Coins,
   FileText,
@@ -37,6 +38,7 @@ export const SETTINGS_SECTIONS = [
   'ai-agent',
   'business-hours',
   'fields',
+  'statuses',
   'deals',
   'members',
 ] as const;
@@ -69,6 +71,7 @@ export const SECTION_META: Record<SettingsSection, SectionMeta> = {
   'ai-agent': { id: 'ai-agent', labelKey: 'aiAgent', icon: Bot, group: 'workspace', adminOnly: true },
   'business-hours': { id: 'business-hours', labelKey: 'businessHours', icon: Clock, group: 'workspace', adminOnly: true },
   fields: { id: 'fields', labelKey: 'fields', icon: Tags, group: 'workspace' },
+  statuses: { id: 'statuses', labelKey: 'statuses', icon: CircleDot, group: 'workspace', adminOnly: true },
   deals: { id: 'deals', labelKey: 'deals', icon: Coins, group: 'workspace' },
   members: { id: 'members', labelKey: 'members', icon: UsersRound, group: 'workspace' },
 };

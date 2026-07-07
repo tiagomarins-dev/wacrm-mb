@@ -19,6 +19,7 @@ import { LeadScoreConfigPanel } from '@/components/settings/lead-score-config';
 import { AiAgentSettings } from '@/components/settings/ai-agent-settings';
 import { BusinessHoursConfig } from '@/components/settings/business-hours-config';
 import { FieldsAndTagsPanel } from '@/components/settings/fields-and-tags-panel';
+import { StatusManager } from '@/components/settings/status-manager';
 import { DealsSettings } from '@/components/settings/deals-settings';
 import { MembersTab } from '@/components/settings/members-tab';
 import {
@@ -70,6 +71,7 @@ export default function SettingsPage() {
     'ai-agent': <AiAgentSettings />,
     'business-hours': <BusinessHoursConfig />,
     fields: <FieldsAndTagsPanel />,
+    statuses: <StatusManager />,
     deals: <DealsSettings />,
     members: <MembersTab />,
   };
