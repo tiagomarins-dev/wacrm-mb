@@ -7,10 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type {
   Conversation,
-  ConversationStatus,
   Profile,
   AiProfilePublic,
 } from "@/types";
+import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
+import { resolveStatus } from "@/lib/inbox/conversation-statuses";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,21 +46,9 @@ import { buildSearchParams, type AgentFilter, type DateRange } from "@/lib/inbox
 
 const PAGE_SIZE = 25;
 
-// Cor do "ponto" de status (espelha conversation-list.tsx:33-37).
-const STATUS_COLORS: Record<ConversationStatus, string> = {
-  open: "bg-primary",
-  pending: "bg-amber-500",
-  closed: "bg-muted-foreground",
-};
-// Chave i18n do label de cada status (não espalhar t() inline).
-const STATUS_LABEL_KEY: Record<ConversationStatus, string> = {
-  open: "statusOpen",
-  pending: "statusPending",
-  closed: "statusClosed",
-};
-// Filtro de status: 'all' + os valores de DB (NUNCA o rótulo traduzido — vai pro .eq).
-type StatusFilter = "all" | ConversationStatus;
-const STATUS_FILTERS: StatusFilter[] = ["all", "open", "pending", "closed"];
+// Filtro de status: 'all' + a key de qualquer status da conta (system/custom,
+// 062). NUNCA o rótulo traduzido — vai pro .eq. Cores/labels vêm do hook.
+type StatusFilter = string;
 // Presets do filtro de data (custom entra via 2 inputs, fora deste array).
 const DATE_RANGES: DateRange[] = ["today", "week", "month", "6m", "12m", "all"];
 
@@ -85,6 +74,8 @@ export default function ConversationsPage() {
   const router = useRouter();
   const supabase = createClient();
   const { activeConnectionId } = useActiveConnection();
+  // Status da conta (system+custom, 062) — label/cor do badge e opções do filtro.
+  const { statuses } = useConversationStatuses();
 
   const [rows, setRows] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -198,11 +189,11 @@ export default function ConversationsPage() {
           <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
             {statusFilter === "all"
               ? t("filterAllStatus")
-              : t(STATUS_LABEL_KEY[statusFilter])}
+              : resolveStatus(statuses, statusFilter).label}
             <ChevronDown className="size-3.5" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="border-border bg-popover">
-            {STATUS_FILTERS.map((s) => (
+            {["all", ...statuses.map((s) => s.key)].map((s) => (
               <DropdownMenuItem
                 key={s}
                 onClick={() => {
@@ -214,7 +205,7 @@ export default function ConversationsPage() {
                   statusFilter === s ? "text-primary" : "text-popover-foreground"
                 )}
               >
-                {s === "all" ? t("filterAllStatus") : t(STATUS_LABEL_KEY[s])}
+                {s === "all" ? t("filterAllStatus") : resolveStatus(statuses, s).label}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -423,10 +414,17 @@ export default function ConversationsPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className={cn("size-2 rounded-full", STATUS_COLORS[conv.status])} />
-                        {t(STATUS_LABEL_KEY[conv.status])}
-                      </span>
+                      {(() => {
+                        const st = resolveStatus(statuses, conv.status);
+                        return (
+                          <span
+                            className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium"
+                            style={{ backgroundColor: `${st.color}20`, color: st.color }}
+                          >
+                            {st.label}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
                       {conv.last_message_at ? formatDateTime(conv.last_message_at) : "—"}

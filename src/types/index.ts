@@ -366,7 +366,21 @@ export interface LeadScoreRow {
   last_interaction_at: string | null;
 }
 
+// Chaves dos 3 status de SISTEMA (acopladas a comportamento: automação/flow/
+// dashboard/auto-unassign). Status custom são strings livres além destas.
 export type ConversationStatus = 'open' | 'pending' | 'closed';
+
+// Linha da tabela conversation_statuses (mig 062) — status por conta, com cor.
+export interface ConversationStatusRow {
+  id: string;
+  account_id: string;
+  key: string;
+  label: string;
+  color: string; // hex
+  is_system: boolean;
+  sort_order: number;
+  created_at: string;
+}
 
 export interface Conversation {
   id: string;
@@ -379,7 +393,8 @@ export interface Conversation {
   chat_id?: string | null;
   /** True p/ conversa de grupo Evolution (058). */
   is_group?: boolean;
-  status: ConversationStatus;
+  /** Status da conversa: key de conversation_statuses (062). System ou custom. */
+  status: string;
   assigned_agent_id?: string;
   last_message_text?: string;
   last_message_at?: string;

@@ -11,7 +11,6 @@ import type {
   Message,
   MessageReaction,
   Contact,
-  ConversationStatus,
   MessageTemplate,
   Profile,
   QuickReply,
@@ -59,6 +58,8 @@ import { deleteAccountMedia } from "@/lib/storage/upload-media";
 import { TemplatePicker } from "./template-picker";
 import { buildReplyPreview } from "./reply-quote";
 import { resolveAssignee } from "@/lib/inbox/assignee";
+import { resolveStatus } from "@/lib/inbox/conversation-statuses";
+import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
 import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
@@ -86,7 +87,7 @@ interface MessageThreadProps {
   onMessagesLoaded: (messages: Message[]) => void;
   onNewMessage: (message: Message) => void;
   onUpdateMessage: (id: string, updates: Partial<Message>) => void;
-  onStatusChange: (conversationId: string, status: ConversationStatus) => void;
+  onStatusChange: (conversationId: string, status: string) => void;
   onAssignChange: (
     conversationId: string,
     assignedAgentId: string | null,
@@ -161,12 +162,6 @@ function groupThreadByDate(items: ThreadItem[]) {
   return groups;
 }
 
-const STATUS_OPTIONS: { label: string; value: ConversationStatus; color: string }[] = [
-  { label: "Open", value: "open", color: "text-primary" },
-  { label: "Pending", value: "pending", color: "text-amber-400" },
-  { label: "Closed", value: "closed", color: "text-muted-foreground" },
-];
-
 /**
  * WhatsApp-style doodle background applied to the chat area (both the
  * active thread and the empty state). The SVG tile lives at
@@ -199,6 +194,8 @@ export function MessageThread({
 }: MessageThreadProps) {
   const { user, accountId } = useAuth();
   const { t } = useTranslation("inbox");
+  // Status da conta (system+custom, 062) — dropdown de troca e badge atual.
+  const { statuses } = useConversationStatuses();
   const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Rastreia se o usuário está colado no fim (atualizado no onScroll do
@@ -779,7 +776,7 @@ export function MessageThread({
   );
 
   const handleStatusChange = useCallback(
-    async (status: ConversationStatus) => {
+    async (status: string) => {
       if (!conversation) return;
 
       const supabase = createClient();
@@ -1031,9 +1028,8 @@ export function MessageThread({
   const assignee = resolveAssignee(conversation.assigned_agent_id, profiles, aiProfiles);
   const assignedToOtherHuman = assignee.kind === "human" && conversation.assigned_agent_id !== user?.id;
   const assigneeName = assignee.kind === "human" ? assignee.name : null;
-  const currentStatus = STATUS_OPTIONS.find(
-    (s) => s.value === conversation.status
-  );
+  // Status atual resolvido (label+cor hex) da lista da conta.
+  const currentStatus = resolveStatus(statuses, conversation.status);
   const assignedAgentId = conversation.assigned_agent_id ?? null;
   const currentAssignee = profiles.find((p) => p.user_id === assignedAgentId);
   // Perfis de IA são responsáveis "virtuais" (id sintético, sem profile) —
@@ -1238,22 +1234,23 @@ export function MessageThread({
 
           {/* Status dropdown */}
           <DropdownMenu>
-            <DropdownMenuTrigger className={cn(
-                  "inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted",
-                  currentStatus?.color ?? "text-muted-foreground"
-                )}>
-                {currentStatus?.label ?? "Status"}
+            <DropdownMenuTrigger
+              className="inline-flex items-center justify-center h-7 gap-1 px-2 text-xs rounded-md hover:bg-muted"
+              style={{ color: currentStatus.color }}
+            >
+                {currentStatus.label}
                 <ChevronDown className="h-3 w-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
               className="border-border bg-popover"
             >
-              {STATUS_OPTIONS.map((opt) => (
+              {statuses.map((opt) => (
                 <DropdownMenuItem
-                  key={opt.value}
-                  onClick={() => handleStatusChange(opt.value)}
-                  className={cn("text-sm", opt.color)}
+                  key={opt.key}
+                  onClick={() => handleStatusChange(opt.key)}
+                  className="text-sm"
+                  style={{ color: opt.color }}
                 >
                   {opt.label}
                 </DropdownMenuItem>

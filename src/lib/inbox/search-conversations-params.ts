@@ -5,7 +5,6 @@
 //  - 'all'/'unassigned' viram os flags p_agent/p_unassigned;
 //  - paginação por PAGE_SIZE.
 // ============================================================
-import type { ConversationStatus } from "@/types";
 import { startOfWeek, startOfMonth, subMonths, endOfDay } from "date-fns";
 import { startOfLocalDay } from "@/lib/dashboard/date-utils";
 
@@ -51,7 +50,8 @@ export type AgentFilter = "all" | "unassigned" | string;
 
 export interface SearchInput {
   search: string;
-  statusFilter: "all" | ConversationStatus;
+  // 'all' ou a key de qualquer status da conta (system/custom, 062).
+  statusFilter: string;
   agentFilter: AgentFilter;
   activeConnectionId: string | null;
   page: number;

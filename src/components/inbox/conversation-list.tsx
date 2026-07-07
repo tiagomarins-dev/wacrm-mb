@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
-import type { Conversation, ConversationStatus } from "@/types";
+import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
+import { resolveStatus, type ResolvedStatus } from "@/lib/inbox/conversation-statuses";
+import type { Conversation } from "@/types";
 import { Search, ArrowDown, ArrowUp, Users, Bot } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
@@ -33,11 +35,6 @@ interface ConversationListProps {
   resyncToken?: number;
 }
 
-const STATUS_COLORS: Record<ConversationStatus, string> = {
-  open: "bg-primary",
-  pending: "bg-amber-500",
-  closed: "bg-muted-foreground",
-};
 
 // Direção do ordenador por tempo (toggle global das abas) + chave de persistência.
 type SortDir = "asc" | "desc";
@@ -250,6 +247,10 @@ export function ConversationList({
     [conversations, user?.id, now, aiAgentIds]
   );
 
+  // Status da conta (system+custom) — buscados 1× e repassados a cada linha
+  // para o badge colorido (evita fetch por conversa).
+  const { statuses } = useConversationStatuses();
+
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setSearch(e.target.value);
@@ -390,6 +391,7 @@ export function ConversationList({
                 conversation={conv}
                 isActive={conv.id === activeConversationId}
                 onSelect={handleSelect}
+                statuses={statuses}
               />
             ))}
           </div>
@@ -403,12 +405,14 @@ interface ConversationItemProps {
   conversation: Conversation;
   isActive: boolean;
   onSelect: (conversation: Conversation) => void;
+  statuses: ResolvedStatus[];
 }
 
 function ConversationItem({
   conversation,
   isActive,
   onSelect,
+  statuses,
 }: ConversationItemProps) {
   // Idioma ativo da UI: 'pt-BR' usa o locale ptBR; 'en' usa o default (en-US).
   const { i18n } = useTranslation("inbox");
@@ -474,13 +478,19 @@ function ConversationItem({
                 {conversation.unread_count}
               </span>
             )}
-            <span
-              className={cn(
-                "h-2 w-2 rounded-full",
-                STATUS_COLORS[conversation.status]
-              )}
-              title={conversation.status}
-            />
+            {/* Badge de status escrito, cor do status da conta (062). */}
+            {(() => {
+              const st = resolveStatus(statuses, conversation.status);
+              return (
+                <span
+                  className="shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-semibold leading-none"
+                  style={{ backgroundColor: `${st.color}20`, color: st.color }}
+                  title={st.label}
+                >
+                  {st.label}
+                </span>
+              );
+            })()}
           </div>
         </div>
       </div>
