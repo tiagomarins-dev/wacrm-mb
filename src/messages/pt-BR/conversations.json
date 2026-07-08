@@ -27,5 +27,16 @@
   "noMatch": "Nenhuma conversa encontrada",
   "failedLoad": "Falha ao carregar conversas",
   "showing": "Exibindo {{from}}-{{to}} de {{total}}",
-  "pageOf": "Página {{page}} de {{total}}"
+  "pageOf": "Página {{page}} de {{total}}",
+  "bulkClose": "Fechar selecionadas",
+  "bulkCloseTitle_one": "Fechar {{count}} conversa?",
+  "bulkCloseTitle_other": "Fechar {{count}} conversas?",
+  "bulkCloseConfirm": "Elas saem da fila e ficam como Finalizadas. Reversível.",
+  "bulkCloseDone_one": "{{count}} conversa fechada",
+  "bulkCloseDone_other": "{{count}} conversas fechadas",
+  "bulkCloseError": "Erro ao fechar conversas",
+  "selectAllAria": "Selecionar todas",
+  "selectAria": "Selecionar {{name}}",
+  "selectedSuffix_one": "selecionada",
+  "selectedSuffix_other": "selecionadas"
 }

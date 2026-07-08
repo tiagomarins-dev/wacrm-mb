@@ -27,5 +27,16 @@
   "noMatch": "No conversations found",
   "failedLoad": "Failed to load conversations",
   "showing": "Showing {{from}}-{{to}} of {{total}}",
-  "pageOf": "Page {{page}} of {{total}}"
+  "pageOf": "Page {{page}} of {{total}}",
+  "bulkClose": "Close selected",
+  "bulkCloseTitle_one": "Close {{count}} conversation?",
+  "bulkCloseTitle_other": "Close {{count}} conversations?",
+  "bulkCloseConfirm": "They leave the queue and become Closed. Reversible.",
+  "bulkCloseDone_one": "{{count}} conversation closed",
+  "bulkCloseDone_other": "{{count}} conversations closed",
+  "bulkCloseError": "Failed to close conversations",
+  "selectAllAria": "Select all",
+  "selectAria": "Select {{name}}",
+  "selectedSuffix_one": "selected",
+  "selectedSuffix_other": "selected"
 }

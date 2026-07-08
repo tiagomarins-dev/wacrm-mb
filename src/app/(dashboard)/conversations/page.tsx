@@ -15,6 +15,16 @@ import { useConversationWorkspace } from "@/hooks/use-conversation-workspace";
 import { ConversationWorkspace } from "@/components/inbox/conversation-workspace";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { GatedButton } from "@/components/ui/gated-button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -37,8 +47,10 @@ import {
   ChevronRight,
   Loader2,
   MessagesSquare,
+  CheckCircle2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCan } from "@/hooks/use-can";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useFormat } from "@/lib/i18n/format";
 import { resolveAssignee, type Assignee } from "@/lib/inbox/assignee";
@@ -99,6 +111,10 @@ export default function ConversationsPage() {
   // Filtro por tag do contato (063): 'all' ou uuid da tag. Tags da conta p/ o dropdown.
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [accountTags, setAccountTags] = useState<AccountTag[]>([]);
+  // Seleção múltipla (page-scoped) p/ fechar em lote. Espelha contacts/page.tsx.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCloseOpen, setBulkCloseOpen] = useState(false);
+  const canEdit = useCan("send-messages");
 
   // Responsáveis: membros humanos (profiles, RLS) + perfis de IA (view pública).
   useEffect(() => {
@@ -133,6 +149,9 @@ export default function ConversationsPage() {
   // O termo de busca só vai pro banco com >= 3 chars (regra no buildSearchParams).
   const fetchConversations = useCallback(async () => {
     setLoading(true);
+    // Limpa a seleção: paginação/filtro trocam as linhas visíveis (espelha
+    // contacts/page.tsx:122) — senão a barra de bulk agiria sobre linhas fora da página.
+    setSelected(new Set());
     const { data, error } = await supabase.rpc(
       "search_conversations",
       buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo, tagFilter })
@@ -156,6 +175,48 @@ export default function ConversationsPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchConversations();
   }, [fetchConversations]);
+
+  // Seleção múltipla page-scoped (espelha contacts/page.tsx).
+  const pageIds = rows.map((r) => r.id);
+  const allSelected = pageIds.length > 0 && pageIds.every((id) => selected.has(id));
+  const someSelected = pageIds.some((id) => selected.has(id));
+  function toggleSelectAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // Fecha em lote as conversas selecionadas (status → 'closed'). Saem de
+  // fila/sla/minhas no inbox (via realtime). Client RLS: conversations_update = agent+.
+  async function bulkClose() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    const { error } = await supabase
+      .from("conversations")
+      .update({ status: "closed" })
+      .in("id", ids);
+    if (error) {
+      toast.error(t("bulkCloseError"));
+      return;
+    }
+    setRows((prev) =>
+      prev.map((c) => (selected.has(c.id) ? { ...c, status: "closed" } : c)),
+    );
+    setSelected(new Set());
+    setBulkCloseOpen(false);
+    toast.success(t("bulkCloseDone", { count: ids.length }));
+  }
 
   // Trocar de conexão zera o filtro de atendente (a pessoa pode não atender lá)
   // e volta pra 1ª página — o atendente é específico de uma conexão.
@@ -433,11 +494,48 @@ export default function ConversationsPage() {
             ws.hasActiveConv ? "hidden lg:flex" : "flex",
           )}
         >
+      {/* Barra de ação em lote — aparece com N selecionadas */}
+      {selected.size > 0 && (
+        <div className="mb-2 flex items-center justify-between gap-4 rounded-lg border border-border bg-muted/40 px-4 py-2">
+          <p className="text-sm text-foreground">
+            <span className="font-medium">{selected.size}</span>{" "}
+            {t("selectedSuffix", { count: selected.size })}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelected(new Set())}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {t("common:clear")}
+            </Button>
+            <GatedButton
+              size="sm"
+              canAct={canEdit}
+              gateReason="close conversations"
+              onClick={() => setBulkCloseOpen(true)}
+            >
+              <CheckCircle2 className="size-4" />
+              {t("bulkClose")}
+            </GatedButton>
+          </div>
+        </div>
+      )}
+
       {/* Tabela */}
       <div className="overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={!allSelected && someSelected}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label={t("selectAllAria")}
+                />
+              </TableHead>
               <TableHead className="text-muted-foreground">{t("colName")}</TableHead>
               <TableHead className="hidden text-muted-foreground md:table-cell">{t("colPhone")}</TableHead>
               <TableHead className="hidden text-muted-foreground lg:table-cell">{t("colLastMsg")}</TableHead>
@@ -449,7 +547,7 @@ export default function ConversationsPage() {
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={6} className="py-12 text-center">
+                <TableCell colSpan={7} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">{t("loading")}</p>
@@ -458,7 +556,7 @@ export default function ConversationsPage() {
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={6} className="py-12 text-center">
+                <TableCell colSpan={7} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <MessagesSquare className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -481,6 +579,15 @@ export default function ConversationsPage() {
                     )}
                     onClick={() => ws.select(conv)}
                   >
+                    <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selected.has(conv.id)}
+                        onCheckedChange={() => toggleSelect(conv.id)}
+                        aria-label={t("selectAria", {
+                          name: conv.contact?.name || conv.contact?.phone || "",
+                        })}
+                      />
+                    </TableCell>
                     <TableCell className="font-medium text-foreground">{displayName}</TableCell>
                     <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
                       {conv.contact?.phone}
@@ -565,6 +672,22 @@ export default function ConversationsPage() {
             conversa e volta pra lista. */}
         {ws.hasActiveConv && <ConversationWorkspace ws={ws} showDesktopBack />}
       </div>
+
+      {/* Confirmação de fechar em lote */}
+      <Dialog open={bulkCloseOpen} onOpenChange={setBulkCloseOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("bulkCloseTitle", { count: selected.size })}</DialogTitle>
+            <DialogDescription>{t("bulkCloseConfirm")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBulkCloseOpen(false)}>
+              {t("common:cancel")}
+            </Button>
+            <Button onClick={bulkClose}>{t("bulkClose")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

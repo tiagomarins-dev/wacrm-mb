@@ -27,14 +27,19 @@ export function classifyTab(
   aiAgentIds: ReadonlySet<string> = NO_AI_IDS,
 ): boolean {
   const assigned = conv.assigned_agent_id ?? null;
+  // "Finalizada" (status system `closed`, 062) sai das abas de trabalho —
+  // fila/minhas/sla. Permanece em geral e ia (decisão de produto).
+  const closed = conv.status === "closed";
   switch (tab) {
     case "fila":
-      // Sem atendente (nem humano nem bot).
-      return assigned === null;
+      // Sem atendente (nem humano nem bot) E não finalizada.
+      return assigned === null && !closed;
     case "minhas":
-      return !!userId && assigned === userId;
+      return !!userId && assigned === userId && !closed;
     case "sla": {
       // Atribuída a HUMANO (não bot), última msg do cliente, parada > 30min.
+      // Finalizada nunca é violação de SLA.
+      if (closed) return false;
       if (!assigned || assigned === AI_AGENT_USER_ID) return false;
       if (conv.last_message_sender_type !== "customer") return false;
       if (!conv.last_message_at) return false;

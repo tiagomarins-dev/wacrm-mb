@@ -165,3 +165,29 @@ describe("desatribuição → volta pra fila", () => {
     expect(classifyTab(liberada, "fila", USER, NOW)).toBe(true);
   });
 });
+
+// Status "Finalizada" (closed) sai das abas de trabalho (fila/minhas/sla),
+// mas permanece em geral/ia. Aberta mantém o comportamento atual (regressão).
+describe("closed — sai das abas de trabalho, mantém geral/ia", () => {
+  it("closed + sem dono → fora da fila; open → dentro (regressão)", () => {
+    expect(classifyTab(conv({ assigned_agent_id: undefined, status: "closed" }), "fila", USER, NOW)).toBe(false);
+    expect(classifyTab(conv({ assigned_agent_id: undefined, status: "open" }), "fila", USER, NOW)).toBe(true);
+  });
+  it("closed + minha → fora de minhas; open → dentro", () => {
+    expect(classifyTab(conv({ assigned_agent_id: USER, status: "closed" }), "minhas", USER, NOW)).toBe(false);
+    expect(classifyTab(conv({ assigned_agent_id: USER, status: "open" }), "minhas", USER, NOW)).toBe(true);
+  });
+  it("closed + humano + idle>30min → fora de SLA; open → dentro", () => {
+    const base = { assigned_agent_id: "h1", last_message_sender_type: "customer" as const, last_message_at: at(31) };
+    expect(classifyTab(conv({ ...base, status: "closed" }), "sla", USER, NOW)).toBe(false);
+    expect(classifyTab(conv({ ...base, status: "open" }), "sla", USER, NOW)).toBe(true);
+  });
+  it("closed permanece em geral", () => {
+    expect(classifyTab(conv({ status: "closed" }), "geral", USER, NOW)).toBe(true);
+  });
+  it("countByTab: closed+sem dono não conta fila mas conta geral", () => {
+    const c = countByTab([conv({ assigned_agent_id: undefined, status: "closed" })], USER, NOW);
+    expect(c.fila).toBe(0);
+    expect(c.geral).toBe(1);
+  });
+});
