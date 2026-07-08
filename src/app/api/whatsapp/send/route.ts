@@ -21,6 +21,8 @@ import {
 import type { MessageTemplate } from '@/types'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import { findTemplateRow } from '@/lib/whatsapp/find-template-row'
+import { shouldClaimConversation } from '@/lib/inbox/should-claim'
+import { AI_AGENT_USER_ID } from '@/lib/ai-agent/constants'
 
 export async function POST(request: Request) {
   try {
@@ -420,8 +422,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // Update conversation
-    await supabase
+    // Update conversation (last_message) — INCONDICIONAL. Loga o erro (antes era
+    // fire-and-forget silencioso).
+    const { error: convUpdateErr } = await supabase
       .from('conversations')
       .update({
         last_message_text: content_text || `[${message_type}]`,
@@ -429,6 +432,41 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq('id', conversation_id)
+    if (convUpdateErr) {
+      console.error('[whatsapp/send] conversation update failed:', convUpdateErr.message)
+    }
+
+    // Auto-atribuir a conversa a quem respondeu QUANDO ela não tem dono HUMANO
+    // (Fila, bot ou perfil de IA). Nunca rouba de outro humano. O lookup de
+    // ai_profiles (RLS admin-only) espelha resolveAssignedProfile (dispatch.ts:112),
+    // mas SEM `enabled`: perfil de IA desabilitado também é "sem dono humano".
+    const currentAssignee = (conversation.assigned_agent_id as string | null) ?? null
+    let matchedAiProfile = false
+    if (currentAssignee && currentAssignee !== AI_AGENT_USER_ID) {
+      const { data: aiProfile } = await supabaseAdmin()
+        .from('ai_profiles')
+        .select('id')
+        .eq('id', currentAssignee)
+        .eq('account_id', accountId)
+        .maybeSingle()
+      matchedAiProfile = !!aiProfile
+    }
+    if (shouldClaimConversation(currentAssignee, matchedAiProfile)) {
+      // Compare-and-set: só reivindica se o dono NÃO mudou desde a leitura
+      // (corrida de 2 atendentes → o 1º ganha, o 2º casa 0 linhas). Client RLS
+      // → o trigger de audit (048) grava o atendente como actor.
+      const claim = supabase
+        .from('conversations')
+        .update({ assigned_agent_id: user.id })
+        .eq('id', conversation_id)
+      const { error: claimErr } =
+        currentAssignee === null
+          ? await claim.is('assigned_agent_id', null)
+          : await claim.eq('assigned_agent_id', currentAssignee)
+      if (claimErr) {
+        console.error('[whatsapp/send] auto-assign failed:', claimErr.message)
+      }
+    }
 
     // Transcrição de áudio (fire-and-forget). Usa supabaseAdmin: a config de
     // transcrição vive em integrations_config (RLS admin-only), e o atendente
