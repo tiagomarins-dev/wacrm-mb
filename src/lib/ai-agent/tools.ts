@@ -13,6 +13,7 @@
 // (guardrail) e pelo recheck-humano do engine, em vez de burlar os dois.
 // ============================================================
 import { getCurso, searchSupport } from './knowledge'
+import { getSiteUrl } from '@/lib/site-url'
 import { createAgentLinkToken } from '@/lib/link-tracking/token'
 import type { AgentCtx, AgentTopic } from './llm'
 
@@ -163,7 +164,7 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
           detectedTopic: 'vendas',
         }
       }
-      const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+      const base = getSiteUrl()
       if (!base) return { output: { error: 'site url não configurada' }, detectedTopic: 'vendas' }
       const token = await createAgentLinkToken(
         ctx.db,

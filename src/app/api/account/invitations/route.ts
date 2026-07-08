@@ -18,6 +18,7 @@
 // ============================================================
 
 import { NextResponse } from "next/server";
+import { getSiteUrl } from "@/lib/site-url";
 
 import { requireRole, toErrorResponse } from "@/lib/auth/account";
 import {
@@ -92,8 +93,9 @@ function isHostAllowed(
 }
 
 function getBaseUrl(request: Request): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
-  if (explicit) return explicit.replace(/\/+$/, "");
+  // Passo #1: SITE_URL (runtime) → NEXT_PUBLIC_SITE_URL (build), já normalizado.
+  const explicit = getSiteUrl();
+  if (explicit) return explicit;
 
   const allowList = parseAllowedHosts();
   const forwardedHost = request.headers
