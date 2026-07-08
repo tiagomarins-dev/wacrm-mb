@@ -36,5 +36,7 @@
   "failedLoad": "Failed to load contacts",
   "failedDelete": "Failed to delete contacts",
   "deletedToast_one": "{{count}} contact deleted",
-  "deletedToast_other": "{{count}} contacts deleted"
+  "deletedToast_other": "{{count}} contacts deleted",
+  "openConversation": "Open conversation",
+  "openConversationError": "Failed to open conversation"
 }

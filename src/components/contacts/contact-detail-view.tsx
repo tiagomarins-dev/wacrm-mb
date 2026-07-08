@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { formatCurrency } from '@/lib/currency';
@@ -45,6 +46,7 @@ import {
   Save,
   X,
   DollarSign,
+  MessageSquare,
 } from 'lucide-react';
 
 interface ContactDetailViewProps {
@@ -52,6 +54,9 @@ interface ContactDetailViewProps {
   onOpenChange: (open: boolean) => void;
   contactId: string | null;
   onUpdated: () => void;
+  // Abre/cria a conversa deste contato no inbox (delegado à página).
+  // Opcional: só a página de Contatos passa; o botão some onde não vier.
+  onOpenConversation?: (contactId: string) => void;
 }
 
 export function ContactDetailView({
@@ -59,7 +64,9 @@ export function ContactDetailView({
   onOpenChange,
   contactId,
   onUpdated,
+  onOpenConversation,
 }: ContactDetailViewProps) {
+  const { t } = useTranslation('contacts');
   const supabase = createClient();
   const { accountId, defaultCurrency } = useAuth();
 
@@ -410,6 +417,19 @@ export function ContactDetailView({
                       </span>
                     )}
                   </div>
+                  {/* Abre/cria a conversa deste contato no inbox (conexão ativa) */}
+                  {onOpenConversation && (
+                    <button
+                      onClick={() => {
+                        onOpenConversation(contact.id);
+                        onOpenChange(false);
+                      }}
+                      className="flex items-center gap-1.5 text-xs text-primary hover:underline mt-2 cursor-pointer"
+                    >
+                      <MessageSquare className="size-3.5" />
+                      {t('openConversation')}
+                    </button>
+                  )}
                 </div>
               </div>
             </SheetHeader>
