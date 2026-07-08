@@ -46,6 +46,9 @@ import { buildSearchParams, type AgentFilter, type DateRange } from "@/lib/inbox
 
 const PAGE_SIZE = 25;
 
+// Tag da conta para o filtro (subset de Tag — só o que o dropdown usa).
+type AccountTag = { id: string; name: string; color: string };
+
 // Filtro de status: 'all' + a key de qualquer status da conta (system/custom,
 // 062). NUNCA o rótulo traduzido — vai pro .eq. Cores/labels vêm do hook.
 type StatusFilter = string;
@@ -93,6 +96,9 @@ export default function ConversationsPage() {
   // Mapas p/ resolver o responsável (carregados 1x). Espelha message-thread.tsx:206-242.
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([]);
+  // Filtro por tag do contato (063): 'all' ou uuid da tag. Tags da conta p/ o dropdown.
+  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [accountTags, setAccountTags] = useState<AccountTag[]>([]);
 
   // Responsáveis: membros humanos (profiles, RLS) + perfis de IA (view pública).
   useEffect(() => {
@@ -109,6 +115,13 @@ export default function ConversationsPage() {
       .then(({ data }) => {
         if (!cancelled) setAiProfiles((data as AiProfilePublic[]) ?? []);
       });
+    // Tags da conta p/ o filtro (RLS já isola por conta — sem .eq).
+    sb.from("tags")
+      .select("id, name, color")
+      .order("name")
+      .then(({ data }) => {
+        if (!cancelled) setAccountTags((data as AccountTag[]) ?? []);
+      });
     return () => {
       cancelled = true;
     };
@@ -122,7 +135,7 @@ export default function ConversationsPage() {
     setLoading(true);
     const { data, error } = await supabase.rpc(
       "search_conversations",
-      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo })
+      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo, tagFilter })
     );
 
     if (error) {
@@ -135,7 +148,7 @@ export default function ConversationsPage() {
     setRows(list.map((r) => r.data));
     setTotalCount(Number(list[0]?.total_count ?? 0));
     setLoading(false);
-  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, dateRange, customFrom, customTo, t]);
+  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, dateRange, customFrom, customTo, tagFilter, t]);
 
   // Refetch a cada mudança de page/search/status/conexão. Disable espelha
   // contacts/page.tsx:185 (fetch faz setLoading síncrono no início).
@@ -159,6 +172,7 @@ export default function ConversationsPage() {
     search.trim() !== "" ||
     statusFilter !== "all" ||
     agentFilter !== "all" ||
+    tagFilter !== "all" ||
     dateRange !== "month" ||
     !!customFrom ||
     !!customTo;
@@ -206,6 +220,49 @@ export default function ConversationsPage() {
                 )}
               >
                 {s === "all" ? t("filterAllStatus") : resolveStatus(statuses, s).label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Filtro por tag do contato (063). 'Todas as tags' = sem filtro. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+            {tagFilter === "all"
+              ? t("filterAllTags")
+              : accountTags.find((tg) => tg.id === tagFilter)?.name ?? t("filterAllTags")}
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="border-border bg-popover">
+            <DropdownMenuItem
+              onClick={() => {
+                setTagFilter("all");
+                setPage(0);
+              }}
+              className={cn(
+                "text-sm",
+                tagFilter === "all" ? "text-primary" : "text-popover-foreground"
+              )}
+            >
+              {t("filterAllTags")}
+            </DropdownMenuItem>
+            {accountTags.map((tg) => (
+              <DropdownMenuItem
+                key={tg.id}
+                onClick={() => {
+                  setTagFilter(tg.id);
+                  setPage(0);
+                }}
+                className={cn(
+                  "flex items-center gap-2 text-sm",
+                  tagFilter === tg.id ? "text-primary" : "text-popover-foreground"
+                )}
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: tg.color }}
+                />
+                {tg.name}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>

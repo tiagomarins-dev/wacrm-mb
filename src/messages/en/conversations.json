@@ -12,6 +12,7 @@
   "statusPending": "Pending",
   "statusClosed": "Closed",
   "filterAllStatus": "All statuses",
+  "filterAllTags": "All tags",
   "date_today": "Today",
   "date_week": "This week",
   "date_month": "This month",
