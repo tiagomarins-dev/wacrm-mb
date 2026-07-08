@@ -19,10 +19,12 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  // O inbox gerencia a própria altura/scroll (3 painéis full-height com
-  // composer fixo). Para ele, o main não rola nem tem padding — sem isso,
-  // a área de mensagens e o composer brigam com o scroll/padding do main.
-  const isInbox = pathname?.startsWith("/inbox") ?? false;
+  // Telas "full-bleed" (inbox e /conversations com split-view) gerenciam a
+  // própria altura/scroll (3 painéis full-height + composer fixo). Nelas o main
+  // não rola nem tem padding — senão a área de mensagens/composer briga com o
+  // scroll/padding do main.
+  const isFullBleed =
+    (pathname?.startsWith("/inbox") || pathname?.startsWith("/conversations")) ?? false;
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).
@@ -46,14 +48,14 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   // Auto-colapso: ao ENTRAR no inbox (transição false→true), colapsa UMA vez —
   // assim o ajuste manual do usuário dentro do inbox "gruda". Não força ao sair
   // nem persiste (só o toggle manual persiste).
-  const prevIsInbox = useRef(isInbox);
+  const prevIsFullBleed = useRef(isFullBleed);
   useEffect(() => {
-    if (isInbox && !prevIsInbox.current) {
+    if (isFullBleed && !prevIsFullBleed.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setNavCollapsed(true);
     }
-    prevIsInbox.current = isInbox;
-  }, [isInbox]);
+    prevIsFullBleed.current = isFullBleed;
+  }, [isFullBleed]);
 
   // Toggle manual (persiste inline, best-effort).
   const toggleNav = useCallback(() => {
@@ -105,7 +107,7 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
         <main
           className={cn(
             "min-w-0 flex-1",
-            isInbox
+            isFullBleed
               ? "overflow-hidden"
               : "overflow-x-hidden overflow-y-auto p-4 sm:p-6",
           )}

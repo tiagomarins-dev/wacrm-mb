@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import type {
@@ -12,6 +11,8 @@ import type {
 } from "@/types";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { resolveStatus } from "@/lib/inbox/conversation-statuses";
+import { useConversationWorkspace } from "@/hooks/use-conversation-workspace";
+import { ConversationWorkspace } from "@/components/inbox/conversation-workspace";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +75,6 @@ function assigneeLabel(a: Assignee, t: (k: string) => string): string {
 export default function ConversationsPage() {
   const { t } = useTranslation(["conversations", "common"]);
   const { formatDateTime } = useFormat();
-  const router = useRouter();
   const supabase = createClient();
   const { activeConnectionId } = useActiveConnection();
   // Status da conta (system+custom, 062) — label/cor do badge e opções do filtro.
@@ -165,6 +165,17 @@ export default function ConversationsPage() {
     setPage(0);
   }, [activeConnectionId]);
 
+  // Motor da conversa compartilhado (mesmo do inbox) — abre a conversa à direita
+  // sem sair da tela. Lista = rows (filtro por RPC); patch atualiza a linha visível;
+  // conv fora do filtro é ignorada (upsert noop). Canal realtime próprio.
+  const ws = useConversationWorkspace({
+    channelName: "conversations-realtime",
+    conversations: rows,
+    patchConversation: (id, updater) =>
+      setRows((prev) => prev.map((c) => (c.id === id ? updater(c) : c))),
+    upsertConversation: () => {},
+  });
+
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
   const hasNext = page < totalPages - 1;
   const hasPrev = page > 0;
@@ -178,12 +189,15 @@ export default function ConversationsPage() {
     !!customTo;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
-      </div>
+    // Full-bleed (shell sem padding): coluna que preenche a tela. Header+filtros
+    // fixos (shrink-0); abaixo o split tabela↔conversa.
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Header + filtros (largura cheia, não rolam) */}
+      <div className="shrink-0 space-y-4 border-b border-border p-4 sm:p-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">{t("title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("subtitle")}</p>
+        </div>
 
       {/* Busca + filtro de status */}
       <div className="flex flex-wrap items-center gap-2">
@@ -406,10 +420,21 @@ export default function ConversationsPage() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        </div>
       </div>
 
+      {/* Split: tabela filtrada (esq) ↔ conversa+contato (dir), sem sair da tela. */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Painel esquerdo: tabela + paginação. Some no mobile quando há conversa
+            aberta (a conversa ocupa a tela toda). */}
+        <div
+          className={cn(
+            "flex h-full min-w-0 flex-1 flex-col overflow-hidden p-4 sm:p-6",
+            ws.hasActiveConv ? "hidden lg:flex" : "flex",
+          )}
+        >
       {/* Tabela */}
-      <div className="overflow-hidden rounded-lg border border-border">
+      <div className="overflow-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -449,8 +474,12 @@ export default function ConversationsPage() {
                 return (
                   <TableRow
                     key={conv.id}
-                    className="cursor-pointer border-border hover:bg-muted/50"
-                    onClick={() => router.push(`/inbox?c=${conv.id}`)}
+                    className={cn(
+                      "cursor-pointer border-border hover:bg-muted/50",
+                      ws.activeConversation?.id === conv.id &&
+                        "border-l-2 border-l-primary bg-muted/70",
+                    )}
+                    onClick={() => ws.select(conv)}
                   >
                     <TableCell className="font-medium text-foreground">{displayName}</TableCell>
                     <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
@@ -529,6 +558,13 @@ export default function ConversationsPage() {
           </div>
         </div>
       )}
+        </div>
+
+        {/* Painel direito: só quando há conversa aberta — assim a tabela fica
+            CHEIA enquanto nada está selecionado. O "voltar" (desktop) fecha a
+            conversa e volta pra lista. */}
+        {ws.hasActiveConv && <ConversationWorkspace ws={ws} showDesktopBack />}
+      </div>
     </div>
   );
 }
