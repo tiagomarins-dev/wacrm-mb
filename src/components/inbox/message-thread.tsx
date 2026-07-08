@@ -32,6 +32,7 @@ import {
   Users,
   Sparkles,
   MoreVertical,
+  MailOpen,
   ChevronRight,
   Maximize2,
   Minimize2,
@@ -99,6 +100,8 @@ interface MessageThreadProps {
    * mobile only.
    */
   onBack?: () => void;
+  /** Marca a conversa como não lida (o pai deseleciona antes de gravar). */
+  onMarkUnread?: (id: string) => void;
   /**
    * Increment to force the messages + reactions fetch effects to refire.
    * Parent bumps this on realtime reconnect / tab visibility → visible
@@ -184,6 +187,7 @@ export function MessageThread({
   onStatusChange,
   onAssignChange,
   onBack,
+  onMarkUnread,
   resyncToken = 0,
   onRefresh,
   contactPanelOpen,
@@ -1202,6 +1206,17 @@ export function MessageThread({
           >
             <Sparkles className="h-3.5 w-3.5" />
           </button>
+
+          {/* Marcar como não lida — o pai fecha a conversa antes de gravar. */}
+          <button
+            type="button"
+            onClick={() => onMarkUnread?.(conversation.id)}
+            aria-label={t("markUnread")}
+            title={t("markUnread")}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <MailOpen className="h-3.5 w-3.5" />
+          </button>
           </div>
 
           {/* Kebab overflow — só no mobile (sm:hidden). Junta as ações
@@ -1228,6 +1243,9 @@ export function MessageThread({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setBriefingOpen(true)} className="text-sm">
                 <Sparkles className="mr-2 h-3.5 w-3.5" /> Resumo/Briefing
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onMarkUnread?.(conversation.id)} className="text-sm">
+                <MailOpen className="mr-2 h-3.5 w-3.5" /> {t("markUnread")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
