@@ -525,6 +525,34 @@ export default function InboxPage() {
     router.replace("/inbox", { scroll: false });
   }, [router]);
 
+  // Marca a conversa como não lida: unread_count=1 no banco + na lista.
+  // Rollback local se o update falhar (realtime não emite evento em erro).
+  const handleMarkUnread = useCallback(async (id: string) => {
+    setConversations((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, unread_count: 1 } : c)),
+    );
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("conversations")
+      .update({ unread_count: 1 })
+      .eq("id", id);
+    if (error) {
+      toast.error("Falha ao marcar como não lida");
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)),
+      );
+    }
+  }, []);
+
+  // Do header do thread: fecha a conversa (deixa de ser ativa) ANTES de marcar,
+  // senão o auto-reset do thread (message-thread:603) zera de novo.
+  const handleMarkUnreadFromThread = useCallback(
+    (id: string) => {
+      handleCloseConversation();
+      handleMarkUnread(id);
+    },
+    [handleCloseConversation, handleMarkUnread],
+  );
 
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
@@ -612,6 +640,7 @@ export default function InboxPage() {
       onStatusChange={handleStatusChange}
       onAssignChange={handleAssignChange}
       onBack={handleCloseConversation}
+      onMarkUnread={handleMarkUnreadFromThread}
       resyncToken={resyncToken}
       onRefresh={handleManualRefresh}
       contactPanelOpen={contactPanelOpen}
@@ -664,6 +693,7 @@ export default function InboxPage() {
             conversations={conversations}
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={resyncToken}
+            onMarkUnread={handleMarkUnread}
           />
         </div>
 

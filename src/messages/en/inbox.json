@@ -30,6 +30,8 @@
   "refreshConversation": "Refresh conversation",
   "note": "Note",
   "notes": "Notes",
+  "markUnread": "Mark as unread",
+  "moreActions": "More actions",
   "addEmail": "Add email",
   "addTag": "Add tag",
   "replyMode": "Reply",

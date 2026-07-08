@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { resolveStatus, type ResolvedStatus } from "@/lib/inbox/conversation-statuses";
 import type { Conversation } from "@/types";
-import { Search, ArrowDown, ArrowUp, Users, Bot } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -14,6 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
 import { classifyTab, sortByTab, countByTab, effectiveDir, type QueueTab } from "@/lib/inbox/queue";
@@ -33,6 +39,8 @@ interface ConversationListProps {
    * or the tab was throttled. Optional so existing callers keep working.
    */
   resyncToken?: number;
+  /** Marca uma conversa como não lida (via kebab da linha). */
+  onMarkUnread: (id: string) => void;
 }
 
 
@@ -65,6 +73,7 @@ export function ConversationList({
   conversations,
   onConversationsLoaded,
   resyncToken = 0,
+  onMarkUnread,
 }: ConversationListProps) {
   const { t } = useTranslation("inbox");
   const { user, canManageMembers, accountId } = useAuth();
@@ -392,6 +401,7 @@ export function ConversationList({
                 isActive={conv.id === activeConversationId}
                 onSelect={handleSelect}
                 statuses={statuses}
+                onMarkUnread={onMarkUnread}
               />
             ))}
           </div>
@@ -406,6 +416,7 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: (conversation: Conversation) => void;
   statuses: ResolvedStatus[];
+  onMarkUnread: (id: string) => void;
 }
 
 function ConversationItem({
@@ -413,9 +424,10 @@ function ConversationItem({
   isActive,
   onSelect,
   statuses,
+  onMarkUnread,
 }: ConversationItemProps) {
   // Idioma ativo da UI: 'pt-BR' usa o locale ptBR; 'en' usa o default (en-US).
-  const { i18n } = useTranslation("inbox");
+  const { t, i18n } = useTranslation("inbox");
   const dateLocale = i18n.language === "pt-BR" ? ptBR : undefined;
   const contact = conversation.contact;
   // Grupo (058): título via helper (sem contato); 1:1 usa nome/telefone.
@@ -437,6 +449,7 @@ function ConversationItem({
     : "";
 
   return (
+    <div className="relative group/item">
     <button
       onClick={handleClick}
       className={cn(
@@ -495,5 +508,27 @@ function ConversationItem({
         </div>
       </div>
     </button>
+    {/* Kebab de ações — irmão do <button> da linha (não filho, p/ não aninhar
+        botão). Aparece no hover; stopPropagation evita abrir a conversa. */}
+    <div className="absolute right-1 top-2 opacity-0 transition-opacity group-hover/item:opacity-100 focus-within:opacity-100">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={t("moreActions")}
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-card/80 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="border-border bg-popover">
+          <DropdownMenuItem
+            onClick={() => onMarkUnread(conversation.id)}
+            className="text-sm"
+          >
+            <MailOpen className="mr-2 h-3.5 w-3.5" /> {t("markUnread")}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+    </div>
   );
 }
