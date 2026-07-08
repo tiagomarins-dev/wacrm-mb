@@ -58,6 +58,8 @@ export interface SearchInput {
   dateRange: DateRange;
   customFrom?: Date | null;
   customTo?: Date | null;
+  // 'all' ou o uuid de uma tag da conta (filtro por tag do contato, 063).
+  tagFilter: string;
 }
 
 export interface SearchParams {
@@ -68,6 +70,7 @@ export interface SearchParams {
   p_connection: string | null;
   p_date_from: string | null;
   p_date_to: string | null;
+  p_tag: string | null;
   p_limit: number;
   p_offset: number;
 }
@@ -87,6 +90,7 @@ export function buildSearchParams(i: SearchInput): SearchParams {
     p_connection: i.activeConnectionId ?? null,
     p_date_from: dr.from ? dr.from.toISOString() : null,
     p_date_to: dr.to ? dr.to.toISOString() : null,
+    p_tag: i.tagFilter === "all" ? null : i.tagFilter,
     p_limit: PAGE_SIZE,
     p_offset: i.page * PAGE_SIZE,
   };

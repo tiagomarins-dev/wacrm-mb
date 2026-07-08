@@ -15,6 +15,7 @@ const base: SearchInput = {
   activeConnectionId: null,
   page: 0,
   dateRange: "all",
+  tagFilter: "all",
 };
 
 describe("buildSearchParams", () => {
@@ -22,9 +23,15 @@ describe("buildSearchParams", () => {
     const p = buildSearchParams(base);
     expect(p).toEqual({
       p_search: null, p_status: null, p_agent: null, p_unassigned: false,
-      p_connection: null, p_date_from: null, p_date_to: null,
+      p_connection: null, p_date_from: null, p_date_to: null, p_tag: null,
       p_limit: PAGE_SIZE, p_offset: 0,
     });
+  });
+
+  it("tag: 'all' → p_tag null; uuid → passa", () => {
+    expect(buildSearchParams({ ...base, tagFilter: "all" }).p_tag).toBeNull();
+    const tag = "11111111-1111-1111-1111-111111111111";
+    expect(buildSearchParams({ ...base, tagFilter: tag }).p_tag).toBe(tag);
   });
 
   it("status: 'all' → null; valor real → passa", () => {
