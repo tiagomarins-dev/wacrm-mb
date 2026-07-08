@@ -74,3 +74,32 @@ export function fundeCursos(
 
   return fundidos;
 }
+
+// Grupo de cursos de um mesmo ano de matrícula (null = sem data).
+export interface CursosPorAno {
+  ano: number | null;
+  cursos: CursoFundido[];
+}
+
+// Agrupa os cursos fundidos por ano da matrícula (data_matricula). O ano vem
+// dos 4 primeiros dígitos ("2026-05-29..." → 2026); sem data → null. Ordena por
+// ano desc; o grupo sem-ano (null) fica por último. Pura — o accordion consome
+// no componente.
+export function agrupaCursosPorAno(cursos: CursoFundido[]): CursosPorAno[] {
+  const porAno = new Map<number | null, CursoFundido[]>();
+  for (const c of cursos) {
+    // Extrai o ano do início da data (evita parse com timezone).
+    const ano = Number(c.data_matricula?.slice(0, 4)) || null;
+    const lista = porAno.get(ano);
+    if (lista) lista.push(c);
+    else porAno.set(ano, [c]);
+  }
+  // Ano desc; grupo "sem ano" (null) sempre por último.
+  return [...porAno.entries()]
+    .map(([ano, cursos]) => ({ ano, cursos }))
+    .sort((a, b) => {
+      if (a.ano === null) return 1;
+      if (b.ano === null) return -1;
+      return b.ano - a.ano;
+    });
+}

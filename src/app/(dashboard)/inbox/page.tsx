@@ -721,6 +721,9 @@ export default function InboxPage() {
               onToggleExpand={() =>
                 setExpanded((e) => (e === "contact" ? null : "contact"))
               }
+              onContactUpdate={(p) =>
+                setActiveContact((prev) => (prev ? { ...prev, ...p } : prev))
+              }
             />
           </div>
         )}
@@ -747,7 +750,13 @@ export default function InboxPage() {
               <span className="text-sm font-semibold">Detalhes do contato</span>
             </div>
             <div className="min-h-0 flex-1">
-              <ContactSidebar contact={activeContact} widthClassName="w-full" />
+              <ContactSidebar
+                contact={activeContact}
+                widthClassName="w-full"
+                onContactUpdate={(p) =>
+                  setActiveContact((prev) => (prev ? { ...prev, ...p } : prev))
+                }
+              />
             </div>
           </div>
         )}

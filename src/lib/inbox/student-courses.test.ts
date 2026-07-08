@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fundeCursos } from "./student-courses";
+import { fundeCursos, agrupaCursosPorAno, type CursoFundido } from "./student-courses";
 import type { CursoMatriculado, ProgressoAulas } from "@/lib/integrations/student-info";
 
 const curso = (id: number, nome: string, tag = "curso"): CursoMatriculado => ({
@@ -54,5 +54,35 @@ describe("fundeCursos", () => {
   it("data_matricula vazia → null", () => {
     const c = { ...curso(1, "X"), data_matricula: "" };
     expect(fundeCursos([c], undefined)[0].data_matricula).toBeNull();
+  });
+});
+
+// Curso fundido só com o essencial para o agrupamento por ano.
+const cf = (id: number, data: string | null): CursoFundido => ({
+  id_curso: id, nome_curso: `C${id}`, tag: "", data_matricula: data, progresso: null,
+});
+
+describe("agrupaCursosPorAno", () => {
+  it("agrupa pelo ano do slice de data_matricula", () => {
+    const r = agrupaCursosPorAno([cf(1, "2026-05-29 10:00:00"), cf(2, "2026-01-02")]);
+    expect(r).toHaveLength(1);
+    expect(r[0].ano).toBe(2026);
+    expect(r[0].cursos.map((c) => c.id_curso)).toEqual([1, 2]);
+  });
+
+  it("ordena por ano desc (2026 antes de 2025)", () => {
+    const r = agrupaCursosPorAno([cf(1, "2025-03-01"), cf(2, "2026-03-01")]);
+    expect(r.map((g) => g.ano)).toEqual([2026, 2025]);
+  });
+
+  it("data null/vazia → grupo ano:null por último", () => {
+    const r = agrupaCursosPorAno([cf(1, null), cf(2, "2026-03-01"), cf(3, "")]);
+    expect(r[0].ano).toBe(2026);
+    expect(r[r.length - 1].ano).toBeNull();
+    expect(r[r.length - 1].cursos.map((c) => c.id_curso)).toEqual([1, 3]);
+  });
+
+  it("lista vazia → []", () => {
+    expect(agrupaCursosPorAno([])).toEqual([]);
   });
 });

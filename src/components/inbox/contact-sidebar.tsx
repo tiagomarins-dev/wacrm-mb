@@ -2,25 +2,30 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
-import type { Contact, Deal, ContactNote, Tag } from "@/types";
+import type { Contact, ContactNote, Tag } from "@/types";
 import type { StudentInfoResponse } from "@/lib/integrations/student-info";
 import { agrupaRedacoesPorBanca } from "@/lib/inbox/redacoes";
-import { fundeCursos } from "@/lib/inbox/student-courses";
+import { fundeCursos, agrupaCursosPorAno } from "@/lib/inbox/student-courses";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Phone,
   Mail,
   Copy,
   Check,
-  User,
   Tag as TagIcon,
-  DollarSign,
   StickyNote,
   GraduationCap,
   Loader2,
   Plus,
+  X,
   Maximize2,
   Minimize2,
 } from "lucide-react";
@@ -43,6 +48,8 @@ interface ContactSidebarProps {
   expanded?: boolean;
   /** Se fornecido, mostra o botão de destacar/restaurar (só desktop). */
   onToggleExpand?: () => void;
+  /** Reflete a edição inline no pai (activeContact) — passar nas 2 instâncias. */
+  onContactUpdate?: (patch: Partial<Contact>) => void;
 }
 
 export function ContactSidebar({
@@ -50,15 +57,29 @@ export function ContactSidebar({
   widthClassName = "w-70",
   expanded,
   onToggleExpand,
+  onContactUpdate,
 }: ContactSidebarProps) {
   const { t } = useTranslation('inbox');
   const { accountId } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [deals, setDeals] = useState<Deal[]>([]);
   const [notes, setNotes] = useState<ContactNote[]>([]);
   const [tags, setTags] = useState<(Tag & { contact_tag_id: string })[]>([]);
+  // Todas as tags da conta (para o seletor "+"). RLS filtra por conta.
+  const [accountTags, setAccountTags] = useState<Tag[]>([]);
   const [newNote, setNewNote] = useState("");
   const [addingNote, setAddingNote] = useState(false);
+  // Cópia local dos campos editáveis; re-sincroniza ao trocar de contato.
+  const [form, setForm] = useState({ name: "", phone: "", email: "" });
+  useEffect(() => {
+    // Re-sincroniza a cópia local só quando troca de contato (id), não a cada
+    // tecla — por isso a dep é só contact?.id.
+    setForm({
+      name: contact?.name ?? "",
+      phone: contact?.phone ?? "",
+      email: contact?.email ?? "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contact?.id]);
   // Dados do Aluno (Millaborges) — busca ao vivo a cada abertura do contato.
   const [student, setStudent] = useState<StudentPanel | null>(null);
   const [loadingStudent, setLoadingStudent] = useState(false);
@@ -68,13 +89,8 @@ export function ContactSidebar({
 
     const supabase = createClient();
 
-    // Fetch deals, notes, and tags in parallel
-    const [dealsRes, notesRes, tagsRes] = await Promise.all([
-      supabase
-        .from("deals")
-        .select("*, stage:pipeline_stages(*)")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
+    // Fetch notes, tags do contato e todas as tags da conta em paralelo.
+    const [notesRes, tagsRes, accountTagsRes] = await Promise.all([
       supabase
         .from("contact_notes")
         .select("*")
@@ -84,9 +100,10 @@ export function ContactSidebar({
         .from("contact_tags")
         .select("id, tag_id, tags(*)")
         .eq("contact_id", contact.id),
+      // Todas as tags da conta (seletor "+"); RLS já isola por conta.
+      supabase.from("tags").select("*").order("name"),
     ]);
 
-    if (dealsRes.data) setDeals(dealsRes.data);
     if (notesRes.data) setNotes(notesRes.data);
     if (tagsRes.data) {
       const mapped = tagsRes.data
@@ -97,6 +114,7 @@ export function ContactSidebar({
         }));
       setTags(mapped);
     }
+    if (accountTagsRes.data) setAccountTags(accountTagsRes.data as Tag[]);
 
     // Dados do Aluno: chama a rota proxy (server-to-server) a cada troca de contato.
     setLoadingStudent(true);
@@ -160,6 +178,60 @@ export function ContactSidebar({
     setAddingNote(false);
   }, [contact, newNote, accountId]);
 
+  // Salva um campo do contato no blur, só se mudou. phone é NOT NULL → bloqueia
+  // vazio. Espelha saveDetails() de contact-detail-view.tsx:216.
+  const saveField = useCallback(
+    async (field: "name" | "phone" | "email", value: string) => {
+      if (!contact) return;
+      const v = value.trim();
+      if (field === "phone" && !v) {
+        toast.error("Telefone é obrigatório");
+        return;
+      }
+      const original = (contact[field] ?? "") as string;
+      if (v === original) return; // nada mudou
+      const patch = { [field]: field === "phone" ? v : v || null } as Partial<Contact>;
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("contacts")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", contact.id);
+      if (error) {
+        toast.error("Falha ao salvar");
+        return;
+      }
+      toast.success("Contato atualizado");
+      onContactUpdate?.(patch); // reflete no pai (activeContact)
+    },
+    [contact, onContactUpdate],
+  );
+
+  // Anexa/remove a tag do contato (contact_tags: existe→DELETE, senão INSERT).
+  // Espelha toggleTag() de contact-detail-view.tsx:244.
+  const toggleTag = useCallback(
+    async (tag: Tag) => {
+      if (!contact) return;
+      const supabase = createClient();
+      const has = tags.some((tt) => tt.id === tag.id);
+      if (has) {
+        await supabase
+          .from("contact_tags")
+          .delete()
+          .eq("contact_id", contact.id)
+          .eq("tag_id", tag.id);
+        setTags((prev) => prev.filter((tt) => tt.id !== tag.id));
+      } else {
+        const { data } = await supabase
+          .from("contact_tags")
+          .insert({ contact_id: contact.id, tag_id: tag.id })
+          .select("id")
+          .single();
+        setTags((prev) => [...prev, { ...tag, contact_tag_id: data?.id ?? "" }]);
+      }
+    },
+    [contact, tags],
+  );
+
   if (!contact) {
     return (
       <div className={`flex h-full ${widthClassName} items-center justify-center border-l border-border bg-card`}>
@@ -201,107 +273,117 @@ export function ContactSidebar({
                 initials
               )}
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-foreground">
-              {displayName}
-            </h3>
+            {/* Nome editável (input que parece texto; salva no blur). */}
+            <input
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              onBlur={(e) => saveField("name", e.target.value)}
+              placeholder={contact.phone}
+              className="mt-3 w-full rounded-md bg-transparent text-center text-sm font-semibold text-foreground outline-none hover:bg-muted focus:bg-muted focus:ring-1 focus:ring-primary/50"
+            />
             {contact.company && (
               <p className="text-xs text-muted-foreground">{contact.company}</p>
             )}
           </div>
 
-          {/* Phone */}
+          {/* Telefone (editável) + Email (editável) */}
           <div className="mt-4 space-y-2">
-            <button
-              onClick={handleCopyPhone}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
-            >
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span className="flex-1 text-left">{contact.phone}</span>
-              {copied ? (
-                <Check className="h-3 w-3 text-primary" />
-              ) : (
-                <Copy className="h-3 w-3 text-muted-foreground" />
-              )}
-            </button>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground focus-within:bg-muted hover:bg-muted">
+              <Phone className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                value={form.phone}
+                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onBlur={(e) => saveField("phone", e.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-foreground outline-none"
+              />
+              <button
+                onClick={handleCopyPhone}
+                aria-label="Copiar telefone"
+                className="shrink-0"
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-primary" />
+                ) : (
+                  <Copy className="h-3 w-3 text-muted-foreground" />
+                )}
+              </button>
+            </div>
 
-            {contact.email && (
-              <div className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground">
-                <Mail className="h-4 w-4 text-muted-foreground" />
-                <span className="truncate">{contact.email}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-muted-foreground focus-within:bg-muted hover:bg-muted">
+              <Mail className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onBlur={(e) => saveField("email", e.target.value)}
+                placeholder={t("addEmail")}
+                type="email"
+                className="min-w-0 flex-1 bg-transparent text-foreground outline-none"
+              />
+            </div>
           </div>
 
           {/* Divider */}
           <div className="my-4 border-t border-border" />
 
-          {/* Tags */}
+          {/* Tags (editáveis) */}
           <div>
             <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <TagIcon className="h-3 w-3" />
               Tags
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {tags.length === 0 ? (
-                <p className="px-1 text-xs text-muted-foreground">{t('noTags')}</p>
-              ) : (
-                tags.map((tag) => (
-                  <span
-                    key={tag.contact_tag_id}
-                    className="rounded-full px-2 py-0.5 text-[10px] font-medium"
-                    style={{
-                      backgroundColor: `${tag.color}20`,
-                      color: tag.color,
-                    }}
-                  >
-                    {tag.name}
-                  </span>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Divider */}
-          <div className="my-4 border-t border-border" />
-
-          {/* Active Deals */}
-          <div>
-            <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
-              Active Deals
-            </div>
-            <div className="mt-2 space-y-2">
-              {deals.length === 0 ? (
-                <p className="px-1 text-xs text-muted-foreground">{t('noDeals')}</p>
-              ) : (
-                deals.map((deal) => (
-                  <div
-                    key={deal.id}
-                    className="rounded-lg bg-muted px-3 py-2"
-                  >
-                    <p className="text-sm font-medium text-foreground">
-                      {deal.title}
+            <div className="mt-2 flex flex-wrap items-center gap-1">
+              {tags.map((tag) => (
+                <button
+                  key={tag.contact_tag_id}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className="group inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                  title="Remover tag"
+                >
+                  {tag.name}
+                  <X className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+                </button>
+              ))}
+              {/* Seletor "+" — abre a lista de tags da conta para toggle. */}
+              <Popover>
+                <PopoverTrigger
+                  aria-label={t("addTag")}
+                  title={t("addTag")}
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-dashed border-border text-muted-foreground hover:bg-muted"
+                >
+                  <Plus className="h-3 w-3" />
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-56 p-2">
+                  {accountTags.length === 0 ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">
+                      {t("noTags")}
                     </p>
-                    <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        {deal.currency ?? "$"}
-                        {deal.value.toLocaleString()}
-                      </span>
-                      {deal.stage && (
-                        <span
-                          className="rounded-full px-1.5 py-0.5 text-[10px]"
-                          style={{
-                            backgroundColor: `${deal.stage.color}20`,
-                            color: deal.stage.color,
-                          }}
-                        >
-                          {deal.stage.name}
-                        </span>
-                      )}
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {accountTags.map((tag) => {
+                        const selected = tags.some((tt) => tt.id === tag.id);
+                        return (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            onClick={() => toggleTag(tag)}
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium transition-all",
+                              selected
+                                ? "ring-2 ring-primary ring-offset-1 ring-offset-popover"
+                                : "opacity-60 hover:opacity-100"
+                            )}
+                            style={{ backgroundColor: `${tag.color}20`, color: tag.color }}
+                          >
+                            {tag.name}
+                          </button>
+                        );
+                      })}
                     </div>
-                  </div>
-                ))
-              )}
+                  )}
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -326,7 +408,7 @@ export function ContactSidebar({
           <div>
             <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               <StickyNote className="h-3 w-3" />
-              Notes
+              {t("notes")}
             </div>
             <div className="mt-2">
               <div className="flex gap-2">
@@ -448,14 +530,17 @@ function StudentBlock({
             {a.vigente === "S" ? "Ativo" : "Inativo"}
           </span>
         </div>
-        <p className="mt-1 text-muted-foreground">CPF: {a.cpf || "—"}</p>
+        <p className="mt-1 text-muted-foreground">Email: {a.email || "—"}</p>
         <p className="text-muted-foreground">Nasc.: {fmtDate(a.data_nascimento)}</p>
       </div>
 
-      {/* Cursos (matrícula + progresso fundidos por id_curso — sem duplicata). */}
+      {/* Cursos fundidos, agrupados por ano da matrícula. Ano vigente expandido,
+          anteriores colapsados (<details> nativo). */}
       {(() => {
-        // Só binding local + JSX — a fusão das duas fontes mora na lib pura.
+        // Binding local — fusão e agrupamento moram na lib pura.
         const cursos = fundeCursos(student.cursos_matriculados, prog);
+        const grupos = agrupaCursosPorAno(cursos);
+        const anoAtual = new Date().getFullYear();
         return (
           <div>
             <div className="mb-1 flex items-center justify-between px-1">
@@ -464,41 +549,50 @@ function StudentBlock({
               </span>
               {prog && <span className="text-foreground">{Math.round(prog.percentual_geral)}%</span>}
             </div>
-            {cursos.length === 0 ? (
+            {grupos.length === 0 ? (
               <p className="px-1 text-muted-foreground">Sem curso ativo.</p>
             ) : (
-              <div className="space-y-1.5">
-                {cursos.map((curso) => (
-                  <div key={curso.id_curso} className="rounded-lg bg-muted px-3 py-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-medium text-foreground">{curso.nome_curso}</span>
-                      {curso.progresso && (
-                        <span className="shrink-0 text-muted-foreground">
-                          {curso.progresso.aulas_concluidas}/{curso.progresso.total_aulas} aulas
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-muted-foreground">
-                      Matrícula: {fmtDate(curso.data_matricula ?? undefined)}
-                      {curso.tag ? ` · ${curso.tag}` : ""}
-                    </p>
-                    {curso.progresso && (
-                      <>
-                        {/* Barra = % de aulas concluídas (rotulada p/ não confundir com vídeo). */}
-                        <div className="mt-1 flex items-center gap-2">
-                          <div className="flex-1">
-                            <Bar pct={curso.progresso.percentual_concluidas} />
+              <div className="space-y-1">
+                {grupos.map((g) => (
+                  <details key={g.ano ?? "sem-ano"} open={g.ano === anoAtual}>
+                    <summary className="cursor-pointer list-none px-1 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                      {g.ano ?? "Sem data"} · {g.cursos.length} curso{g.cursos.length > 1 ? "s" : ""}
+                    </summary>
+                    <div className="mt-1 space-y-1.5">
+                      {g.cursos.map((curso) => (
+                        <div key={curso.id_curso} className="rounded-lg bg-muted px-3 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate font-medium text-foreground">{curso.nome_curso}</span>
+                            {curso.progresso && (
+                              <span className="shrink-0 text-muted-foreground">
+                                {curso.progresso.aulas_concluidas}/{curso.progresso.total_aulas} aulas
+                              </span>
+                            )}
                           </div>
-                          <span className="shrink-0 text-[10px] text-muted-foreground">
-                            {Math.round(curso.progresso.percentual_concluidas)}% aulas
-                          </span>
+                          <p className="text-muted-foreground">
+                            Matrícula: {fmtDate(curso.data_matricula ?? undefined)}
+                            {curso.tag ? ` · ${curso.tag}` : ""}
+                          </p>
+                          {curso.progresso && (
+                            <>
+                              {/* Barra = % de aulas concluídas (rotulada p/ não confundir com vídeo). */}
+                              <div className="mt-1 flex items-center gap-2">
+                                <div className="flex-1">
+                                  <Bar pct={curso.progresso.percentual_concluidas} />
+                                </div>
+                                <span className="shrink-0 text-[10px] text-muted-foreground">
+                                  {Math.round(curso.progresso.percentual_concluidas)}% aulas
+                                </span>
+                              </div>
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                Vídeo assistido: {Math.round(curso.progresso.media_video_assistido)}%
+                              </p>
+                            </>
+                          )}
                         </div>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          Vídeo assistido: {Math.round(curso.progresso.media_video_assistido)}%
-                        </p>
-                      </>
-                    )}
-                  </div>
+                      ))}
+                    </div>
+                  </details>
                 ))}
               </div>
             )}
