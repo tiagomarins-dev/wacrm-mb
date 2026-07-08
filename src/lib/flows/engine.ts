@@ -33,6 +33,7 @@
  */
 
 import { supabaseAdmin } from "./admin-client";
+import { getSiteUrl } from "@/lib/site-url";
 import {
   engineSendInteractiveButtons,
   engineSendInteractiveList,
@@ -449,8 +450,8 @@ async function sendLinkAndSuspend(
   node: FlowNodeRow,
 ): Promise<void> {
   const cfg = node.config as unknown as WaitForLinkClickNodeConfig;
-  const base = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
-  if (!base) throw new Error("NEXT_PUBLIC_SITE_URL is not set");
+  const base = getSiteUrl();
+  if (!base) throw new Error("SITE_URL/NEXT_PUBLIC_SITE_URL is not set");
 
   // Token curto persistido (capability) → URL clicável no WhatsApp.
   const token = await createLinkToken(

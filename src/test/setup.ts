@@ -6,8 +6,12 @@
 // que SUBSTITUI global.fetch e vence o MSW — logo seguem verdes. Testes
 // de lógica pura nunca chamam fetch. 'error' garante zero rede silenciosa.
 // ============================================================
-import { afterAll, afterEach, beforeAll } from "vitest";
+import { afterAll, afterEach, beforeAll, vi } from "vitest";
 import { server } from "./msw/server";
+
+// `server-only` lança fora de um bundle server (RSC). No vitest (node) é no-op,
+// senão qualquer teste que importe um módulo server-only quebraria no import.
+vi.mock("server-only", () => ({}));
 
 // Sobe antes de toda a suíte; falha alto em request sem handler.
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));

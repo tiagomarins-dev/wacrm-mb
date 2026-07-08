@@ -68,9 +68,11 @@ export function validateFlowForActivation(
   issues.push(...validateTrigger(flow.trigger_type, flow.trigger_config));
 
   // ---- requisito de ambiente p/ nó de link ----
-  // O link rastreável é montado como `${NEXT_PUBLIC_SITE_URL}/r/<id>`. Sem a
-  // env, o envio falha em runtime → bloqueia a ativação aqui (NEXT_PUBLIC_* é
-  // inlined, então a checagem vale no client e no server).
+  // O link rastreável é montado como `${base}/r/<id>` (getSiteUrl). Este gate de
+  // ativação roda no CLIENT e no server; o client NÃO enxerga SITE_URL (env
+  // runtime server-only), só a NEXT_PUBLIC_* (inlined no build). Por isso a
+  // checagem aqui fica em NEXT_PUBLIC_SITE_URL: nós de link rastreável exigem
+  // essa env (build-time). Convites/integrations aceitam SITE_URL (runtime).
   if (
     nodes.some((n) => n.node_type === "wait_for_link_click") &&
     !process.env.NEXT_PUBLIC_SITE_URL

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getSiteUrl } from '@/lib/site-url'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/integrations/admin-client'
 import { decrypt } from '@/lib/whatsapp/encryption'
@@ -129,7 +130,7 @@ export async function POST(request: Request) {
         ? body.summary.trim().slice(0, SUMMARY_MAX)
         : aiSummary
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+    const siteUrl = getSiteUrl()
     const convUrl = siteUrl ? `${siteUrl}/inbox?c=${conversationId}` : null
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const contactBlock = buildContactBlock(contact as any, convUrl)

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { getSiteUrl } from '@/lib/site-url'
 import { requireRole, toErrorResponse } from '@/lib/auth/account'
 import { supabaseAdmin } from '@/lib/integrations/admin-client'
 import { decrypt } from '@/lib/whatsapp/encryption'
@@ -98,7 +99,7 @@ export async function POST(request: Request) {
     })
 
     // URL absoluta da conversa (deep-link ?c=) — igual share/route.ts:132.
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+    const siteUrl = getSiteUrl()
     const conversationUrl = siteUrl ? `${siteUrl}/inbox?c=${conversationId}` : null
     // Bloco de contato p/ o handoff (Nome/Telefone/Conversa) — PII real, montada
     // DEPOIS da chamada ao LLM, então nunca entra no payload do OpenRouter.
