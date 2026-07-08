@@ -100,6 +100,9 @@ interface MessageThreadProps {
    * mobile only.
    */
   onBack?: () => void;
+  /** Mostra o botão "voltar" também no desktop (split-view de /conversations,
+   * que precisa fechar a conversa e voltar à lista cheia). Default: só mobile. */
+  backAlwaysVisible?: boolean;
   /** Marca a conversa como não lida (o pai deseleciona antes de gravar). */
   onMarkUnread?: (id: string) => void;
   /**
@@ -187,6 +190,7 @@ export function MessageThread({
   onStatusChange,
   onAssignChange,
   onBack,
+  backAlwaysVisible = false,
   onMarkUnread,
   resyncToken = 0,
   onRefresh,
@@ -1066,7 +1070,10 @@ export function MessageThread({
               type="button"
               onClick={onBack}
               aria-label={t("backToConversations")}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden"
+              className={cn(
+                "flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground",
+                !backAlwaysVisible && "lg:hidden",
+              )}
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
