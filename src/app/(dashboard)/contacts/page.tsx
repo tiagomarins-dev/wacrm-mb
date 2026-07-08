@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
@@ -42,6 +43,7 @@ import {
   ChevronLeft,
   ChevronRight,
   SlidersHorizontal,
+  MessageSquare,
 } from 'lucide-react';
 import { ContactForm } from '@/components/contacts/contact-form';
 import { ContactDetailView } from '@/components/contacts/contact-detail-view';
@@ -64,6 +66,7 @@ interface ContactWithTags extends Contact {
 export default function ContactsPage() {
   const { t } = useTranslation(['contacts', 'common']);
   const { formatDate } = useFormat();
+  const router = useRouter();
   const supabase = createClient();
   // Conexão ativa (multi-número, 033): filtra os contatos por conexão.
   const { activeConnectionId } = useActiveConnection();
@@ -82,6 +85,9 @@ export default function ContactsPage() {
   const [editContactTags, setEditContactTags] = useState<ContactTag[]>([]);
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailContactId, setDetailContactId] = useState<string | null>(null);
+  // Trava a UI durante o fetch de abrir conversa (anti clique-duplo; a
+  // idempotência do banco cobre o resto).
+  const [pendingOpenId, setPendingOpenId] = useState<string | null>(null);
   // Lead Score por contato: 1 RPC → mapa (aceitável p/ milhares de contatos).
   const [scoreMap, setScoreMap] = useState<
     Map<string, { score: number; classification: LeadClassification }>
@@ -205,6 +211,33 @@ export default function ContactsPage() {
   function openDetail(contactId: string) {
     setDetailContactId(contactId);
     setDetailOpen(true);
+  }
+
+  // Abre/cria a conversa do contato pela conexão ATIVA e navega pro inbox.
+  // pendingOpenId trava a UI durante o fetch (a idempotência do banco cobre o resto).
+  async function openConversation(contactId: string) {
+    if (pendingOpenId) return;
+    setPendingOpenId(contactId);
+    try {
+      const res = await fetch('/api/conversations/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contact_id: contactId,
+          connection_id: activeConnectionId,
+        }),
+      });
+      if (!res.ok) {
+        toast.error(t('openConversationError'));
+        return;
+      }
+      const { conversation_id } = await res.json();
+      router.push(`/inbox?c=${conversation_id}`);
+    } catch {
+      toast.error(t('openConversationError'));
+    } finally {
+      setPendingOpenId(null);
+    }
   }
 
   // Carrega o ranking de lead score 1x e indexa por contato p/ a coluna.
@@ -522,6 +555,20 @@ export default function ContactsPage() {
                         align="end"
                         className="bg-popover border-border"
                       >
+                        {/* Abrir conversa — só p/ quem pode agir (esconde de viewer) */}
+                        {canEdit && (
+                          <DropdownMenuItem
+                            disabled={pendingOpenId === contact.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openConversation(contact.id);
+                            }}
+                            className="text-popover-foreground focus:bg-muted focus:text-foreground"
+                          >
+                            <MessageSquare className="size-4" />
+                            {t('openConversation')}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           onClick={(e) => {
                             e.stopPropagation();
@@ -611,6 +658,7 @@ export default function ContactsPage() {
         onOpenChange={setDetailOpen}
         contactId={detailContactId}
         onUpdated={fetchContacts}
+        onOpenConversation={openConversation}
       />
 
       {/* Import Modal */}

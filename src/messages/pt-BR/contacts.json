@@ -36,5 +36,7 @@
   "failedLoad": "Falha ao carregar contatos",
   "failedDelete": "Falha ao excluir contatos",
   "deletedToast_one": "{{count}} contato excluído",
-  "deletedToast_other": "{{count}} contatos excluídos"
+  "deletedToast_other": "{{count}} contatos excluídos",
+  "openConversation": "Abrir conversa",
+  "openConversationError": "Erro ao abrir conversa"
 }
