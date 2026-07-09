@@ -59,7 +59,7 @@ export function BusinessHoursConfig() {
     setLoading(true);
     const [bhRes, connRes] = await Promise.all([
       supabase.from('business_hours').select('connection_id, timezone, schedule'),
-      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary'),
+      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary').is('archived_at', null),
     ]);
     if (connRes.error) {
       toast.error(t('loadError'));
