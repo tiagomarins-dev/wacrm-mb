@@ -611,7 +611,10 @@ export function WhatsAppConfig() {
                         : 'border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted')
                     }
                   >
-                    <span className="font-mono">{c.phone_number_id}</span>
+                    {/* Apelido (055) quando houver; senão o phone_number_id em mono */}
+                    <span className={c.label ? '' : 'font-mono'}>
+                      {c.label || c.phone_number_id}
+                    </span>
                     {c.is_primary && (
                       <span className="rounded bg-primary/20 px-1 text-[10px] uppercase text-primary">
                         {t('connections.primary')}
