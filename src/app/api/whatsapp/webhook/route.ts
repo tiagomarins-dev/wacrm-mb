@@ -265,23 +265,41 @@ async function processWebhook(body: { entry?: WhatsAppWebhookEntry[] }) {
 
       for (let i = 0; i < value.messages.length; i++) {
         const message = value.messages[i]
-        const contact = value.contacts[i] || value.contacts[0]
+        // `contacts` pode vir vazio/desalinhado em certos eventos (o guard de
+        // :223 não pega array vazio, que é truthy) → fallback pro wa_id do
+        // próprio message. Sem isso, `contact.profile.name` (:522) estoura e,
+        // como o ACK 200 já foi dado à Meta, a mensagem se perde sem reenvio.
+        const contact = value.contacts[i] || value.contacts[0] || {
+          profile: { name: '' },
+          wa_id: message.from,
+        }
 
-        await processMessage(
-          message,
-          contact,
-          // Tenancy — drives every contact / conversation lookup
-          // and the engines' active-row dispatch.
-          config.account_id,
-          // Audit / sender-of-record — used as the user_id on row
-          // inserts that need it for NOT NULL FK compliance. Always
-          // the admin who saved the WhatsApp config.
-          config.user_id,
-          // Conexão (multi-número, 033) — id da whatsapp_config casada
-          // pelo phone_number_id. Carimba contato/conversa p/ isolar.
-          config.id,
-          decryptedAccessToken
-        )
+        // try/catch por mensagem: um payload ruim não derruba o resto do batch
+        // (o loop é sequencial; um throw abortaria as mensagens seguintes).
+        try {
+          await processMessage(
+            message,
+            contact,
+            // Tenancy — drives every contact / conversation lookup
+            // and the engines' active-row dispatch.
+            config.account_id,
+            // Audit / sender-of-record — used as the user_id on row
+            // inserts that need it for NOT NULL FK compliance. Always
+            // the admin who saved the WhatsApp config.
+            config.user_id,
+            // Conexão (multi-número, 033) — id da whatsapp_config casada
+            // pelo phone_number_id. Carimba contato/conversa p/ isolar.
+            config.id,
+            decryptedAccessToken
+          )
+        } catch (err) {
+          console.error(
+            '[webhook] processMessage falhou p/ msg',
+            message.id,
+            '-',
+            err instanceof Error ? err.message : err,
+          )
+        }
       }
     }
   }
@@ -519,7 +537,9 @@ async function processMessage(
   accessToken: string
 ) {
   const senderPhone = normalizePhone(message.from)
-  const contactName = contact.profile.name
+  // Guard defensivo: contact/profile podem faltar (evento sem contacts casado)
+  // ou vir com nome vazio; cai no telefone como nome em vez de estourar.
+  const contactName = contact?.profile?.name || senderPhone
 
   // Find or create contact
   const contactOutcome = await findOrCreateContact(
