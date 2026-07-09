@@ -85,7 +85,9 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
     const { data } = await supabase
       .from("whatsapp_config")
       .select("id, phone_number_id, status, is_primary, label")
-      .eq("account_id", accountId);
+      .eq("account_id", accountId)
+      // Esconde conexões arquivadas (064) do seletor.
+      .is("archived_at", null);
     const list = (data ?? []) as Connection[];
     setConnections(list);
     // Conexão ativa: cookie → atual → primária → 1ª (lógica pura em pick-active).

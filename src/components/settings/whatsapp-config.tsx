@@ -135,6 +135,8 @@ export function WhatsAppConfig() {
           .from('whatsapp_config')
           .select('*')
           .eq('account_id', acctId)
+          // Esconde conexões arquivadas (064) da lista "Números conectados".
+          .is('archived_at', null)
           .order('is_primary', { ascending: false })
           .order('created_at', { ascending: true });
         if (error) console.error('Failed to load connections:', error);

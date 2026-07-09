@@ -49,7 +49,7 @@ export function AiConnectionConfig() {
     setLoading(true);
     const [cfgRes, connRes] = await Promise.all([
       supabase.from('ai_agent_config').select('connection_id, enabled, debounce_seconds, allowed_phones, auto_unassign_minutes'),
-      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary, label'),
+      supabase.from('whatsapp_config').select('id, phone_number_id, is_primary, label').is('archived_at', null),
     ]);
     if (cfgRes.error) {
       toast.error(t('loadError'));
