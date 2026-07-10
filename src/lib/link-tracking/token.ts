@@ -73,6 +73,33 @@ export async function createAgentLinkToken(
   return id
 }
 
+// Token rastreável para links enviados pelo ATENDENTE humano (source='manual').
+// Espelha createAgentLinkToken (flow_id/run_id = null); só troca node_key/source
+// para 'manual'. Requer `now` para o TTL. Sem migration (link_tokens.source livre).
+export async function createManualLinkToken(
+  db: SupabaseClient,
+  args: { account_id: string; contact_id: string | null; url: string },
+  now: number,
+): Promise<string> {
+  if (!/^https?:\/\//i.test(args.url)) {
+    throw new Error('link url must be http(s)')
+  }
+  const id = crypto.randomBytes(16).toString('hex')
+  const { error } = await db.from('link_tokens').insert({
+    id,
+    account_id: args.account_id,
+    flow_id: null,
+    run_id: null,
+    node_key: 'manual',
+    source: 'manual',
+    contact_id: args.contact_id,
+    url: args.url,
+    expires_at: new Date(now + TTL_MS).toISOString(),
+  })
+  if (error) throw new Error(`failed to create manual link token: ${error.message}`)
+  return id
+}
+
 // Lê o token. Inexistente/expirado/scheme inválido → null (fail-closed).
 // Não apaga a linha: cliques repetidos viram no-op no resume (guard de
 // current_node_key); manter a linha deixa o link funcionar dentro do TTL.

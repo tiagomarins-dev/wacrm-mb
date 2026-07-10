@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
+import { buildLinkParts } from "@/lib/link-tracking/url-detect";
 import type { Message, MessageReaction } from "@/types";
 import {
   Clock,
@@ -36,6 +37,8 @@ interface MessageBubbleProps {
   reactions?: MessageReaction[];
   currentUserId?: string;
   onToggleReaction?: (emoji: string) => void;
+  /** Mapa token→URL original p/ resolver os /r/<token> na exibição (só bolha do atendente). */
+  tokenMap?: Record<string, string>;
 }
 
 function StatusIcon({ status }: { status: Message["status"] }) {
@@ -222,10 +225,59 @@ function MediaImage({
   );
 }
 
-function MessageContent({ message }: { message: Message }) {
+// Renderiza content_text linkificando URLs. /r/<token> resolvido no mapa → <a href=original>;
+// não resolvido (flip otimista) → texto puro. Monta via React (texto escapado) — nunca HTML cru.
+function LinkifiedText({
+  text,
+  tokenMap,
+  className,
+}: {
+  text: string;
+  tokenMap: Record<string, string>;
+  className?: string;
+}) {
+  const parts = buildLinkParts(text, tokenMap);
+  return (
+    <p className={className}>
+      {parts.map((p, i) =>
+        p.kind === "link" ? (
+          <a
+            key={i}
+            href={p.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            {p.label}
+          </a>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </p>
+  );
+}
+
+function MessageContent({
+  message,
+  tokenMap,
+  isAgent,
+}: {
+  message: Message;
+  tokenMap?: Record<string, string>;
+  isAgent?: boolean;
+}) {
   switch (message.content_type) {
     case "text":
-      return (
+      // Só a bolha do atendente (isAgent) linkifica — inbound do contato fica texto puro
+      // (não transforma link de terceiro em clicável dentro do CRM).
+      return isAgent ? (
+        <LinkifiedText
+          text={message.content_text ?? ""}
+          tokenMap={tokenMap ?? {}}
+          className="whitespace-pre-wrap break-words text-sm"
+        />
+      ) : (
         <p className="whitespace-pre-wrap break-words text-sm">
           {message.content_text}
         </p>
@@ -244,11 +296,18 @@ function MessageContent({ message }: { message: Message }) {
           ) : (
             <MediaUnavailable label="Image" />
           )}
-          {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-              {message.content_text}
-            </p>
-          )}
+          {message.content_text &&
+            (isAgent ? (
+              <LinkifiedText
+                text={message.content_text}
+                tokenMap={tokenMap ?? {}}
+                className="mt-1 whitespace-pre-wrap break-words text-sm"
+              />
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                {message.content_text}
+              </p>
+            ))}
         </div>
       );
 
@@ -264,11 +323,18 @@ function MessageContent({ message }: { message: Message }) {
           ) : (
             <MediaUnavailable label="Video" />
           )}
-          {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-              {message.content_text}
-            </p>
-          )}
+          {message.content_text &&
+            (isAgent ? (
+              <LinkifiedText
+                text={message.content_text}
+                tokenMap={tokenMap ?? {}}
+                className="mt-1 whitespace-pre-wrap break-words text-sm"
+              />
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                {message.content_text}
+              </p>
+            ))}
         </div>
       );
 
@@ -317,11 +383,18 @@ function MessageContent({ message }: { message: Message }) {
             <LayoutTemplate className="h-3 w-3" />
             Template
           </span>
-          {message.content_text && (
-            <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-              {message.content_text}
-            </p>
-          )}
+          {message.content_text &&
+            (isAgent ? (
+              <LinkifiedText
+                text={message.content_text}
+                tokenMap={tokenMap ?? {}}
+                className="mt-1 whitespace-pre-wrap break-words text-sm"
+              />
+            ) : (
+              <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                {message.content_text}
+              </p>
+            ))}
         </div>
       );
 
@@ -367,6 +440,7 @@ export function MessageBubble({
   reactions,
   currentUserId,
   onToggleReaction,
+  tokenMap,
 }: MessageBubbleProps) {
   // MessageBubble tem seu próprio `t` (o de :61 é do subcomponente AudioMessage).
   const { t } = useTranslation("inbox");
@@ -404,7 +478,7 @@ export function MessageBubble({
             onPrimary={isAgent}
           />
         )}
-        <MessageContent message={message} />
+        <MessageContent message={message} tokenMap={tokenMap} isAgent={isAgent} />
         <div
           className={cn(
             "mt-1 flex items-center gap-1",
