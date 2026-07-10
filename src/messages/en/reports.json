@@ -37,5 +37,14 @@
   "noBusinessHours": "No business hours set for this connection — times count 24/7. Configure in Settings → Business hours.",
   "empty": "No data in this period.",
   "samples": "{{count}} samples",
-  "loadFailed": "Failed to load report"
+  "loadFailed": "Failed to load report",
+  "dayTitle": "Conversations by agent (day)",
+  "daySelectAgent": "Choose an agent",
+  "dayEmpty": "No conversations on this day",
+  "dayLoadFailed": "Failed to load conversations",
+  "dayColName": "Contact",
+  "dayColPhone": "Phone",
+  "dayColLastMsg": "Last message",
+  "dayColStatus": "Status",
+  "dayColDate": "Date"
 }
