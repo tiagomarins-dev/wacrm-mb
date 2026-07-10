@@ -37,5 +37,14 @@
   "noBusinessHours": "Sem horário de atendimento configurado nesta conexão — os tempos contam 24/7. Configure em Configurações → Horário de atendimento.",
   "empty": "Sem dados no período.",
   "samples": "{{count}} amostras",
-  "loadFailed": "Falha ao carregar o relatório"
+  "loadFailed": "Falha ao carregar o relatório",
+  "dayTitle": "Conversas por atendente (dia)",
+  "daySelectAgent": "Escolha um atendente",
+  "dayEmpty": "Nenhuma conversa nesse dia",
+  "dayLoadFailed": "Erro ao carregar conversas",
+  "dayColName": "Contato",
+  "dayColPhone": "Telefone",
+  "dayColLastMsg": "Última mensagem",
+  "dayColStatus": "Status",
+  "dayColDate": "Data"
 }

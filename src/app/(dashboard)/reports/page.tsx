@@ -1,11 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { BarChart3, Loader2, Clock, Timer, MessagesSquare, ArrowLeftRight, Bot, Info, ShoppingCart } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useActiveConnection } from "@/hooks/use-active-connection";
+import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
+import { resolveStatus } from "@/lib/inbox/conversation-statuses";
+import { useFormat } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { SalesOverridePanel } from "@/components/reports/sales-override-panel";
@@ -13,6 +18,13 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import type { AgentResponseTime, AgentVolume, AgentSales, ReportMember } from "@/types";
+
+// Conversa que "passou por" o atendente no dia (retorno da RPC agent_conversations, 065).
+type DayConversation = {
+  conversation_id: string; contact_id: string; contact_name: string | null;
+  contact_phone: string | null; last_message_text: string | null;
+  last_message_at: string | null; status: string; assigned_agent_id: string | null;
+};
 
 const WINDOWS = [7, 30, 90] as const;
 
@@ -25,8 +37,11 @@ type Row = AgentResponseTime & Partial<AgentVolume> & { name: string; vendas: nu
 export default function ReportsPage() {
   const { t } = useTranslation(["reports", "common"]);
   const supabase = createClient();
-  const { user, canEditSettings } = useAuth();
+  const router = useRouter();
+  const { user, canEditSettings, isOwner } = useAuth();
   const { activeConnectionId } = useActiveConnection();
+  const { statuses } = useConversationStatuses();
+  const { formatDateTime } = useFormat();
 
   const [windowDays, setWindowDays] = useState<number>(30);
   const [members, setMembers] = useState<ReportMember[]>([]);
@@ -34,6 +49,12 @@ export default function ReportsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [noHours, setNoHours] = useState(false);
+
+  // Seção owner-only: conversas que passaram por um atendente num dia (065).
+  const [dayAgent, setDayAgent] = useState<string | null>(null);
+  const [selectedDay, setSelectedDay] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [dayConversations, setDayConversations] = useState<DayConversation[]>([]);
+  const [dayLoading, setDayLoading] = useState(false);
 
   // Admin/owner: carrega operadores (agent+) para o dropdown. Viewer some.
   useEffect(() => {
@@ -106,6 +127,32 @@ export default function ReportsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Busca as conversas que passaram pelo atendente no dia escolhido (owner-only, RPC 065).
+  // O gate real é server-side (a RPC nega se não for owner); captura erro p/ não sumir silencioso.
+  const loadDay = useCallback(async () => {
+    if (!dayAgent || !selectedDay) { setDayConversations([]); return; }
+    setDayLoading(true);
+    try {
+      const from = new Date(`${selectedDay}T00:00:00`);
+      const to = new Date(from);
+      to.setDate(to.getDate() + 1);
+      const { data, error } = await supabase.rpc("agent_conversations", {
+        p_agent_id: dayAgent,
+        p_from: from.toISOString(),
+        p_to: to.toISOString(),
+        p_connection_id: activeConnectionId,
+      });
+      if (error) { toast.error(t("dayLoadFailed")); setDayConversations([]); return; }
+      setDayConversations((data ?? []) as DayConversation[]);
+    } finally {
+      setDayLoading(false);
+    }
+  }, [dayAgent, selectedDay, activeConnectionId, supabase, t]);
+
+  useEffect(() => {
+    void loadDay();
+  }, [loadDay]);
 
   // Modo "cards" quando há um atendente único em foco (operador, ou admin que
   // escolheu um operador). "Geral" do admin (selectedAgent null) vira tabela.
@@ -237,6 +284,84 @@ export default function ReportsPage() {
         <div className="mt-8 border-t border-border pt-6">
           <SalesOverridePanel windowDays={windowDays} connectionId={activeConnectionId} members={members} />
         </div>
+      )}
+
+      {/* Seção OWNER-only (065): conversas que passaram por um atendente no dia. */}
+      {isOwner && (
+        <section className="mt-8 border-t border-border pt-6">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">{t("dayTitle")}</h2>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <select
+              value={dayAgent ?? ""}
+              onChange={(e) => setDayAgent(e.target.value || null)}
+              className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            >
+              <option value="">{t("daySelectAgent")}</option>
+              {members.map((m) => (
+                <option key={m.user_id} value={m.user_id}>{m.full_name}</option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={selectedDay}
+              onChange={(e) => setSelectedDay(e.target.value)}
+              className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            />
+          </div>
+
+          {dayLoading ? (
+            <Loader2 className="size-5 animate-spin text-primary" />
+          ) : !dayAgent ? (
+            <p className="text-sm text-muted-foreground">{t("daySelectAgent")}</p>
+          ) : dayConversations.length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t("dayEmpty")}</p>
+          ) : (
+            <div className="overflow-auto rounded-lg border border-border">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">{t("dayColName")}</TableHead>
+                    <TableHead className="hidden text-muted-foreground md:table-cell">{t("dayColPhone")}</TableHead>
+                    <TableHead className="hidden text-muted-foreground lg:table-cell">{t("dayColLastMsg")}</TableHead>
+                    <TableHead className="text-muted-foreground">{t("dayColStatus")}</TableHead>
+                    <TableHead className="hidden text-muted-foreground md:table-cell">{t("dayColDate")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dayConversations.map((cv) => {
+                    const st = resolveStatus(statuses, cv.status);
+                    return (
+                      <TableRow
+                        key={cv.conversation_id}
+                        className="cursor-pointer border-border hover:bg-muted/50"
+                        onClick={() => router.push(`/inbox?c=${cv.conversation_id}`)}
+                      >
+                        <TableCell className="font-medium text-foreground">{cv.contact_name || cv.contact_phone || "—"}</TableCell>
+                        <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">{cv.contact_phone}</TableCell>
+                        <TableCell className="hidden max-w-[280px] lg:table-cell">
+                          <span className="block truncate text-xs text-muted-foreground" title={cv.last_message_text ?? ""}>
+                            {cv.last_message_text}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium"
+                            style={{ backgroundColor: `${st.color}20`, color: st.color }}
+                          >
+                            {st.label}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
+                          {cv.last_message_at ? formatDateTime(cv.last_message_at) : "—"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );
