@@ -62,5 +62,6 @@
   "unknownAgent": "someone",
   "statusOpen": "Open",
   "statusPending": "Pending",
-  "statusClosed": "Closed"
+  "statusClosed": "Closed",
+  "linkClicks": "Link clicks"
 }
