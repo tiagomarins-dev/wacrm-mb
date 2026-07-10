@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { type MediaKind } from '@/lib/whatsapp/meta-api'
 import { decrypt, encrypt, isLegacyFormat } from '@/lib/whatsapp/encryption'
 import { supabaseAdmin } from '@/lib/flows/admin-client'
+import { wrapTrackableLinks } from '@/lib/link-tracking/wrap'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { createMessageProvider } from '@/lib/providers/factory'
 import { capabilitiesFor } from '@/lib/providers/types'
@@ -296,6 +297,31 @@ export async function POST(request: Request) {
       templateRow = (data as MessageTemplate | null) ?? null
     }
 
+    // Encapsula os links do atendente em /r/<token> rastreável (igual ao agente de IA).
+    // Template não tem texto livre (content vem do provedor) → não wrapa. wrapTrackableLinks
+    // já guarda !text e getSiteUrl ausente (fallback: manda o texto cru).
+    const outboundText =
+      message_type === 'template'
+        ? content_text
+        : await wrapTrackableLinks(supabaseAdmin(), content_text, {
+            accountId,
+            contactId: conversation.contact_id ?? null,
+          })
+
+    // O check de 1024 (linha ~126) rodou no texto CRU; o /r/ pode ter aumentado a
+    // legenda de mídia. Re-valida SÓ mídia (Meta limita legenda a 1024).
+    if (
+      isMediaKind &&
+      message_type !== 'audio' &&
+      typeof outboundText === 'string' &&
+      outboundText.length > 1024
+    ) {
+      return NextResponse.json(
+        { error: 'Caption exceeds the 1024-character limit' },
+        { status: 400 }
+      )
+    }
+
     // Roteia o envio pelo provider da conexão (Fase B). MetaAdapter
     // repassa os args p/ meta-api.ts — wire idêntico ao envio direto.
     const provider = createMessageProvider(config, accessToken)
@@ -323,7 +349,7 @@ export async function POST(request: Request) {
           to: phone,
           kind: message_type as MediaKind,
           link: media_url,
-          caption: content_text || undefined,
+          caption: outboundText || undefined,
           filename: filename || undefined,
           contextMessageId,
         })
@@ -331,7 +357,8 @@ export async function POST(request: Request) {
       }
       const result = await provider.sendText({
         to: phone,
-        text: content_text,
+        // Texto é validado presente acima → wrap devolve string. `?? ''` só satisfaz o tipo.
+        text: outboundText ?? '',
         contextMessageId,
       })
       return result.messageId
@@ -402,7 +429,9 @@ export async function POST(request: Request) {
         // quem respondeu cada conversa. Resolvível depois via profiles.
         sender_id: user.id,
         content_type: message_type,
-        content_text: content_text || null,
+        // Grava o texto JÁ com /r/<token> (mantém o badge 066). last_message_text
+        // fica o ORIGINAL (preview limpo) — não trocar abaixo.
+        content_text: outboundText || null,
         media_url: media_url || null,
         template_name: template_name || null,
         message_id: waMessageId,

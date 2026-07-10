@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createLinkToken, createAgentLinkToken, consumeLinkToken } from './token'
+import { createLinkToken, createAgentLinkToken, createManualLinkToken, consumeLinkToken } from './token'
 
 const NOW = 1_750_000_000_000
 
@@ -76,6 +76,37 @@ describe('createAgentLinkToken', () => {
     const { db } = makeDb(null)
     await expect(
       createAgentLinkToken(db, { account_id: 'a', contact_id: null, url: 'ftp://x' }, NOW),
+    ).rejects.toThrow(/http/)
+  })
+})
+
+describe('createManualLinkToken', () => {
+  it('grava token do atendente (source/node_key=manual, flow_id/run_id null)', async () => {
+    const { db, inserts } = makeDb(null)
+    const id = await createManualLinkToken(
+      db,
+      { account_id: 'acc-1', contact_id: 'contact-1', url: 'https://exemplo.com/p' },
+      NOW,
+    )
+    expect(id).toMatch(/^[0-9a-f]{32}$/)
+    expect(inserts).toHaveLength(1)
+    expect(inserts[0].source).toBe('manual')
+    expect(inserts[0].node_key).toBe('manual')
+    expect(inserts[0].flow_id).toBeNull()
+    expect(inserts[0].run_id).toBeNull()
+    expect(inserts[0].url).toBe('https://exemplo.com/p')
+  })
+
+  it('contact_id null é aceito', async () => {
+    const { db, inserts } = makeDb(null)
+    await createManualLinkToken(db, { account_id: 'a', contact_id: null, url: 'https://x.com' }, NOW)
+    expect(inserts[0].contact_id).toBeNull()
+  })
+
+  it('url não-http → lança', async () => {
+    const { db } = makeDb(null)
+    await expect(
+      createManualLinkToken(db, { account_id: 'a', contact_id: null, url: 'javascript:alert(1)' }, NOW),
     ).rejects.toThrow(/http/)
   })
 })

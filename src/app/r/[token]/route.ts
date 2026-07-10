@@ -2,6 +2,7 @@ import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { resumeRunOnLinkClick } from '@/lib/flows/engine'
 import { consumeLinkToken } from '@/lib/link-tracking/token'
 import { recordAgentClick } from '@/lib/link-tracking/agent-click'
+import { isLoggedMemberClick } from '@/lib/link-tracking/member-click'
 import { isBotUserAgent } from '@/lib/link-tracking/user-agent'
 
 export const runtime = 'nodejs'
@@ -32,11 +33,18 @@ export async function GET(
     return redirect()
   }
 
+  // Ignora clique de membro logado da conta do token (evita clique falso do próprio
+  // atendente). Fail-open: sem cookie de sessão (contato no WhatsApp) → false → conta normal.
+  const isMember = await isLoggedMemberClick(_req, payload.account_id)
+
   try {
-    // Roteamento por origem do token: link do AGENTE de IA (sem flow_run)
-    // só audita o clique; link de FLOW retoma a run como antes.
-    if (payload.source === 'agent') {
-      await recordAgentClick(supabaseAdmin(), payload, _req.headers.get('user-agent'))
+    // Roteamento por origem do token: link do AGENTE de IA ou do ATENDENTE (manual, sem
+    // flow_run) só audita o clique; link de FLOW retoma a run como antes. Clique de membro
+    // logado não é auditado (não infla o rastreio).
+    if (payload.source === 'agent' || payload.source === 'manual') {
+      if (!isMember) {
+        await recordAgentClick(supabaseAdmin(), payload, _req.headers.get('user-agent'))
+      }
     } else {
       await resumeRunOnLinkClick(
         supabaseAdmin(),
@@ -51,12 +59,14 @@ export async function GET(
 
   // Incrementa o badge de cliques na mensagem OUTBOUND que enviou este link
   // (realtime via messages). Fora do try — best-effort, nunca trava o redirect.
-  // O bot/prefetch já retornou acima, então não infla a contagem.
-  void supabaseAdmin()
-    .rpc('increment_message_link_clicks', { p_token: token })
-    .then(({ error }) => {
-      if (error) console.error('[link] click badge inc failed:', error.message)
-    })
+  // O bot/prefetch já retornou acima; clique de membro logado não conta (skip-membro).
+  if (!isMember) {
+    void supabaseAdmin()
+      .rpc('increment_message_link_clicks', { p_token: token })
+      .then(({ error }) => {
+        if (error) console.error('[link] click badge inc failed:', error.message)
+      })
+  }
 
   return redirect()
 }

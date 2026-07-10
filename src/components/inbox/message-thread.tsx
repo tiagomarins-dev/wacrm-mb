@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
+import { findUrls, extractManualToken } from "@/lib/link-tracking/url-detect";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
 import type { AiProfilePublic } from "@/types";
@@ -241,6 +242,41 @@ export function MessageThread({
     }, 700);
   }, [isRefreshing, onRefresh]);
   const [replyTo, setReplyTo] = useState<ReplyDraft | null>(null);
+
+  // Resolve os /r/<token> das mensagens do ATENDENTE → URL original, p/ linkificar o link
+  // como clicável na bolha (o contato recebe o /r/; o atendente vê/clica o original, sem
+  // gerar clique falso). Incremental: só busca tokens ainda não no mapa.
+  const [tokenMap, setTokenMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const novos = new Set<string>();
+    for (const m of messages) {
+      if (m.sender_type !== "agent" && m.sender_type !== "bot") continue;
+      for (const u of findUrls(m.content_text ?? "")) {
+        const tk = extractManualToken(u.url);
+        if (tk && !(tk in tokenMap)) novos.add(tk);
+      }
+    }
+    if (novos.size === 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/link-tokens/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tokens: [...novos] }),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!cancelled && res.ok && payload?.map) {
+          setTokenMap((prev) => ({ ...prev, ...payload.map }));
+        }
+      } catch {
+        /* silencioso: a bolha mostra o /r/ como texto puro até resolver */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [messages, tokenMap]);
 
   // Profiles are bounded by RLS to rows the current user is allowed to
   // see — today that's just the current user, but the dropdown keeps the
@@ -1464,6 +1500,7 @@ export function MessageThread({
                           reactions={msgReactions}
                           currentUserId={user?.id}
                           onToggleReaction={handlePillToggle}
+                          tokenMap={tokenMap}
                         />
                       </MessageActions>
                     );

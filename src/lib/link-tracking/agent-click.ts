@@ -1,9 +1,9 @@
 // ============================================================
-// Registro de clique em link enviado pelo AGENTE DE IA (token source='agent',
-// sem flow_run). Espelha o insert de link_clicks de resumeRunOnLinkClick
-// (flows/engine.ts:1250), mas com flow_run_id=null, source='agent'. NÃO
-// retoma flow nenhum. connection_id é resolvido do contato (o token não
-// carrega connection_id; link_clicks.connection_id é nullable).
+// Registro de clique em link enviado pelo AGENTE DE IA ou pelo ATENDENTE humano
+// (token source in ('agent','manual'), sem flow_run). Espelha o insert de link_clicks
+// de resumeRunOnLinkClick (flows/engine.ts:1250), mas com flow_run_id=null. NÃO retoma
+// flow nenhum. source/node_key vêm do payload (dinâmicos). connection_id é resolvido do
+// contato (o token não carrega connection_id; link_clicks.connection_id é nullable).
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ConsumedToken } from './token'
@@ -33,8 +33,8 @@ export async function recordAgentClick(
     connection_id: connectionId,
     contact_id: payload.contact_id,
     flow_run_id: null,
-    node_key: 'agent',
-    source: 'agent',
+    node_key: payload.node_key,
+    source: payload.source,
     target_url: payload.url,
     user_agent: userAgent,
     is_sale: false,

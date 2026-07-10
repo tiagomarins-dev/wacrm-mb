@@ -141,6 +141,9 @@ export const RATE_LIMITS = {
    *  while still bounding accidental abuse from a script run in a
    *  loop or a compromised admin session spamming role flips. */
   adminAction: { limit: 30, windowMs: 60_000 },
+  /** Resolução de link /r/<token>→original na bolha do inbox. Bucket próprio p/
+   *  NÃO consumir a cota de envio (RATE_LIMITS.send) do atendente. */
+  linkResolve: { limit: 120, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't
