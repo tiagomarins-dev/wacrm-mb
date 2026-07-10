@@ -498,18 +498,18 @@ export function MessageBubble({
             {time}
           </span>
           {isAgent && <StatusIcon status={message.status} />}
-          {/* Badge de cliques — só bolha OUTBOUND com link rastreável (/r/<token>) já clicado.
-              Cor casa com a bolha bg-primary (igual o timestamp). Atualiza em tempo real
-              via UPDATE de messages (066). */}
+          {/* Badge de cliques — toda bolha OUTBOUND com link rastreável (/r/<token>),
+              mesmo com 0 cliques: sinaliza que o link ESTÁ rastreado (o contador só sobe
+              com clique de contato real). Cor casa com a bolha bg-primary (igual o
+              timestamp). Atualiza em tempo real via UPDATE de messages (066). */}
           {isAgent &&
-            /\/r\/[a-f0-9]{32}/.test(message.content_text ?? "") &&
-            (message.link_click_count ?? 0) > 0 && (
+            /\/r\/[a-f0-9]{32}/.test(message.content_text ?? "") && (
               <span
                 className="inline-flex items-center gap-1 text-[10px] font-medium text-primary-foreground/70"
                 title={t("linkClicks")}
               >
                 <MousePointerClick className="size-3" />
-                {message.link_click_count}
+                {message.link_click_count ?? 0}
               </span>
             )}
         </div>
