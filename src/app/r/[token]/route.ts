@@ -48,5 +48,15 @@ export async function GET(
     // Nem o resume nem o registro bloqueiam o redirect.
     console.error('[link] click handling failed:', e instanceof Error ? e.message : e)
   }
+
+  // Incrementa o badge de cliques na mensagem OUTBOUND que enviou este link
+  // (realtime via messages). Fora do try — best-effort, nunca trava o redirect.
+  // O bot/prefetch já retornou acima, então não infla a contagem.
+  void supabaseAdmin()
+    .rpc('increment_message_link_clicks', { p_token: token })
+    .then(({ error }) => {
+      if (error) console.error('[link] click badge inc failed:', error.message)
+    })
+
   return redirect()
 }

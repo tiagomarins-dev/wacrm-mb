@@ -489,6 +489,8 @@ export interface Message {
   transcription_status?: TranscriptionStatus;
   /** Nome do participante remetente em conversa de grupo (058). NULL em 1:1. */
   sender_name?: string | null;
+  /** Cliques no link rastreável (/r/<token>) enviado nesta mensagem (066). Badge realtime. */
+  link_click_count?: number;
 }
 
 export type ReactionActor = 'customer' | 'agent';
