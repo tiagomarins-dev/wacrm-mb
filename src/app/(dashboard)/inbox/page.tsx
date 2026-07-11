@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Conversation } from "@/types";
 import { useConversationWorkspace } from "@/hooks/use-conversation-workspace";
@@ -12,7 +12,6 @@ import { WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function InboxPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   /** `?c=<id>` deep-link — abre o thread automaticamente ao chegar do dashboard. */
   const deepLinkConvId = searchParams.get("c");
@@ -82,12 +81,18 @@ export default function InboxPage() {
     patchConversation,
     upsertConversation: hydrateConversation,
     onSelect: (conv) => {
-      autoSelectedForDeepLinkRef.current = conv.id;
-      router.replace(`/inbox?c=${conv.id}`, { scroll: false });
+      // Atualiza a URL (?c=) só p/ deep-link/reload — via history API, NÃO router.replace.
+      // router.replace dispara navegação RSC que passa no middleware (getUser + refresh de
+      // cookie); em refresh de token, o App Router degrada pra HARD RELOAD → a página
+      // recarregava ao clicar na conversa ("às vezes"). history.replaceState só troca a
+      // barra de endereço, sem navegar/remontar. O deep-link é lido no mount (searchParams).
+      // NÃO tocar em autoSelectedForDeepLinkRef aqui: como a URL não re-dispara o
+      // searchParams, deepLinkConvId fica fixo; o ref marca só CONSUMO do deep-link
+      // (senão uma recarga da lista re-selecionaria a conversa do deep-link).
+      window.history.replaceState(null, "", `/inbox?c=${conv.id}`);
     },
     onClose: () => {
-      autoSelectedForDeepLinkRef.current = null;
-      router.replace("/inbox", { scroll: false });
+      window.history.replaceState(null, "", "/inbox");
     },
   });
 

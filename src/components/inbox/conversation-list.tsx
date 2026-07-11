@@ -47,6 +47,9 @@ interface ConversationListProps {
 // Direção do ordenador por tempo (toggle global das abas) + chave de persistência.
 type SortDir = "asc" | "desc";
 const SORT_DIR_KEY = "wacrm:inbox:sort-dir";
+// Persiste a aba ativa (Fila/Minhas/SLA/IA) p/ sobreviver a reload/remount — senão o
+// default "fila" volta e o atendente "perde" a aba. Restaurada pós-mount (como sortDir).
+const ACTIVE_TAB_KEY = "wacrm:inbox:active-tab";
 
 // Abas da fila de atendimento → chave i18n do label / do empty state.
 const TAB_LABEL: Record<QueueTab, string> = {
@@ -78,7 +81,30 @@ export function ConversationList({
   const { t } = useTranslation("inbox");
   const { user, canManageMembers, accountId } = useAuth();
   const [search, setSearch] = useState("");
+  // Default FIXO no initializer (NÃO ler localStorage aqui — SSR daria hydration
+  // mismatch; restaura pós-mount no effect abaixo, igual sortDir).
   const [activeTab, setActiveTab] = useState<QueueTab>("fila");
+  // Restaura a aba salva DEPOIS do mount (reconcilia sem hydration mismatch).
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(ACTIVE_TAB_KEY);
+      // Hidratação pós-mount (intencional). effectiveTab derruba p/ "fila" se a aba
+      // salva não valer p/ este usuário (ex.: "ia" sem permissão), então é seguro.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (v && v in TAB_LABEL) setActiveTab(v as QueueTab);
+    } catch {
+      // localStorage pode lançar em private browsing/sandbox.
+    }
+  }, []);
+  // Troca a aba e persiste (best-effort). Usado pelas Tabs e pelo chip IA.
+  const chooseTab = useCallback((tab: QueueTab) => {
+    setActiveTab(tab);
+    try {
+      localStorage.setItem(ACTIVE_TAB_KEY, tab);
+    } catch {
+      // persistência best-effort.
+    }
+  }, []);
   const [loading, setLoading] = useState(true);
   // Ids tidos como "IA" p/ a aba Agente IA: bot genérico + perfis de IA da conta.
   // Base sempre tem o bot; perfis entram via fetch admin (effect abaixo).
@@ -308,7 +334,7 @@ export function ConversationList({
         <div className="flex items-center gap-1">
           <Tabs
             value={effectiveTab}
-            onValueChange={(v) => setActiveTab(v as QueueTab)}
+            onValueChange={(v) => chooseTab(v as QueueTab)}
             className="min-w-0 flex-1"
           >
             <TabsList variant="line" className="w-full justify-start gap-1 overflow-x-auto">
@@ -341,7 +367,7 @@ export function ConversationList({
               aria-label={t("tabIa")}
               title={t("tabIa")}
               onClick={() =>
-                setActiveTab(effectiveTab === "ia" ? "fila" : "ia")
+                chooseTab(effectiveTab === "ia" ? "fila" : "ia")
               }
             >
               <Bot className="size-3.5" />
