@@ -16,6 +16,7 @@ const base: SearchInput = {
   page: 0,
   dateRange: "all",
   tagFilter: "all",
+  intentFilter: "all",
 };
 
 describe("buildSearchParams", () => {
@@ -24,6 +25,7 @@ describe("buildSearchParams", () => {
     expect(p).toEqual({
       p_search: null, p_status: null, p_agent: null, p_unassigned: false,
       p_connection: null, p_date_from: null, p_date_to: null, p_tag: null,
+      p_intent: null,
       p_limit: PAGE_SIZE, p_offset: 0,
     });
   });
@@ -32,6 +34,13 @@ describe("buildSearchParams", () => {
     expect(buildSearchParams({ ...base, tagFilter: "all" }).p_tag).toBeNull();
     const tag = "11111111-1111-1111-1111-111111111111";
     expect(buildSearchParams({ ...base, tagFilter: tag }).p_tag).toBe(tag);
+  });
+
+  it("intenção: 'all' → null; 'vendas'/'suporte'/'outro' passam; '__none__' passa (sentinel)", () => {
+    expect(buildSearchParams({ ...base, intentFilter: "all" }).p_intent).toBeNull();
+    expect(buildSearchParams({ ...base, intentFilter: "vendas" }).p_intent).toBe("vendas");
+    expect(buildSearchParams({ ...base, intentFilter: "suporte" }).p_intent).toBe("suporte");
+    expect(buildSearchParams({ ...base, intentFilter: "__none__" }).p_intent).toBe("__none__");
   });
 
   it("status: 'all' → null; valor real → passa", () => {

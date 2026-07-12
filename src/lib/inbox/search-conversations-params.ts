@@ -60,6 +60,8 @@ export interface SearchInput {
   customTo?: Date | null;
   // 'all' ou o uuid de uma tag da conta (filtro por tag do contato, 063).
   tagFilter: string;
+  // 'all' / 'vendas' / 'suporte' / 'outro' / '__none__' (não classificada) — filtro de intenção (067).
+  intentFilter: string;
 }
 
 export interface SearchParams {
@@ -71,6 +73,7 @@ export interface SearchParams {
   p_date_from: string | null;
   p_date_to: string | null;
   p_tag: string | null;
+  p_intent: string | null;
   p_limit: number;
   p_offset: number;
 }
@@ -91,6 +94,8 @@ export function buildSearchParams(i: SearchInput): SearchParams {
     p_date_from: dr.from ? dr.from.toISOString() : null,
     p_date_to: dr.to ? dr.to.toISOString() : null,
     p_tag: i.tagFilter === "all" ? null : i.tagFilter,
+    // 'all' → null (sem filtro); '__none__' e os rótulos passam crus pro where da RPC.
+    p_intent: i.intentFilter === "all" ? null : i.intentFilter,
     p_limit: PAGE_SIZE,
     p_offset: i.page * PAGE_SIZE,
   };

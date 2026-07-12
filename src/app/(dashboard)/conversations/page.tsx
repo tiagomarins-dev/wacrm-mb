@@ -56,6 +56,7 @@ import { useFormat } from "@/lib/i18n/format";
 import { resolveAssignee, type Assignee } from "@/lib/inbox/assignee";
 import { AI_AGENT_LABEL, AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { buildSearchParams, type AgentFilter, type DateRange } from "@/lib/inbox/search-conversations-params";
+import { IntentBadge } from "@/components/conversations/intent-badge";
 
 const PAGE_SIZE = 25;
 
@@ -67,6 +68,8 @@ type AccountTag = { id: string; name: string; color: string };
 type StatusFilter = string;
 // Presets do filtro de data (custom entra via 2 inputs, fora deste array).
 const DATE_RANGES: DateRange[] = ["today", "week", "month", "6m", "12m", "all"];
+// Opções do filtro de intenção (067). '__none__' = não classificada (report_intent NULL).
+const INTENT_OPTIONS = ["all", "vendas", "suporte", "outro", "__none__"] as const;
 
 // Traduz o discriminador do responsável p/ exibição.
 function assigneeLabel(a: Assignee, t: (k: string) => string): string {
@@ -111,6 +114,8 @@ export default function ConversationsPage() {
   // Filtro por tag do contato (063): 'all' ou uuid da tag. Tags da conta p/ o dropdown.
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [accountTags, setAccountTags] = useState<AccountTag[]>([]);
+  // Filtro por intenção classificada (067): 'all' / valor / '__none__'.
+  const [intentFilter, setIntentFilter] = useState<string>("all");
   // Seleção múltipla (page-scoped) p/ fechar em lote. Espelha contacts/page.tsx.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkCloseOpen, setBulkCloseOpen] = useState(false);
@@ -154,7 +159,7 @@ export default function ConversationsPage() {
     setSelected(new Set());
     const { data, error } = await supabase.rpc(
       "search_conversations",
-      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo, tagFilter })
+      buildSearchParams({ search, statusFilter, agentFilter, activeConnectionId, page, dateRange, customFrom, customTo, tagFilter, intentFilter })
     );
 
     if (error) {
@@ -167,7 +172,7 @@ export default function ConversationsPage() {
     setRows(list.map((r) => r.data));
     setTotalCount(Number(list[0]?.total_count ?? 0));
     setLoading(false);
-  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, dateRange, customFrom, customTo, tagFilter, t]);
+  }, [supabase, page, search, statusFilter, agentFilter, activeConnectionId, dateRange, customFrom, customTo, tagFilter, intentFilter, t]);
 
   // Refetch a cada mudança de page/search/status/conexão. Disable espelha
   // contacts/page.tsx:185 (fetch faz setLoading síncrono no início).
@@ -245,6 +250,7 @@ export default function ConversationsPage() {
     statusFilter !== "all" ||
     agentFilter !== "all" ||
     tagFilter !== "all" ||
+    intentFilter !== "all" ||
     dateRange !== "month" ||
     !!customFrom ||
     !!customTo;
@@ -338,6 +344,35 @@ export default function ConversationsPage() {
                   style={{ backgroundColor: tg.color }}
                 />
                 {tg.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Filtro por intenção classificada (067). '__none__' = não classificada. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger className="inline-flex h-9 items-center gap-1 rounded-md border border-border px-3 text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+            {intentFilter === "all"
+              ? t("filterAllIntents")
+              : t(`intent_${intentFilter === "__none__" ? "none" : intentFilter}`)}
+            <ChevronDown className="size-3.5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="border-border bg-popover">
+            {INTENT_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt}
+                onClick={() => {
+                  setIntentFilter(opt);
+                  setPage(0);
+                }}
+                className={cn(
+                  "text-sm",
+                  intentFilter === opt ? "text-primary" : "text-popover-foreground"
+                )}
+              >
+                {opt === "all"
+                  ? t("filterAllIntents")
+                  : t(`intent_${opt === "__none__" ? "none" : opt}`)}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -541,13 +576,14 @@ export default function ConversationsPage() {
               <TableHead className="hidden text-muted-foreground lg:table-cell">{t("colLastMsg")}</TableHead>
               <TableHead className="hidden text-muted-foreground sm:table-cell">{t("colAssignee")}</TableHead>
               <TableHead className="text-muted-foreground">{t("colStatus")}</TableHead>
+              <TableHead className="hidden text-muted-foreground sm:table-cell">{t("colIntent")}</TableHead>
               <TableHead className="hidden text-muted-foreground md:table-cell">{t("colDate")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow className="border-border">
-                <TableCell colSpan={7} className="py-12 text-center">
+                <TableCell colSpan={8} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <Loader2 className="size-6 animate-spin text-primary" />
                     <p className="text-sm text-muted-foreground">{t("loading")}</p>
@@ -556,7 +592,7 @@ export default function ConversationsPage() {
               </TableRow>
             ) : rows.length === 0 ? (
               <TableRow className="border-border">
-                <TableCell colSpan={7} className="py-12 text-center">
+                <TableCell colSpan={8} className="py-12 text-center">
                   <div className="flex flex-col items-center gap-2">
                     <MessagesSquare className="size-8 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">
@@ -618,6 +654,12 @@ export default function ConversationsPage() {
                           </span>
                         );
                       })()}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell">
+                      <IntentBadge
+                        value={conv.report_intent}
+                        label={conv.report_intent ? t(`intent_${conv.report_intent}`) : undefined}
+                      />
                     </TableCell>
                     <TableCell className="hidden text-xs text-muted-foreground md:table-cell">
                       {conv.last_message_at ? formatDateTime(conv.last_message_at) : "—"}
