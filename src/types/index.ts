@@ -406,6 +406,8 @@ export interface Conversation {
   contact?: Contact;
   /** Conexão (número) dona da conversa (multi-número, 033). */
   connection_id?: string | null;
+  /** Intenção classificada por IA (report_intent, 053). NULL = ainda não classificada. */
+  report_intent?: 'vendas' | 'suporte' | 'outro' | null;
 }
 
 // Evento interno de transferência de conversa (mig 048). Gravado por trigger
