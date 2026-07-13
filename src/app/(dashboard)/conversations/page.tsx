@@ -569,6 +569,7 @@ export default function ConversationsPage() {
                   indeterminate={!allSelected && someSelected}
                   onCheckedChange={toggleSelectAll}
                   aria-label={t("selectAllAria")}
+                  className="size-5"
                 />
               </TableHead>
               <TableHead className="text-muted-foreground">{t("colName")}</TableHead>
@@ -622,6 +623,7 @@ export default function ConversationsPage() {
                         aria-label={t("selectAria", {
                           name: conv.contact?.name || conv.contact?.phone || "",
                         })}
+                        className="size-5"
                       />
                     </TableCell>
                     <TableCell className="font-medium text-foreground">{displayName}</TableCell>
