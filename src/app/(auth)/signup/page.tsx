@@ -34,9 +34,9 @@ function SignupPageInner() {
   const searchParams = useSearchParams();
   // When the user lands here from `/join/<token>` we carry the
   // invite token in the query so it survives the signup → email
-  // verification → redirect round-trip. `emailRedirectTo` below
-  // points back at /join/<token> so the user lands on the redeem
-  // step after verifying instead of being dropped on /dashboard.
+  // verification → redirect round-trip. `emailRedirectTo` below aponta
+  // pro /auth/callback?next=/join/<token>: o callback troca o code por
+  // sessão e leva o usuário ao /join já autenticado (auto-redeem).
   const inviteToken = searchParams.get("invite");
 
   const [fullName, setFullName] = useState("");
@@ -64,13 +64,13 @@ function SignupPageInner() {
 
     setLoading(true);
 
-    // If we have an invite token, point Supabase's verification
-    // email back at the join page so the user can accept after
-    // verifying. Without a token, Supabase uses its default
-    // redirect (the app root).
-    const emailRedirectTo = inviteToken
-      ? `${window.location.origin}/join/${encodeURIComponent(inviteToken)}`
-      : undefined;
+    // A confirmação SEMPRE volta pelo /auth/callback (troca o code por sessão). Com
+    // convite, segue pro /join/<token> (auto-redeem vincula à empresa); sem convite,
+    // pro /dashboard. Sem isso, a confirmação cai no root sem handler (usuário órfão).
+    const next = inviteToken
+      ? `/join/${encodeURIComponent(inviteToken)}`
+      : "/dashboard";
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
     const { error } = await supabase.auth.signUp({
       email,
@@ -79,7 +79,7 @@ function SignupPageInner() {
         data: {
           full_name: fullName,
         },
-        ...(emailRedirectTo ? { emailRedirectTo } : {}),
+        emailRedirectTo,
       },
     });
 

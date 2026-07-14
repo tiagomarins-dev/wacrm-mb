@@ -1,0 +1,35 @@
+// ============================================================
+// Troca o `code` do e-mail (confirmação/recuperação) por sessão e segue pro `next`.
+// Sem esta rota, o link de confirmação cai em /?code= sem estabelecer sessão → o
+// convite nunca conclui (usuário fica órfão na conta pessoal). runtime nodejs:
+// exchangeCodeForSession usa cookies/PKCE (não roda em Edge).
+// ============================================================
+import { NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+
+export const runtime = 'nodejs'
+
+// Só aceita path relativo interno (bloqueia open-redirect: //evil, https://…).
+// `/reset-password` ainda não existe (404) → desvia pro /login até a página ser criada.
+function safeNext(next: string | null): string {
+  if (!next || !next.startsWith('/') || next.startsWith('//')) return '/dashboard'
+  if (next.startsWith('/reset-password')) return '/login'
+  return next
+}
+
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url)
+  const code = searchParams.get('code')
+  const next = safeNext(searchParams.get('next'))
+
+  if (code) {
+    const supabase = await createClient()
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) return NextResponse.redirect(`${origin}${next}`)
+  }
+  // Falha/sem code → login. Se o destino era /join/<token>, devolve como ?invite=<token>
+  // (a página de login lê `?invite=` e reencaminha pro /join após logar).
+  const m = next.match(/^\/join\/([^/?#]+)/)
+  const loginUrl = m ? `/login?invite=${encodeURIComponent(m[1])}` : '/login'
+  return NextResponse.redirect(`${origin}${loginUrl}`)
+}
