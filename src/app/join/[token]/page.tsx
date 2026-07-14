@@ -16,17 +16,19 @@
 //   │ ok:true              │ signed in     │ "Accept" button → redeem │
 //   └──────────────────────┴───────────────┴─────────────────────────┘
 //
-// We deliberately do NOT redeem automatically on page load — the
-// invitee should confirm what account/role they're accepting.
-// Auto-redeem would also race with the signup flow returning to
-// this page after email verification.
+// Auto-redeem: assim que o convite é válido (peek.ok) E há sessão, vinculamos
+// automaticamente (sem exigir clique) — é o retorno do signup→confirmação. Um ref
+// SÍNCRONO (`redeemedRef`, setado antes do await) garante 1 disparo mesmo com o
+// strict mode do React 19 re-invocando effects; o gate peek.ok exclui token 'used'
+// (idempotente). O botão "Accept" permanece como fallback.
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
+import { shouldAutoRedeem } from '@/lib/auth/should-auto-redeem';
 import {
   AlertTriangle,
   CheckCircle,
@@ -106,6 +108,8 @@ export default function JoinPage() {
   // step. Surface a blocking modal that walks them through it.
   const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  // Guard SÍNCRONO do auto-redeem: garante 1 disparo (strict mode re-invoca effects).
+  const redeemedRef = useRef(false);
 
   // Extracted so the "Try again" button on the server_error card
   // can re-run the same logic without remounting the component.
@@ -196,6 +200,18 @@ export default function JoinPage() {
       setAccepting(false);
     }
   }, [token, t]);
+
+  // Auto-redeem: dispara o vínculo assim que o convite é válido e há sessão (retorno do
+  // signup→confirmação, ou visita já autenticada). Ref síncrono → 1 disparo no strict mode.
+  // Cobre também o "Try again" (loadPeekAndAuth seta o mesmo estado). 409 → modal (no handleAccept).
+  useEffect(() => {
+    if (shouldAutoRedeem(peek, authedUserId, redeemedRef.current)) {
+      redeemedRef.current = true;
+      // Auto-redeem intencional ao detectar convite+sessão (handleAccept faz setState).
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void handleAccept();
+    }
+  }, [peek, authedUserId, handleAccept]);
 
   const handleSignOutAndRetry = useCallback(async () => {
     setSigningOut(true);
