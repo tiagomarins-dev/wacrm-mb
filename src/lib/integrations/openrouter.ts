@@ -4,7 +4,7 @@
 // Email/telefone/nome completo NUNCA entram aqui (anexados depois, no
 // servidor, via contact-block). data_collection:'deny' = no-logging.
 // ============================================================
-import type { IntentLabel } from '@/types'
+import type { IntentLabel, LossReasonLabel, MotivoLabel } from '@/types'
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const DEFAULT_MODEL = 'openai/gpt-4o-mini'
@@ -220,4 +220,121 @@ export async function classifyIntent(args: {
   if (!res.ok) throw new Error(`OpenRouter error ${res.status}`)
   const data = (await res.json()) as { choices?: { message?: { content?: string } }[] }
   return parseIntent(data?.choices?.[0]?.message?.content)
+}
+
+// ── Classificação COMPLETA (F2): intent + motivo + loss_reason + flags, em JSON ──
+const CLASSIFY_FULL_PROMPT =
+  'Analise a conversa de WhatsApp abaixo e responda APENAS um JSON válido, sem texto extra, no formato: ' +
+  '{"intent":"vendas|suporte|outro",' +
+  '"motivo":"duvida_uso|financeiro|erro_bug|reclamacao|outro"|null,' +
+  '"loss_reason":"preco|vai_decidir|concorrente|parou_responder|nao_perdida"|null,' +
+  '"flags":{"sentimento_negativo":boolean,"oportunidade_venda":boolean}}. ' +
+  'Regras: "intent" é a intenção primária (vendas = quer comprar/matricular; suporte = dúvida/problema de aluno). ' +
+  '"motivo" SÓ quando intent=suporte (senão null): duvida_uso (uso da plataforma/curso), financeiro (cobrança/pagamento), ' +
+  'erro_bug (algo não funciona), reclamacao, outro. ' +
+  '"loss_reason" SÓ quando intent=vendas (senão null): preco, vai_decidir (adiou), concorrente, ' +
+  'parou_responder (sumiu), nao_perdida (comprou ou negociação em andamento). ' +
+  '"sentimento_negativo": true se o cliente demonstra insatisfação forte/risco de cancelamento. ' +
+  '"oportunidade_venda": true se, numa conversa de suporte, o cliente pediu/perguntou sobre comprar algo.'
+
+// Resultado da classificação completa. flags SEM aguardando_resposta (o worker
+// calcula determinístico a partir da última mensagem e injeta na gravação).
+export interface ConversationClassification {
+  intent: IntentLabel
+  motivo: MotivoLabel | null
+  loss_reason: LossReasonLabel | null
+  flags: { sentimento_negativo: boolean; oportunidade_venda: boolean }
+}
+
+const MOTIVOS = new Set(['duvida_uso', 'financeiro', 'erro_bug', 'reclamacao', 'outro'])
+const LOSS = new Set(['preco', 'vai_decidir', 'concorrente', 'parou_responder', 'nao_perdida'])
+
+/**
+ * Parse PURO e defensivo do JSON do LLM (espelha format.ts). JSON inválido ou
+ * intent fora do enum → null (degrada, não grava). Campo inválido → null só no
+ * campo (não derruba o resto). Cross-field imposto AQUI (defense in depth):
+ * motivo só com intent=suporte; loss_reason só com intent=vendas. flags: só
+ * booleans coagidos (===true) nas chaves conhecidas — nunca o objeto cru.
+ */
+export function parseClassification(text: string | null | undefined): ConversationClassification | null {
+  if (!text) return null
+  let raw: unknown
+  try {
+    raw = JSON.parse(text)
+  } catch {
+    return null
+  }
+  if (typeof raw !== 'object' || raw === null) return null
+  const o = raw as Record<string, unknown>
+  const intent = parseIntent(typeof o.intent === 'string' ? o.intent : null)
+  if (!intent) return null
+  const motivo =
+    intent === 'suporte' && typeof o.motivo === 'string' && MOTIVOS.has(o.motivo)
+      ? (o.motivo as MotivoLabel)
+      : null
+  const loss =
+    intent === 'vendas' && typeof o.loss_reason === 'string' && LOSS.has(o.loss_reason)
+      ? (o.loss_reason as LossReasonLabel)
+      : null
+  const f = (typeof o.flags === 'object' && o.flags !== null ? o.flags : {}) as Record<string, unknown>
+  return {
+    intent,
+    motivo,
+    loss_reason: loss,
+    flags: {
+      sentimento_negativo: f.sentimento_negativo === true,
+      oportunidade_venda: f.oportunidade_venda === true,
+    },
+  }
+}
+
+/**
+ * Classificação completa da conversa (intent+motivo+loss+flags) em UMA chamada,
+ * com resposta JSON forçada (response_format). Devolve também os tokens
+ * consumidos (p/ intent_cron_runs.tokens). O caller já redigiu PII.
+ */
+export async function classifyConversation(args: {
+  apiKey: string
+  model?: string | null
+  messages: SummaryMessage[]
+}): Promise<{ result: ConversationClassification | null; tokens: number }> {
+  const transcript = serializeMessages(args.messages)
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${args.apiKey}`,
+        'Content-Type': 'application/json',
+        'X-Title': 'wacrm',
+      },
+      body: JSON.stringify({
+        model: args.model || DEFAULT_MODEL,
+        messages: [
+          { role: 'system', content: CLASSIFY_FULL_PROMPT },
+          { role: 'user', content: transcript },
+        ],
+        max_tokens: 200,
+        response_format: { type: 'json_object' },
+        provider: { data_collection: 'deny' },
+      }),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if ((err as Error).name === 'AbortError') throw new Error('OpenRouter timed out')
+    throw new Error('OpenRouter request failed')
+  } finally {
+    clearTimeout(timeout)
+  }
+  if (!res.ok) throw new Error(`OpenRouter error ${res.status}`)
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string } }[]
+    usage?: { total_tokens?: number }
+  }
+  return {
+    result: parseClassification(data?.choices?.[0]?.message?.content),
+    tokens: data?.usage?.total_tokens ?? 0,
+  }
 }

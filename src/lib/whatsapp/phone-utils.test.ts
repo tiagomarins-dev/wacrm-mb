@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  brPhoneNinthDigitVariant,
   isRecipientNotAllowedError,
   isValidE164,
   normalizePhone,
@@ -160,5 +161,25 @@ describe("isRecipientNotAllowedError", () => {
       false,
     );
     expect(isRecipientNotAllowedError("")).toBe(false);
+  });
+});
+
+// Variante do 9º dígito BR (match MB, F2).
+describe("brPhoneNinthDigitVariant", () => {
+  it("celular com 9 → remove o 9", () => {
+    expect(brPhoneNinthDigitVariant("5521987654321")).toBe("552187654321");
+  });
+  it("número de 8 dígitos → insere o 9", () => {
+    expect(brPhoneNinthDigitVariant("552187654321")).toBe("5521987654321");
+  });
+  it("não-BR → null", () => {
+    expect(brPhoneNinthDigitVariant("37063949836")).toBeNull();
+  });
+  it("curto/shape inesperado → null", () => {
+    expect(brPhoneNinthDigitVariant("55219876")).toBeNull();
+    expect(brPhoneNinthDigitVariant("")).toBeNull();
+  });
+  it("9 dígitos que NÃO começam em 9 → null (não é celular padrão)", () => {
+    expect(brPhoneNinthDigitVariant("5521812345678")).toBeNull();
   });
 });

@@ -4,6 +4,8 @@
 // resolve por email primeiro (precedência email → cpf → telefone).
 // ============================================================
 
+import { brPhoneNinthDigitVariant, normalizePhone } from '@/lib/whatsapp/phone-utils'
+
 const URL = 'https://app.millaborges.com/api/aluno.info.php'
 const TIMEOUT_MS = 15_000
 
@@ -88,4 +90,24 @@ export async function fetchStudentInfo(args: {
   // 401/403/405/429/500 → erro (sem vazar a key).
   if (!res.ok) throw new Error(`Millaborges error ${res.status}`)
   return (await res.json()) as StudentInfoResponse
+}
+
+/**
+ * fetchStudentInfo com telefone NORMALIZADO + retry 1× na variante do 9º dígito
+ * quando nao_encontrado (o match da MB quebra entre cadastros com/sem o 9). Máx
+ * 2 chamadas. Usado pelo SALES-CRON (batch) — a rota interativa usa o client cru
+ * (não pode herdar o pior caso de 2× timeout).
+ */
+export async function fetchStudentInfoWithRetry(args: {
+  apiKey: string
+  email?: string | null
+  phone?: string | null
+}): Promise<StudentInfoResponse> {
+  const phone = args.phone ? normalizePhone(args.phone) : null
+  const first = await fetchStudentInfo({ ...args, phone })
+  if (first.status !== 'nao_encontrado' || !phone) return first
+  const variant = brPhoneNinthDigitVariant(phone)
+  if (!variant) return first
+  const second = await fetchStudentInfo({ ...args, phone: variant })
+  return second.status === 'success' ? second : first
 }

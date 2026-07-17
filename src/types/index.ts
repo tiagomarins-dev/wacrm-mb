@@ -408,6 +408,14 @@ export interface Conversation {
   connection_id?: string | null;
   /** Intenção classificada por IA (report_intent, 053). NULL = ainda não classificada. */
   report_intent?: 'vendas' | 'suporte' | 'outro' | null;
+  /** Motivo de contato (suporte) — classificação completa (068). */
+  report_motivo?: MotivoLabel | null;
+  /** Motivo de não-compra (vendas) — classificação completa (068). */
+  report_loss_reason?: LossReasonLabel | null;
+  /** Flags qualitativas p/ o Radar (068). */
+  report_flags?: ReportFlags | null;
+  /** Versão da taxonomia aplicada (068). NULL = só intent v0. */
+  report_taxonomy_version?: number | null;
 }
 
 // Evento interno de transferência de conversa (mig 048). Gravado por trigger
@@ -931,6 +939,16 @@ export interface MbPaidCourse {
 // ── Inteligência de relatórios (Fase 3) ─────────────────────
 export type SaleType = 'ativa' | 'passiva';
 export type IntentLabel = 'vendas' | 'suporte' | 'outro';
+/** Motivo de contato (conversas de suporte) — taxonomia v1 (068). */
+export type MotivoLabel = 'duvida_uso' | 'financeiro' | 'erro_bug' | 'reclamacao' | 'outro';
+/** Motivo de não-compra (conversas de vendas) — taxonomia v1 (068). */
+export type LossReasonLabel = 'preco' | 'vai_decidir' | 'concorrente' | 'parou_responder' | 'nao_perdida';
+/** Flags qualitativas da conversa (base do Radar, 068). Sempre booleans. */
+export interface ReportFlags {
+  sentimento_negativo: boolean;
+  oportunidade_venda: boolean;
+  aguardando_resposta: boolean;
+}
 
 // Retorno da RPC report_coverage (cobertura de match MB + classificação).
 export interface ReportCoverage {

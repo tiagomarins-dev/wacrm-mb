@@ -7,7 +7,7 @@
 // ============================================================
 import { supabaseAdmin } from '@/lib/flows/admin-client'
 import { decrypt } from '@/lib/whatsapp/encryption'
-import { fetchStudentInfo, type StudentInfoResponse } from '@/lib/integrations/student-info'
+import { fetchStudentInfoWithRetry, type StudentInfoResponse } from '@/lib/integrations/student-info'
 import { pickAttributableSales, detectReversions } from './sales-attribution'
 import { classifySaleType } from './sale-type'
 import { AI_AGENT_USER_ID } from '@/lib/ai-agent/constants'
@@ -93,17 +93,32 @@ async function processAccount(
   const convIds = convs.map((c) => c.id)
   const contactIds = [...new Set(convs.map((c) => c.contact_id))]
 
-  // contatos (email/phone), 1ª msg do cliente, eventos e vendas existentes — em lote
-  const [{ data: contacts }, { data: msgsRows }, { data: events }, { data: existing }] = await Promise.all([
-    db.from('contacts').select('id, email, phone').in('id', contactIds),
+  // contatos (email/phone), 1ª msg do cliente, eventos e vendas existentes — em CHUNKS.
+  // ⚠️ .in() com centenas de UUIDs estoura o limite de URL do PostgREST (HTTP 400
+  // silencioso → data null → mapas vazios → NADA atribuído). Além disso, o servidor
+  // capa 1000 linhas por resposta — messages usa chunk pequeno p/ não truncar a 1ª
+  // msg de nenhuma conversa.
+  const inChunks = async <T>(ids: string[], size: number, run: (chunk: string[]) => Promise<T[] | null>): Promise<T[]> => {
+    const out: T[] = []
+    for (let i = 0; i < ids.length; i += size) {
+      out.push(...((await run(ids.slice(i, i + size))) ?? []))
+    }
+    return out
+  }
+  const [contacts, msgsRows, events, existing] = await Promise.all([
+    inChunks(contactIds, 150, async (chunk) =>
+      (await db.from('contacts').select('id, email, phone').in('id', chunk)).data as never[] | null),
     // TODAS as msgs (qualquer sender), ordem cronológica → deriva 1º contato do
     // cliente (âncora da janela) E o sender da 1ª msg da conversa (ativa/passiva).
-    db.from('messages').select('conversation_id, sender_type, created_at')
-      .in('conversation_id', convIds).order('created_at', { ascending: true }),
-    db.from('conversation_events').select('conversation_id, to_agent_id, created_at')
-      .in('conversation_id', convIds).order('created_at', { ascending: false }),
-    db.from('attributed_sales').select('conversation_id, id_curso, data_matricula')
-      .eq('account_id', acc).in('conversation_id', convIds).eq('status', 'confirmed'),
+    inChunks(convIds, 20, async (chunk) =>
+      (await db.from('messages').select('conversation_id, sender_type, created_at')
+        .in('conversation_id', chunk).order('created_at', { ascending: true })).data as never[] | null),
+    inChunks(convIds, 100, async (chunk) =>
+      (await db.from('conversation_events').select('conversation_id, to_agent_id, created_at')
+        .in('conversation_id', chunk).order('created_at', { ascending: false })).data as never[] | null),
+    inChunks(convIds, 150, async (chunk) =>
+      (await db.from('attributed_sales').select('conversation_id, id_curso, data_matricula')
+        .eq('account_id', acc).in('conversation_id', chunk).eq('status', 'confirmed')).data as never[] | null),
   ])
 
   const contactById = new Map((contacts as { id: string; email: string | null; phone: string | null }[] | null ?? []).map((c) => [c.id, c]))
@@ -142,7 +157,7 @@ async function processAccount(
 
       let payload: StudentInfoResponse
       try {
-        payload = await fetchStudentInfo({ apiKey: key as string, email: contact.email, phone: contact.phone })
+        payload = await fetchStudentInfoWithRetry({ apiKey: key as string, email: contact.email, phone: contact.phone })
       } catch {
         return // falha de rede/timeout — sem retry (não amplificar); próximo run tenta de novo
       }

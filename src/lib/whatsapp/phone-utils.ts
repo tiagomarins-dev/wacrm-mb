@@ -33,6 +33,21 @@ export function phonesMatch(phone1: string, phone2: string): boolean {
 }
 
 /**
+ * Variante do 9º dígito p/ celular BR (55 + DDD + 8/9 dígitos): cadastros antigos
+ * na base MB podem não ter o 9 (ou o inverso), quebrando o match por telefone.
+ * 55+DDD+9 dígitos começando em 9 → remove o 9; 55+DDD+8 dígitos → insere o 9.
+ * Não-BR ou shape inesperado → null (sem variante).
+ */
+export function brPhoneNinthDigitVariant(digits: string): string | null {
+  if (!/^55\d{10,11}$/.test(digits)) return null
+  const ddd = digits.slice(2, 4)
+  const rest = digits.slice(4)
+  if (rest.length === 9 && rest.startsWith('9')) return `55${ddd}${rest.slice(1)}`
+  if (rest.length === 8) return `55${ddd}9${rest}`
+  return null
+}
+
+/**
  * Validate phone number is E.164-like format (7-15 digits starting with non-zero).
  * Accepts with or without + prefix.
  */
