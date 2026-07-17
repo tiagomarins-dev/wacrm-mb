@@ -54,6 +54,11 @@ describe("conversationEventLabel", () => {
       .toBe("evtAssigned:to=Maria");
   });
 
+  it("status_changed → label vazio (não renderiza pill)", () => {
+    expect(conversationEventLabel(ev({ type: "status_changed", from_agent_id: null, to_agent_id: null, actor_user_id: null }), PROFILES, AI, t))
+      .toBe("");
+  });
+
   it("to órfão → fallback unknownAgent (não quebra)", () => {
     expect(conversationEventLabel(ev({ from_agent_id: null, to_agent_id: "xyz", actor_user_id: "u1" }), PROFILES, AI, t))
       .toBe("evtTransferred:actor=someone,to=unknownAgent");

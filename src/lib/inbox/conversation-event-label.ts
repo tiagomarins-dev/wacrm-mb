@@ -32,6 +32,8 @@ export function conversationEventLabel(
   const to = resolveAssignee(ev.to_agent_id, profiles, aiProfiles);
   const from = resolveAssignee(ev.from_agent_id, profiles, aiProfiles);
 
+  // Defense in depth: tipos que não são de atribuição não têm pill (filtrados no mergeThread)
+  if (ev.type === "status_changed") return "";
   // Desatribuição (cron por inatividade ou manual): sempre "por inatividade".
   if (ev.type === "unassigned") return t("evtUnassignedIdle");
   // Encaminhamento da IA → humano (from é bot/perfil de IA; actor = sistema).
