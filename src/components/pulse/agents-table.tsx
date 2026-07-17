@@ -26,9 +26,13 @@ interface AgentsTableProps {
   members: ReportMember[];
   /** Nome do perfil de IA da conta (ex.: "Ruth"); fallback = rótulo genérico. */
   aiName?: string | null;
+  /** Atendente do filtro global (null = todos). RPCs 050/052 aceitam p_agent_id. */
+  selectedAgent?: string | null;
+  /** True quando o filtro global aponta pro agente de IA (id de perfil/sentinela). */
+  isAiSelected?: boolean;
 }
 
-export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName }: AgentsTableProps) {
+export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName, selectedAgent = null, isAiSelected = false }: AgentsTableProps) {
   const { t } = useTranslation(["pulse"]);
   const supabase = createClient();
   const [rows, setRows] = useState<Row[]>([]);
@@ -46,7 +50,8 @@ export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName
     (async () => {
       setLoading(true);
       try {
-        const params = { p_window_days: windowDays, p_connection_id: connectionId, p_agent_id: null };
+        // Obedece o filtro global: humano selecionado → só ele; IA → 050/052 voltam vazias (id não-humano)
+        const params = { p_window_days: windowDays, p_connection_id: connectionId, p_agent_id: selectedAgent };
         const [rt, vol, sales, ai] = await Promise.all([
           supabase.rpc("agent_response_time", params),
           supabase.rpc("agent_volume", params),
@@ -91,7 +96,7 @@ export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName
       }
     })();
     return () => { cancelled = true; };
-  }, [supabase, windowDays, connectionId, endsNow, nameFor]);
+  }, [supabase, windowDays, connectionId, endsNow, nameFor, selectedAgent]);
 
   const fmtMin = (n: number | null | undefined) => (n == null ? "—" : `${n.toFixed(1)} ${t("minutesShort")}`);
 
@@ -124,8 +129,8 @@ export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Linha do agente de IA no topo (transferências = handoffs IA→humano) */}
-              {aiRow && aiRow.msgs_enviadas > 0 && (
+              {/* Linha do agente de IA no topo (some quando um HUMANO específico está filtrado) */}
+              {aiRow && aiRow.msgs_enviadas > 0 && (!selectedAgent || isAiSelected) && (
                 <TableRow className="border-border bg-muted/30">
                   <TableCell className="font-medium text-foreground">
                     <span className="flex items-center gap-1.5">
@@ -142,7 +147,7 @@ export function AgentsTable({ windowDays, endsNow, connectionId, members, aiName
                   <TableCell className="font-medium text-foreground">{aiRow.vendas}</TableCell>
                 </TableRow>
               )}
-              {rows.length === 0 && !(aiRow && aiRow.msgs_enviadas > 0) ? (
+              {rows.length === 0 && !(aiRow && aiRow.msgs_enviadas > 0 && (!selectedAgent || isAiSelected)) ? (
                 <TableRow>
                   <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     {t("empty")}

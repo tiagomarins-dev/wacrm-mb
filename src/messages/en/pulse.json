@@ -57,5 +57,6 @@
   "empty": "No data in this period.",
   "loadFailed": "Failed to load data.",
   "noBusinessHours": "No business hours set for this connection — times count 24/7. Configure in Settings → Business hours.",
-  "aiAgent": "AI agent"
+  "aiAgent": "AI agent",
+  "radarHint": "Current state — independent of the selected period"
 }

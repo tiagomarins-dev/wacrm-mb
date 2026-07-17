@@ -57,5 +57,6 @@
   "empty": "Sem dados no período.",
   "loadFailed": "Falha ao carregar os dados.",
   "noBusinessHours": "Sem horário de atendimento configurado nesta conexão — os tempos contam 24/7. Configure em Configurações → Horário de atendimento.",
-  "aiAgent": "Agente de IA"
+  "aiAgent": "Agente de IA",
+  "radarHint": "Situação atual — independe do período selecionado"
 }

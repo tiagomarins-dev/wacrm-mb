@@ -134,6 +134,11 @@ export default function PulsePage() {
 
   const funil = breakdowns?.funil;
 
+  // Filtro global aponta pro agente de IA? (id de perfil ou sentinela legado)
+  const isAiSelected =
+    !!selectedAgent &&
+    (selectedAgent === "00000000-0000-0000-0000-0000000000a1" || aiProfiles.some((p) => p.id === selectedAgent));
+
   if (!profileLoading && !isOwner) return null;
 
   return (
@@ -254,6 +259,8 @@ export default function PulsePage() {
           connectionId={activeConnectionId}
           members={members}
           aiName={aiProfiles[0]?.nome ?? null}
+          selectedAgent={selectedAgent}
+          isAiSelected={isAiSelected}
         />
       )}
     </div>

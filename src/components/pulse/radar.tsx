@@ -29,7 +29,11 @@ export function Radar({ radar, loading }: { radar: PulseRadar | null; loading: b
   const { t } = useTranslation(["pulse"]);
   return (
     <section className="rounded-xl border border-border bg-card p-5">
-      <h2 className="mb-3 text-sm font-semibold text-foreground">{t("radarTitle")}</h2>
+      <div className="mb-3">
+        <h2 className="text-sm font-semibold text-foreground">{t("radarTitle")}</h2>
+        {/* Radar é snapshot de agora (RPC sem janela) — sinaliza que o período não se aplica */}
+        <p className="text-xs text-muted-foreground">{t("radarHint")}</p>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {CARDS.map(({ key, icon: Icon, tone }) => {
           const card: PulseRadarCard | undefined = radar?.[key];
