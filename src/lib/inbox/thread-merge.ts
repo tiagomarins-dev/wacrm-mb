@@ -20,7 +20,10 @@ export function mergeThread(
 ): ThreadItem[] {
   const items: ThreadItem[] = [
     ...messages.map((m) => ({ kind: "message" as const, id: m.id, created_at: m.created_at, msg: m })),
-    ...events.map((e) => ({ kind: "event" as const, id: e.id, created_at: e.created_at, ev: e })),
+    // Eventos de mudança de status (069) são só telemetria — não viram item de thread
+    ...events
+      .filter((e) => e.type !== "status_changed")
+      .map((e) => ({ kind: "event" as const, id: e.id, created_at: e.created_at, ev: e })),
     ...notes.map((n) => ({ kind: "note" as const, id: n.id, created_at: n.created_at, note: n })),
   ];
   return items.sort((a, b) => {

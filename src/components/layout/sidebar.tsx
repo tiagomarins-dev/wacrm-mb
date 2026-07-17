@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
 import {
+  Activity,
   BarChart3,
   Crown,
   GitBranch,
@@ -27,7 +28,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import type { AccountRole } from "@/lib/auth/roles";
+import { hasMinRole, type AccountRole } from "@/lib/auth/roles";
 
 // Per-role chip metadata used in the sidebar's account strip + the
 // Members tab roster. Keeping this near both consumers in a single
@@ -97,6 +98,11 @@ interface NavItem {
    * Purely informational — doesn't affect routing or access.
    */
   beta?: boolean;
+  /**
+   * Papel mínimo pra VER o item (UX apenas — a segurança real é
+   * server-side, nas RPCs/rotas). Omitido = visível pra todos.
+   */
+  minRole?: AccountRole;
 }
 
 // Dashboard fica solto no topo; os demais entram em 2 grupos rotulados
@@ -116,6 +122,7 @@ const navCrescimento: NavItem[] = [
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/lead-score", labelKey: "leadScore", icon: TrendingUp },
   { href: "/reports", labelKey: "reports", icon: BarChart3 },
+  { href: "/pulse", labelKey: "pulse", icon: Activity, minRole: "owner" },
 ];
 
 const bottomNavItems: NavItem[] = [
@@ -135,6 +142,12 @@ export function Sidebar({ open = false, onClose, collapsed = false }: SidebarPro
   const { t } = useTranslation(["nav", "common"]);
   const { profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
+
+  // Gate por papel: item some p/ quem não tem o papel mínimo (segurança
+  // real é server-side). Enquanto profileLoading, accountRole é null →
+  // item gated fica oculto (sem flash de aparecer-e-sumir).
+  const visibleItems = (items: NavItem[]) =>
+    items.filter((i) => !i.minRole || (accountRole && hasMinRole(accountRole, i.minRole)));
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it
@@ -321,13 +334,13 @@ export function Sidebar({ open = false, onClose, collapsed = false }: SidebarPro
         {/* Main navigation. TooltipProvider habilita os tooltips do rail. */}
         <TooltipProvider delay={300}>
           <nav className="flex-1 overflow-y-auto px-3 py-4">
-            <ul className="flex flex-col gap-1">{navTop.map(renderRow)}</ul>
-            {renderGroup("sectionAtendimento", navAtendimento)}
-            {renderGroup("sectionCrescimento", navCrescimento)}
+            <ul className="flex flex-col gap-1">{visibleItems(navTop).map(renderRow)}</ul>
+            {renderGroup("sectionAtendimento", visibleItems(navAtendimento))}
+            {renderGroup("sectionCrescimento", visibleItems(navCrescimento))}
 
             <div className="my-4 border-t border-border" />
 
-            <ul className="flex flex-col gap-1">{bottomNavItems.map(renderRow)}</ul>
+            <ul className="flex flex-col gap-1">{visibleItems(bottomNavItems).map(renderRow)}</ul>
           </nav>
         </TooltipProvider>
 

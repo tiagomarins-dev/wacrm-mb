@@ -418,9 +418,10 @@ export interface Conversation {
   report_taxonomy_version?: number | null;
 }
 
-// Evento interno de transferência de conversa (mig 048). Gravado por trigger
-// quando assigned_agent_id muda; aparece na thread, nunca enviado ao cliente.
-export type ConversationEventType = 'assigned' | 'transferred' | 'unassigned';
+// Evento interno de conversa (migs 048/069). Gravado por trigger quando
+// assigned_agent_id ou status mudam; atribuições aparecem na thread,
+// status_changed é só telemetria (relatórios). Nunca enviado ao cliente.
+export type ConversationEventType = 'assigned' | 'transferred' | 'unassigned' | 'status_changed';
 export interface ConversationEvent {
   id: string;
   account_id: string;
@@ -428,6 +429,9 @@ export interface ConversationEvent {
   type: ConversationEventType;
   from_agent_id?: string | null;
   to_agent_id?: string | null;
+  // Mudança de status (type='status_changed', 069) — null nos demais tipos
+  from_status?: string | null;
+  to_status?: string | null;
   actor_user_id?: string | null;
   created_at: string;
 }
@@ -969,6 +973,54 @@ export interface AttributedSaleRow {
   status: string;
   confidence: string;
   sale_type: SaleType | null;
+}
+
+// Retorno da RPC pulse_tiles (F1). frt em minutos; resolucao em horas; sla em %.
+export interface PulseTiles {
+  conversas: number;
+  frt_median: number | null;
+  sla_pct: number | null;
+  resolucao_median: number | null;
+  sem_resposta: number;
+}
+
+// Linha da RPC pulse_timeline (gap-filled por dia).
+export interface PulseTimelinePoint {
+  dia: string; // 'YYYY-MM-DD'
+  vendas: number;
+  suporte: number;
+  outro: number;
+}
+
+// Retorno jsonb da RPC pulse_breakdowns.
+export interface PulseBreakdowns {
+  conexoes: { name: string; total: number }[];
+  motivos: { key: string; total: number }[];
+  loss: { key: string; total: number }[];
+  funil: { leads: number; respondidos: number; fechados: number };
+}
+
+// Retorno jsonb da RPC pulse_radar (snapshot de agora).
+export interface PulseRadarCard {
+  total: number;
+  sample: { conversation_id: string; contact_name: string | null }[];
+}
+export interface PulseRadar {
+  churn: PulseRadarCard;
+  oportunidades: PulseRadarCard;
+  aguardando: PulseRadarCard;
+  esfriando: PulseRadarCard;
+}
+
+// Retorno da RPC pulse_ai_row (070/071): desempenho do agente de IA
+// na janela (msgs 'bot'; FRT/ART clock time; vendas sem humano).
+export interface PulseAiRow {
+  conversas_atendidas: number;
+  msgs_enviadas: number;
+  frt_median: number | null;
+  art_median: number | null;
+  handoffs: number;
+  vendas: number;
 }
 
 // Corpo do POST /api/reports/override.

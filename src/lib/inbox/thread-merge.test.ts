@@ -33,6 +33,14 @@ describe("mergeThread", () => {
     expect(mergeThread([msg("m1", "2026-06-27T00:00:00Z")], []).map((i) => i.kind)).toEqual(["message"]);
   });
 
+  it("evento status_changed não vira item de thread", () => {
+    const r = mergeThread(
+      [msg("m1", "2026-06-27T00:00:00Z")],
+      [{ ...evt("e1", "2026-06-27T00:00:01Z"), type: "status_changed" as const, from_status: "open", to_status: "closed" }],
+    );
+    expect(r.map((i) => i.id)).toEqual(["m1"]);
+  });
+
   it("nota interna intercalada por tempo entra na posição certa", () => {
     const r = mergeThread(
       [msg("m1", "2026-06-27T00:00:00Z"), msg("m2", "2026-06-27T00:00:02Z")],
