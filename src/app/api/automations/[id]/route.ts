@@ -9,7 +9,13 @@ import {
 import {
   validateStepsForActivation,
   validateTriggerForActivation,
+  type StepLike,
 } from '@/lib/automations/validate'
+import {
+  generateWebhookToken,
+  validateWebhookMetaTemplateFirst,
+} from '@/lib/automations/webhook-token'
+import { getActiveConnection } from '@/lib/connections/active'
 
 async function requireUser() {
   const supabase = await createClient()
@@ -59,7 +65,9 @@ export async function PATCH(
   // to compute the post-patch "effective" state for validation.
   const { data: existing } = await admin
     .from('automations')
-    .select('id, user_id, is_active, trigger_type, trigger_config')
+    .select(
+      'id, user_id, account_id, connection_id, is_active, trigger_type, trigger_config, webhook_token',
+    )
     .eq('id', id)
     .maybeSingle()
   if (!existing || existing.user_id !== user.id) {
@@ -75,6 +83,15 @@ export async function PATCH(
     'is_active',
   ] as const) {
     if (k in body) update[k] = body[k]
+  }
+
+  const effectiveTrigger = (update.trigger_type ?? existing.trigger_type) as string
+
+  // Trigger webhook (074): gera token quando não existe — cobre tanto a
+  // troca de trigger quanto o clone do duplicate (que copia trigger_type
+  // mas nasce sem token).
+  if (effectiveTrigger === 'webhook_received' && !existing.webhook_token) {
+    update.webhook_token = generateWebhookToken()
   }
 
   // If this PATCH leaves the automation active (either explicitly
@@ -102,6 +119,50 @@ export async function PATCH(
         { status: 400 },
       )
     }
+
+    if (effectiveTrigger === 'webhook_received') {
+      // Conexão: automação antiga/duplicada pode ter connection_id null.
+      // Backfill pela conexão ativa (espelha o POST); conta sem conexão
+      // não pode ativar webhook.
+      let connId = existing.connection_id as string | null
+      if (!connId) {
+        const supabase = await createClient()
+        const active = await getActiveConnection(supabase, existing.account_id).catch(
+          () => null,
+        )
+        if (!active) {
+          return NextResponse.json(
+            {
+              error: 'Cannot keep automation active with invalid configuration',
+              issues: [
+                {
+                  path: 'trigger',
+                  message:
+                    'Automação webhook precisa de uma conexão WhatsApp configurada.',
+                },
+              ],
+            },
+            { status: 400 },
+          )
+        }
+        connId = active.id
+        update.connection_id = connId
+      }
+      const metaIssues = await validateWebhookMetaTemplateFirst(
+        admin,
+        connId,
+        mergedSteps as unknown as StepLike[],
+      )
+      if (metaIssues.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Cannot keep automation active with invalid configuration',
+            issues: metaIssues,
+          },
+          { status: 400 },
+        )
+      }
+    }
   }
 
   if (Object.keys(update).length > 0) {
@@ -117,7 +178,13 @@ export async function PATCH(
     if (err) return NextResponse.json({ error: err }, { status: 500 })
   }
 
-  return NextResponse.json({ ok: true })
+  // Devolve o token (gerado agora ou já existente) pro builder atualizar
+  // o card do webhook sem precisar de re-fetch.
+  return NextResponse.json({
+    ok: true,
+    webhook_token:
+      (update.webhook_token as string | undefined) ?? existing.webhook_token ?? null,
+  })
 }
 
 export async function DELETE(

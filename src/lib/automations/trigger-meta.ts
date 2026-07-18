@@ -45,6 +45,11 @@ export const TRIGGER_META: Record<AutomationTriggerType, TriggerMeta> = {
     labelKey: 'triggerTimeBased',
     pillClass: 'border-slate-500/30 bg-slate-500/10 text-muted-foreground',
   },
+  webhook_received: {
+    label: 'Webhook (HTTP)',
+    labelKey: 'triggerWebhook',
+    pillClass: 'border-rose-500/30 bg-rose-500/10 text-rose-300',
+  },
 }
 
 export function triggerMeta(t: AutomationTriggerType | string): TriggerMeta {

@@ -20,10 +20,34 @@ export interface ValidationIssue {
   message: string
 }
 
-interface StepLike {
+export interface StepLike {
   step_type: string
   step_config: Record<string, unknown>
   branches?: { yes?: StepLike[]; no?: StepLike[] }
+}
+
+// Primeiro step de ENVIO na ordem do fluxo — base da regra template-first
+// do trigger webhook em conexão Meta. Em condition, avalia as duas
+// branches de forma conservadora: se QUALQUER caminho encontra
+// send_message antes de send_template, reporta send_message.
+export function firstSendStepType(
+  steps: StepLike[],
+): 'send_message' | 'send_template' | null {
+  for (const s of steps ?? []) {
+    if (s.step_type === 'send_message' || s.step_type === 'send_template') {
+      return s.step_type
+    }
+    if (s.step_type === 'condition' && s.branches) {
+      const found = [s.branches.yes, s.branches.no]
+        .filter((b): b is StepLike[] => Array.isArray(b))
+        .map((b) => firstSendStepType(b))
+        .filter((r): r is 'send_message' | 'send_template' => r !== null)
+      if (found.includes('send_message')) return 'send_message'
+      if (found.length > 0) return 'send_template'
+      // branches sem envio: segue para os steps após a condition
+    }
+  }
+  return null
 }
 
 export function validateStepsForActivation(steps: StepLike[]): ValidationIssue[] {
@@ -171,6 +195,10 @@ export function validateTriggerForActivation(
     if (!nonEmpty(cfg.tag_id)) {
       issues.push({ path: 'trigger.tag_id', message: 'tag is required' })
     }
+  } else if (triggerType === 'webhook_received') {
+    // Config vazio é válido — o token vive na coluna automations.webhook_token
+    // (mig 074), gerado no servidor. A regra template-first (Meta) precisa de
+    // DB e roda nas rotas de save (validateWebhookMetaTemplateFirst).
   }
 
   return issues

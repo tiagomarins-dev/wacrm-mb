@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
   Check,
+  Download,
   Loader2,
   X,
   ChevronDown,
@@ -18,7 +19,7 @@ import type {
   AutomationLog,
   AutomationLogStepResult,
 } from "@/types"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { formatRelative } from "@/lib/automations/trigger-meta"
 
@@ -94,10 +95,22 @@ export default function AutomationLogsPage({
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <div>
+        <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-foreground">{automation.name}</h1>
           <p className="mt-0.5 text-sm text-muted-foreground">{t("logsTitle")}</p>
         </div>
+        {logs.length > 0 && (
+          // Download direto da rota de export (mesma sessão/RLS da página).
+          // <a> com classes do Button — o Button (base-ui) não aceita asChild.
+          <a
+            href={`/api/automations/${id}/logs/export`}
+            download
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+          >
+            <Download className="h-3.5 w-3.5" />
+            {t("exportCsv")}
+          </a>
+        )}
       </div>
 
       {logs.length === 0 ? (

@@ -120,6 +120,7 @@ vi.mock("@/lib/ai-agent/dispatch", () => ({
 }));
 
 import { runAutomationsForTrigger } from "./engine";
+import { engineSendTemplate } from "./meta-send";
 import { runAiAgentForConversation } from "@/lib/ai-agent/engine";
 import { resolveAssignedProfile } from "@/lib/ai-agent/dispatch";
 
@@ -410,5 +411,47 @@ describe("ai_reply step", () => {
     });
 
     expect(vi.mocked(runAiAgentForConversation)).not.toHaveBeenCalled();
+  });
+});
+
+// Fix da feature webhook: variáveis do send_template passam por
+// interpolate() antes do envio (antes saíam com o placeholder literal).
+describe("send_template — interpolação de variáveis", () => {
+  it("interpola {{vars.x}} e preserva a ordem numérica dos params", async () => {
+    vi.mocked(engineSendTemplate).mockClear();
+    h.state.owned = { id: "c1" };
+    h.state.automations = [automationWithUpdateStep()];
+    h.state.steps = [
+      {
+        id: "s1",
+        automation_id: "a1",
+        step_type: "send_template",
+        position: 0,
+        parent_step_id: null,
+        step_config: {
+          template_name: "boas_vindas",
+          // Chaves fora de ordem + "10" provam o sort numérico (1,2,10).
+          variables: { "10": "fixo", "2": "{{vars.curso}}", "1": "{{vars.nome}}" },
+        },
+      },
+    ];
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: {
+        conversation_id: "conv1",
+        vars: { nome: "Maria", curso: "Medicina UERJ" },
+      },
+    });
+
+    expect(vi.mocked(engineSendTemplate)).toHaveBeenCalledTimes(1);
+    const call = vi.mocked(engineSendTemplate).mock.calls[0][0] as {
+      params: string[];
+      templateName: string;
+    };
+    expect(call.templateName).toBe("boas_vindas");
+    expect(call.params).toEqual(["Maria", "Medicina UERJ", "fixo"]);
   });
 });

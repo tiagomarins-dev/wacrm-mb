@@ -64,29 +64,7 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
   try {
     const db = supabaseAdmin()
 
-    // Tenant isolation. `contactId` can be caller-supplied (the manual
-    // POST /api/automations/engine entrypoint reads it straight from the
-    // request body), and every step below runs through the service-role
-    // client, which bypasses RLS. So before any step can touch the
-    // contact, verify it actually belongs to this account. A foreign or
-    // forged id is refused silently — callers are fire-and-forget, and a
-    // distinct error would leak whether a given contact UUID exists.
-    if (input.contactId) {
-      const { data: owned, error: ownErr } = await db
-        .from('contacts')
-        .select('id')
-        .eq('id', input.contactId)
-        .eq('account_id', input.accountId)
-        .maybeSingle()
-      if (ownErr) {
-        console.error('[automations] contact ownership check failed:', ownErr)
-        return
-      }
-      if (!owned) {
-        console.warn('[automations] contact not in account, refusing dispatch', input.contactId)
-        return
-      }
-    }
+    if (!(await contactBelongsToAccount(db, input))) return
 
     // Filtro por conexão (033): um inbound na conexão A não deve disparar
     // automações da conexão B. Aplicado só quando o caller informa a conexão.
@@ -116,6 +94,55 @@ export async function runAutomationsForTrigger(input: DispatchInput): Promise<vo
     }
   } catch (err) {
     console.error('[automations] dispatch failed:', err)
+  }
+}
+
+// Guard de tenancy: o contactId pode vir de caller externo e o client
+// service-role bypassa RLS — verifica que o contato pertence à conta
+// antes de qualquer step. Recusa silenciosa (fire-and-forget): um id
+// forjado não pode virar oráculo de existência de UUID.
+async function contactBelongsToAccount(
+  db: ReturnType<typeof supabaseAdmin>,
+  input: DispatchInput,
+): Promise<boolean> {
+  if (!input.contactId) return true
+  const { data: owned, error: ownErr } = await db
+    .from('contacts')
+    .select('id')
+    .eq('id', input.contactId)
+    .eq('account_id', input.accountId)
+    .maybeSingle()
+  if (ownErr) {
+    console.error('[automations] contact ownership check failed:', ownErr)
+    return false
+  }
+  if (!owned) {
+    console.warn('[automations] contact not in account, refusing dispatch', input.contactId)
+    return false
+  }
+  return true
+}
+
+/**
+ * Executa UMA automação específica (resolvida por webhook_token na rota
+ * pública POST /api/automations/webhook/[token]). Mesmo contrato de
+ * runAutomationsForTrigger: nunca lança; falhas viram automation_logs
+ * status='failed' ou console.error.
+ */
+export async function runSingleAutomation(
+  automation: Automation,
+  input: DispatchInput,
+): Promise<void> {
+  try {
+    const db = supabaseAdmin()
+    if (!(await contactBelongsToAccount(db, input))) return
+    try {
+      await executeAutomation(automation, input)
+    } catch (err) {
+      console.error('[automations] execute failed:', automation.id, err)
+    }
+  } catch (err) {
+    console.error('[automations] single dispatch failed:', err)
   }
 }
 
@@ -394,7 +421,10 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
               if (bNum) return 1
               return a.localeCompare(b)
             })
-            .map((k) => String(cfg.variables![k]))
+            // Interpola {{vars.x}}/{{message.text}} no valor de cada
+            // variável antes de enviar — sem isso o template sai com o
+            // placeholder literal (ex: "{{vars.nome}}").
+            .map((k) => interpolate(String(cfg.variables![k]), args))
         : []
       const { whatsapp_message_id } = await engineSendTemplate({
         accountId: args.automation.account_id,

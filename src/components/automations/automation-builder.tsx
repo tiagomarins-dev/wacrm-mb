@@ -34,12 +34,22 @@ import {
   ArrowDown,
   ArrowUp,
   Bot,
+  Copy,
+  RefreshCw,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +89,8 @@ export interface BuilderInitial {
   trigger_config: Record<string, unknown>
   is_active: boolean
   steps: BuilderStep[]
+  /** Token do trigger webhook (gerado no servidor ao salvar; mig 074). */
+  webhook_token?: string | null
 }
 
 // ------------------------------------------------------------
@@ -183,6 +195,13 @@ const TRIGGER_OPTIONS: {
     labelEn: "Time-Based",
     hintKey: "triggerTimeBasedHint",
     hintEn: "On a recurring schedule",
+  },
+  {
+    value: "webhook_received",
+    labelKey: "triggerWebhook",
+    labelEn: "Webhook (HTTP)",
+    hintKey: "triggerWebhookHint",
+    hintEn: "Fire when an external system POSTs to this automation's unique URL",
   },
 ]
 
@@ -481,14 +500,28 @@ function AgentSelect({
 function SendTemplateFields({
   templateName,
   language,
+  variables,
   onChange,
 }: {
   templateName: string
   language: string
-  onChange: (patch: { template_name: string; language: string }) => void
+  variables: Record<string, string>
+  onChange: (patch: {
+    template_name: string
+    language: string
+    variables?: Record<string, string>
+  }) => void
 }) {
   const { t } = useTranslation(["automationBuilder", "common"])
   const { templates } = useResources()
+
+  // Grava uma variável posicional preservando nome/idioma atuais.
+  const setVariable = (key: string, value: string) =>
+    onChange({
+      template_name: templateName,
+      language,
+      variables: { ...variables, [key]: value },
+    })
 
   if (templates.length === 0) {
     return (
@@ -497,7 +530,7 @@ function SendTemplateFields({
           <Input
             value={templateName}
             onChange={(e) =>
-              onChange({ template_name: e.target.value, language })
+              onChange({ template_name: e.target.value, language, variables })
             }
             className="bg-muted text-foreground"
           />
@@ -506,11 +539,25 @@ function SendTemplateFields({
           <Input
             value={language}
             onChange={(e) =>
-              onChange({ template_name: templateName, language: e.target.value })
+              onChange({
+                template_name: templateName,
+                language: e.target.value,
+                variables,
+              })
             }
             className="bg-muted text-foreground"
           />
         </FieldBlock>
+        <TemplateVariablesEditor
+          variables={variables}
+          onSet={setVariable}
+          onRemove={(key) => {
+            const next = { ...variables }
+            delete next[key]
+            onChange({ template_name: templateName, language, variables: next })
+          }}
+          manual
+        />
       </>
     )
   }
@@ -519,39 +566,250 @@ function SendTemplateFields({
   // share a name across languages stay distinct.
   const toValue = (name: string, lang: string) => `${name}::${lang}`
   const current = templateName ? toValue(templateName, language) : ""
-  const hasMatch = templates.some(
-    (t) => toValue(t.name, t.language ?? "en_US") === current,
+  const selected = templates.find(
+    (tpl) => toValue(tpl.name, tpl.language ?? "en_US") === current,
   )
 
+  // Placeholders {{1}}, {{2}}… do corpo do template selecionado, em ordem
+  // numérica — cada um vira um input de variável.
+  const placeholders = selected
+    ? [...new Set(selected.body_text?.match(/\{\{(\d+)\}\}/g) ?? [])]
+        .map((m) => m.replace(/\D/g, ""))
+        .sort((a, b) => Number(a) - Number(b))
+    : []
+
   return (
-    <FieldBlock label={t("template")}>
+    <>
+      <FieldBlock label={t("template")}>
+        <select
+          value={current}
+          onChange={(e) => {
+            const [name, lang] = e.target.value.split("::")
+            // Trocar de template zera as variáveis — as posições do antigo
+            // não têm relação com as do novo.
+            onChange({
+              template_name: name ?? "",
+              language: lang ?? "",
+              variables: {},
+            })
+          }}
+          className={SELECT_CLASS}
+        >
+          <option value="">{t("selectTemplate")}</option>
+          {/* Param renomeado para `tpl` para não sombrear o `t` da tradução. */}
+          {templates.map((tpl) => {
+            const lang = tpl.language ?? "en_US"
+            return (
+              <option key={tpl.id} value={toValue(tpl.name, lang)}>
+                {tpl.name} ({lang})
+              </option>
+            )
+          })}
+          {current && !selected && (
+            <option value={current}>
+              {t("templateNotApproved", {
+                name: templateName,
+                language: language || t("unknownLanguage"),
+              })}
+            </option>
+          )}
+        </select>
+      </FieldBlock>
+      {selected?.body_text && (
+        <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md border border-border bg-muted p-2 text-[10px] leading-relaxed text-muted-foreground">
+          {selected.body_text}
+        </pre>
+      )}
+      {placeholders.length > 0 ? (
+        <FieldBlock label={t("templateVariables")}>
+          <div className="space-y-1.5">
+            {placeholders.map((key) => (
+              <div key={key} className="flex items-start gap-1.5">
+                <span className="w-10 shrink-0 pt-2 font-mono text-[11px] text-muted-foreground">{`{{${key}}}`}</span>
+                <VariableValueField
+                  value={variables[key] ?? ""}
+                  onChange={(v) => setVariable(key, v)}
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t("templateVariablesHint", { example: "{{vars.campo}}" })}
+          </p>
+        </FieldBlock>
+      ) : (
+        current &&
+        !selected && (
+          <TemplateVariablesEditor
+            variables={variables}
+            onSet={setVariable}
+            onRemove={(key) => {
+              const next = { ...variables }
+              delete next[key]
+              onChange({ template_name: templateName, language, variables: next })
+            }}
+            manual
+          />
+        )
+      )}
+    </>
+  )
+}
+
+/** Valor de uma variável de template: select com as origens conhecidas
+ *  (payload do webhook + campos customizados + contexto) e opção "Texto
+ *  livre" que abre um input. Valor que não casa com nenhum token conhecido
+ *  cai automaticamente no modo texto livre. */
+const FREE_TEXT = "__free__"
+
+function VariableValueField({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (v: string) => void
+}) {
+  const { t } = useTranslation(["automationBuilder", "common"])
+  const { customFields } = useResources()
+
+  // Só campos cujo nome o interpolate() consegue resolver ({{vars.x}} usa
+  // [\w.]+ — letras/dígitos/underscore, sem espaço nem acento).
+  const interpolableFields = customFields.filter((f) =>
+    /^\w+$/.test(f.field_name),
+  )
+
+  const payloadTokens = [
+    { token: "{{vars.name}}", label: "name" },
+    { token: "{{vars.phone}}", label: "phone" },
+    { token: "{{vars.email}}", label: "email" },
+  ]
+  const contextTokens = [
+    { token: "{{message.text}}", label: t("varMessageText") },
+  ]
+  const knownTokens = [
+    ...payloadTokens.map((o) => o.token),
+    ...interpolableFields.map((f) => `{{vars.${f.field_name}}}`),
+    ...contextTokens.map((o) => o.token),
+  ]
+
+  // Modo texto livre: valor preenchido que não é token conhecido, ou
+  // escolha explícita do usuário (estado local — valor vazio é ambíguo).
+  const [freeMode, setFreeMode] = useState(
+    () => value !== "" && !knownTokens.includes(value),
+  )
+  const isFree = freeMode || (value !== "" && !knownTokens.includes(value))
+  const selectValue = isFree ? FREE_TEXT : value
+
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-1">
       <select
-        value={current}
+        value={selectValue}
         onChange={(e) => {
-          const [name, lang] = e.target.value.split("::")
-          onChange({ template_name: name ?? "", language: lang ?? "" })
+          const v = e.target.value
+          if (v === FREE_TEXT) {
+            setFreeMode(true)
+            onChange("")
+          } else {
+            setFreeMode(false)
+            onChange(v)
+          }
         }}
         className={SELECT_CLASS}
       >
-        <option value="">{t("selectTemplate")}</option>
-        {/* Param renomeado para `tpl` para não sombrear o `t` da tradução. */}
-        {templates.map((tpl) => {
-          const lang = tpl.language ?? "en_US"
-          return (
-            <option key={tpl.id} value={toValue(tpl.name, lang)}>
-              {tpl.name} ({lang})
+        <option value="">{t("varSelectSource")}</option>
+        <optgroup label={t("varPayloadGroup")}>
+          {payloadTokens.map((o) => (
+            <option key={o.token} value={o.token}>
+              {o.label} — {o.token}
             </option>
-          )
-        })}
-        {current && !hasMatch && (
-          <option value={current}>
-            {t("templateNotApproved", {
-              name: templateName,
-              language: language || t("unknownLanguage"),
-            })}
-          </option>
+          ))}
+        </optgroup>
+        {interpolableFields.length > 0 && (
+          <optgroup label={t("customFieldsGroup")}>
+            {interpolableFields.map((f) => (
+              <option key={f.id} value={`{{vars.${f.field_name}}}`}>
+                {f.field_name} — {`{{vars.${f.field_name}}}`}
+              </option>
+            ))}
+          </optgroup>
         )}
+        <optgroup label={t("varContextGroup")}>
+          {contextTokens.map((o) => (
+            <option key={o.token} value={o.token}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
+        <option value={FREE_TEXT}>{t("varFreeText")}</option>
       </select>
+      {isFree && (
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={t("varFreeTextPlaceholder")}
+          autoFocus={freeMode && value === ""}
+          className="bg-muted text-xs text-foreground"
+        />
+      )}
+    </div>
+  )
+}
+
+/** Editor manual de variáveis posicionais (fallback quando o corpo do
+ *  template não está sincronizado — sem placeholders pra derivar). */
+function TemplateVariablesEditor({
+  variables,
+  onSet,
+  onRemove,
+  manual,
+}: {
+  variables: Record<string, string>
+  onSet: (key: string, value: string) => void
+  onRemove: (key: string) => void
+  manual?: boolean
+}) {
+  const { t } = useTranslation(["automationBuilder", "common"])
+  const keys = Object.keys(variables).sort((a, b) => Number(a) - Number(b))
+  // Próxima posição livre: maior chave numérica + 1.
+  const nextKey = String(
+    keys.reduce((max, k) => Math.max(max, Number(k) || 0), 0) + 1,
+  )
+  if (!manual && keys.length === 0) return null
+  return (
+    <FieldBlock label={t("templateVariables")}>
+      <div className="space-y-1.5">
+        {keys.map((key) => (
+          <div key={key} className="flex items-start gap-1.5">
+            <span className="w-10 shrink-0 pt-2 font-mono text-[11px] text-muted-foreground">{`{{${key}}}`}</span>
+            <VariableValueField
+              value={variables[key] ?? ""}
+              onChange={(v) => onSet(key, v)}
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onRemove(key)}
+              title={t("common:delete")}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="mt-1.5"
+        onClick={() => onSet(nextKey, "")}
+      >
+        <Plus className="h-3.5 w-3.5" />
+        {t("templateAddVariable")}
+      </Button>
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {t("templateVariablesHint", { example: "{{vars.campo}}" })}
+      </p>
     </FieldBlock>
   )
 }
@@ -640,6 +898,11 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
         return
       }
       toast.success(isEditing ? t("toastSaved") : t("toastCreated"))
+      // PATCH devolve o token do webhook quando gerado agora (trigger
+      // trocado pra webhook ou clone sem token) — atualiza o card na hora.
+      if (isEditing && typeof body?.webhook_token === "string") {
+        setState((s) => ({ ...s, webhook_token: body.webhook_token }))
+      }
       if (!isEditing && body?.automation?.id) {
         router.replace(`/automations/${body.automation.id}/edit`)
       }
@@ -689,13 +952,18 @@ export function AutomationBuilder({ initial }: { initial: BuilderInitial }) {
       {/* Canvas */}
       <div className="relative flex-1 overflow-y-auto">
         <div className="absolute inset-0 bg-[radial-gradient(circle,var(--border)_1px,transparent_1px)] [background-size:20px_20px] pointer-events-none" />
-        <div className="relative mx-auto flex max-w-2xl flex-col items-center gap-0 px-4 py-10">
+        <div className="relative mx-auto flex max-w-4xl flex-col items-center gap-0 px-4 py-10">
           <ResourcesProvider>
             <TriggerCard
               type={state.trigger_type}
               config={state.trigger_config}
               onTypeChange={(t) => patchTop("trigger_type", t)}
               onConfigChange={(c) => patchTop("trigger_config", c)}
+              webhookToken={state.webhook_token ?? null}
+              automationId={initial.id}
+              onWebhookTokenChange={(tok) =>
+                setState((s) => ({ ...s, webhook_token: tok }))
+              }
             />
             <StepList
               steps={state.steps}
@@ -723,11 +991,17 @@ function TriggerCard({
   config,
   onTypeChange,
   onConfigChange,
+  webhookToken,
+  automationId,
+  onWebhookTokenChange,
 }: {
   type: AutomationTriggerType
   config: Record<string, unknown>
   onTypeChange: (t: AutomationTriggerType) => void
   onConfigChange: (c: Record<string, unknown>) => void
+  webhookToken?: string | null
+  automationId?: string
+  onWebhookTokenChange?: (token: string) => void
 }) {
   const { t } = useTranslation(["automationBuilder", "automations", "common"])
   const [open, setOpen] = useState(false)
@@ -736,9 +1010,9 @@ function TriggerCard({
     t(`automations:${o.labelKey}`, { defaultValue: o.labelEn })
   const selectedOption = TRIGGER_OPTIONS.find((o) => o.value === type)
   return (
-    // Card width: full on mobile, fixed 320px on sm+. The canvas wrapper
-    // (max-w-2xl + px-4) keeps this tidy on tablet/desktop.
-    <div className="z-10 w-full max-w-[320px] sm:w-80">
+    // Largura fluida com teto de 520px: enche a coluna do canvas
+    // (max-w-4xl + px-4) e encolhe sem estourar em telas menores.
+    <div className="z-10 w-full max-w-[520px]">
       <div className="rounded-lg border border-border border-l-4 border-l-blue-500 bg-card shadow-lg">
         <button
           type="button"
@@ -808,9 +1082,169 @@ function TriggerCard({
                 className="bg-muted text-foreground"
               />
             )}
+            {type === "webhook_received" && (
+              <WebhookTriggerConfig
+                webhookToken={webhookToken ?? null}
+                automationId={automationId}
+                onTokenChange={onWebhookTokenChange}
+              />
+            )}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// Config do trigger webhook: mostra a URL pública da automação, exemplo
+// de chamada (curl) e regeneração do token com confirmação. Draft ainda
+// sem token exibe placeholder pedindo pra salvar primeiro.
+function WebhookTriggerConfig({
+  webhookToken,
+  automationId,
+  onTokenChange,
+}: {
+  webhookToken: string | null
+  automationId?: string
+  onTokenChange?: (token: string) => void
+}) {
+  const { t } = useTranslation(["automationBuilder", "common"])
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
+  // Origin só existe no browser — evita quebrar a pré-renderização.
+  const [origin, setOrigin] = useState("")
+  useEffect(() => {
+    setOrigin(window.location.origin)
+  }, [])
+
+  if (!webhookToken) {
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        {t("webhookDraftPlaceholder")}
+      </p>
+    )
+  }
+
+  const url = `${origin}/api/automations/webhook/${webhookToken}`
+  const curl = `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Idempotency-Key: evento-123' \\\n  -d '{"phone":"5521999998888","name":"Fulano","email":"fulano@email.com"}'`
+
+  // Copiar com fallback: navigator.clipboard falha em HTTP puro
+  // (self-host por IP sem TLS) — espelha o padrão do briefing-modal.
+  async function copyUrl() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url)
+      } else {
+        const ta = document.createElement("textarea")
+        ta.value = url
+        ta.style.position = "fixed"
+        ta.style.opacity = "0"
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand("copy")
+        document.body.removeChild(ta)
+      }
+      toast.success(t("webhookCopied"))
+    } catch {
+      toast.error(t("webhookCopyFailed"))
+    }
+  }
+
+  // Regenera o token no servidor — a URL antiga morre na hora.
+  async function regenerate() {
+    if (!automationId) return
+    setRegenerating(true)
+    try {
+      const res = await fetch(
+        `/api/automations/${automationId}/regenerate-webhook-token`,
+        { method: "POST" },
+      )
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok || !body?.webhook_token) {
+        toast.error(body?.error ?? t("toastSaveFailed"))
+        return
+      }
+      onTokenChange?.(body.webhook_token)
+      toast.success(t("webhookRegenerated"))
+      setConfirmOpen(false)
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">
+          {t("webhookUrlLabel")}
+        </label>
+        <div className="flex items-center gap-1.5">
+          <Input
+            readOnly
+            value={url}
+            onFocus={(e) => e.currentTarget.select()}
+            className="bg-muted font-mono text-[11px] text-foreground"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={copyUrl}
+            title={t("webhookCopy")}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      <pre className="overflow-x-auto rounded-md border border-border bg-muted p-2 text-[10px] leading-relaxed text-muted-foreground">
+        {curl}
+      </pre>
+      {/* {{vars.campo}} literal vai por interpolação — chaves duplas no JSON
+          seriam engolidas pelo i18next */}
+      <p className="text-[11px] text-muted-foreground">
+        {t("webhookVarsHint", { example: "{{vars.campo}}" })}
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setConfirmOpen(true)}
+        disabled={!automationId}
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        {t("webhookRegenerate")}
+      </Button>
+      <Dialog open={confirmOpen} onOpenChange={(v) => !v && setConfirmOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t("webhookRegenerateTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("webhookRegenerateDescription")}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={regenerating}
+            >
+              {t("common:cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={regenerate}
+              disabled={regenerating}
+            >
+              {regenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {t("webhookRegenerate")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -956,12 +1390,12 @@ function StepRenderer({
   const Icon = meta.icon
   const expanded = props.expandedId === step.cid
   const isCondition = step.step_type === "condition"
-  // Card widths on mobile fill the full canvas column (max-w-2xl px-4
-  // still keeps them reasonable). On sm+ the original fixed widths
-  // come back so the flow visual stays recognisable.
+  // Largura fluida com teto (400px / 480px na condition): enche a coluna
+  // do canvas (max-w-3xl) e, aninhado nas branches de condition, encolhe
+  // pra largura da coluna sem estourar — sem largura fixa por breakpoint.
   const width = isCondition
-    ? "w-full max-w-[400px] sm:w-[400px]"
-    : "w-full max-w-[320px] sm:w-80"
+    ? "w-full max-w-[640px]"
+    : "w-full max-w-[520px]"
 
   return (
     <>
@@ -1175,6 +1609,7 @@ function StepEditor({
         <SendTemplateFields
           templateName={(cfg.template_name as string) ?? ""}
           language={(cfg.language as string) ?? ""}
+          variables={(cfg.variables as Record<string, string>) ?? {}}
           onChange={(patch) => set(patch)}
         />
       )
