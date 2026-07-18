@@ -460,7 +460,7 @@ export function MessageBubble({
         className={cn(
           "relative rounded-2xl px-3 py-2",
           isAgent
-            ? "rounded-br-md bg-primary text-primary-foreground"
+            ? "rounded-br-md bg-bubble-out text-bubble-out-foreground"
             : "rounded-bl-md bg-muted text-foreground",
         )}
       >
@@ -492,7 +492,7 @@ export function MessageBubble({
               // timestamp must read against that (not the neutral
               // foreground) — otherwise it goes low-contrast in light
               // mode. Inbound bubbles use the muted surface.
-              isAgent ? "text-primary-foreground/70" : "text-muted-foreground",
+              isAgent ? "text-bubble-out-foreground/70" : "text-muted-foreground",
             )}
           >
             {time}
@@ -505,7 +505,7 @@ export function MessageBubble({
           {isAgent &&
             /\/r\/[a-f0-9]{32}/.test(message.content_text ?? "") && (
               <span
-                className="inline-flex items-center gap-1 text-[10px] font-medium text-primary-foreground/70"
+                className="inline-flex items-center gap-1 text-[10px] font-medium text-bubble-out-foreground/70"
                 title={t("linkClicks")}
               >
                 <MousePointerClick className="size-3" />

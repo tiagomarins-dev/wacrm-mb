@@ -48,6 +48,11 @@
   --color-primary-hover: var(--primary-hover);
   --color-primary-soft: var(--primary-soft);
   --color-primary-soft-2: var(--primary-soft-2);
+  /* Bolha OUTBOUND do chat (bg-bubble-out / text-bubble-out-foreground).
+   * Default segue o acento (--primary); temas podem sobrescrever — o
+   * "whatsapp" usa o verde-claro icônico #d9fdd3 (claro) / #005c4b (escuro). */
+  --color-bubble-out: var(--bubble-out);
+  --color-bubble-out-foreground: var(--bubble-out-foreground);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -149,6 +154,10 @@ html[data-mode="light"] {
 
 :root,
 html[data-theme="violet"] {
+  /* Bolha outbound: por padrão acompanha o acento (indireção resolve
+   * no tema ativo). Sobrescrita por tema quando precisa de cor própria. */
+  --bubble-out: var(--primary);
+  --bubble-out-foreground: var(--primary-foreground);
   --primary: oklch(0.526 0.247 293);
   --primary-foreground: oklch(0.985 0 0);
   --primary-hover: oklch(0.6 0.22 293);
@@ -215,6 +224,30 @@ html[data-theme="rose"] {
   --sidebar-primary: oklch(0.645 0.22 16);
   --sidebar-primary-foreground: oklch(0.985 0 0);
   --sidebar-ring: oklch(0.645 0.22 16);
+}
+
+/* WhatsApp — o verde de verdade (#00a884) + bolha outbound icônica:
+ * verde-claro #d9fdd3 no claro, #005c4b no escuro (estilo WhatsApp Web). */
+html[data-theme="whatsapp"] {
+  --primary: oklch(0.65 0.14 168);
+  --primary-foreground: oklch(0.985 0 0);
+  --primary-hover: oklch(0.71 0.13 168);
+  --primary-soft: oklch(0.65 0.14 168 / 0.12);
+  --primary-soft-2: oklch(0.65 0.14 168 / 0.22);
+  --ring: oklch(0.65 0.14 168);
+  --chart-1: oklch(0.65 0.14 168);
+  --chart-2: oklch(0.7 0.12 195);
+  --sidebar-primary: oklch(0.65 0.14 168);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-ring: oklch(0.65 0.14 168);
+  /* modo claro: bolha #d9fdd3 com texto escuro */
+  --bubble-out: oklch(0.95 0.06 135);
+  --bubble-out-foreground: oklch(0.25 0.02 250);
+}
+html[data-theme="whatsapp"][data-mode="dark"] {
+  /* modo escuro: bolha #005c4b com texto claro */
+  --bubble-out: oklch(0.42 0.075 175);
+  --bubble-out-foreground: oklch(0.985 0 0);
 }
 
 /* Inbox mobile: esconde o header global do app quando um thread está aberto —
