@@ -17,6 +17,22 @@ import { getSiteUrl } from '@/lib/site-url'
 import { createAgentLinkToken } from '@/lib/link-tracking/token'
 import type { AgentCtx, AgentTopic } from './llm'
 
+// Semanas restantes (arredonda p/ cima) de hoje até a prova, no calendário
+// de São Paulo (padrão zonedYMD, business-hours.ts). Prova no passado ou
+// data inválida → null (o campo some do output do get_curso).
+export function semanasAteProva(dataProva: string | null, now = new Date()): number | null {
+  if (!dataProva || !/^\d{4}-\d{2}-\d{2}$/.test(dataProva)) return null
+  const p: Record<string, string> = {}
+  for (const part of new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(now)) p[part.type] = part.value
+  const hoje = Date.UTC(+p.year, +p.month - 1, +p.day)
+  const [y, m, d] = dataProva.split('-').map(Number)
+  const prova = Date.UTC(y, m - 1, d)
+  if (prova < hoje) return null
+  return Math.max(1, Math.ceil((prova - hoje) / (7 * 24 * 60 * 60 * 1000)))
+}
+
 // Shape de um tool_call do OpenRouter (OpenAI-compatible).
 interface ToolCall {
   id: string
@@ -132,6 +148,8 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
     case 'get_curso': {
       const curso = await getCurso(ctx.db, ctx.accountId, String(args.slug ?? ''))
       if (!curso) return { output: { error: 'curso não encontrado' }, detectedTopic: 'vendas' }
+      // Prova datada → nº de correções semanais sempre atual (a ficha não fica estática)
+      const semanas = semanasAteProva(curso.data_prova ?? null)
       // Devolve só os campos que o agente pode falar (a ficha é a fonte de verdade).
       return {
         output: {
@@ -145,6 +163,15 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
           garantia: curso.garantia,
           nao_prometer: curso.nao_prometer,
           pagina_vendas_url: curso.pagina_vendas_url,
+          ...(semanas !== null
+            ? {
+                prova: {
+                  data: curso.data_prova,
+                  semanas_restantes: semanas,
+                  correcoes_semanais_estimadas: semanas,
+                },
+              }
+            : {}),
         },
         detectedTopic: 'vendas',
       }

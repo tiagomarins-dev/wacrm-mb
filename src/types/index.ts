@@ -270,6 +270,8 @@ export interface AiCourse {
   pagina_vendas_url: string | null;
   link_venda: string | null;
   atualizado_em: string | null;
+  /** Data da prova do curso (073) — get_curso computa semanas restantes. */
+  data_prova: string | null;
   created_at: string;
   updated_at: string;
 }

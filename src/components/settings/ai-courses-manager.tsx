@@ -49,6 +49,7 @@ export function AiCoursesManager() {
   const [entregas, setEntregas] = useState('');
   const [garantia, setGarantia] = useState('');
   const [naoProm, setNaoProm] = useState('');
+  const [dataProva, setDataProva] = useState('');
   const [ativo, setAtivo] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -86,6 +87,7 @@ export function AiCoursesManager() {
     setEntregas('');
     setGarantia('');
     setNaoProm('');
+    setDataProva('');
     setAtivo(true);
   }
 
@@ -99,6 +101,7 @@ export function AiCoursesManager() {
     setEntregas(c.entregas ?? '');
     setGarantia(c.garantia ?? '');
     setNaoProm(c.nao_prometer ?? '');
+    setDataProva(c.data_prova ?? '');
     setAtivo(c.ativo);
   }
 
@@ -121,6 +124,7 @@ export function AiCoursesManager() {
       entregas: entregas.trim() || null,
       garantia: garantia.trim() || null,
       nao_prometer: naoProm.trim() || null,
+      data_prova: dataProva || null,
       ativo,
       atualizado_em: new Date().toISOString().slice(0, 10),
     };
@@ -227,6 +231,11 @@ export function AiCoursesManager() {
             <div className="flex-1">
               <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('c_naoProm')}</label>
               <Input value={naoProm} onChange={(e) => setNaoProm(e.target.value)} className="border-border bg-background text-foreground" />
+            </div>
+            {/* Data da prova (073): o get_curso computa semanas restantes → correções semanais */}
+            <div className="sm:w-44">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('c_dataProva')}</label>
+              <Input type="date" value={dataProva} onChange={(e) => setDataProva(e.target.value)} className="border-border bg-background text-foreground" />
             </div>
           </div>
           <div className="flex items-center gap-3">
