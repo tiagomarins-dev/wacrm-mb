@@ -14,6 +14,8 @@
   "triggerConversationAssigned": "Conversation Assigned",
   "triggerTagAdded": "Tag Added",
   "triggerTimeBased": "Time-Based",
+  "triggerWebhook": "Webhook (HTTP)",
+  "exportCsv": "Export CSV",
   "relNever": "never",
   "relJustNow": "just now",
   "relMinAgo": "{{n}}m ago",

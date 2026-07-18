@@ -25,6 +25,18 @@ export async function GET(request: Request) {
   }
 
   const admin = supabaseAdmin()
+
+  // TTL da idempotência de webhook (mig 074): eventos > 24h saem — depois
+  // disso, replay com a mesma X-Idempotency-Key volta a executar (aceito
+  // por design). Roda ANTES da drenagem: o early-return de "sem pendências"
+  // abaixo não pode pular a limpeza. Best-effort: falha só loga.
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+  const { error: ttlErr } = await admin
+    .from('automation_webhook_events')
+    .delete()
+    .lt('created_at', cutoff)
+  if (ttlErr) console.error('[automations cron] webhook events TTL failed:', ttlErr)
+
   const { data: due, error } = await admin
     .from('automation_pending_executions')
     .select('*')

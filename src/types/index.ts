@@ -718,7 +718,9 @@ export type AutomationTriggerType =
   | 'new_contact_created'
   | 'conversation_assigned'
   | 'tag_added'
-  | 'time_based';
+  | 'time_based'
+  /** Disparo por POST externo na URL pública da automação (mig 074). */
+  | 'webhook_received';
 
 export type AutomationStepType =
   | 'send_message'
@@ -857,6 +859,9 @@ export interface Automation {
   updated_at: string;
   /** Conexão (número) dona da automação (multi-número, 033). */
   connection_id?: string | null;
+  /** Token público do trigger webhook (wh_ + 32 hex). Gerado no servidor
+   *  ao salvar automação com trigger_type='webhook_received' (mig 074). */
+  webhook_token?: string | null;
 }
 
 export interface AutomationStep {

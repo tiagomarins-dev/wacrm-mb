@@ -6,7 +6,12 @@ import { insertSteps, type BuilderStepInput } from '@/lib/automations/steps-tree
 import {
   validateStepsForActivation,
   validateTriggerForActivation,
+  type StepLike,
 } from '@/lib/automations/validate'
+import {
+  generateWebhookToken,
+  validateWebhookMetaTemplateFirst,
+} from '@/lib/automations/webhook-token'
 import { getActiveConnection } from '@/lib/connections/active'
 
 export async function GET() {
@@ -113,6 +118,45 @@ export async function POST(request: Request) {
   const active = await getActiveConnection(supabase, accountId).catch(() => null)
 
   const admin = supabaseAdmin()
+
+  // Trigger webhook (074): exige conexão (o token é atrelado a ela) e
+  // gera o token no servidor. Validação Meta template-first só quando ativa.
+  let webhookToken: string | null = null
+  if (effectiveTriggerType === 'webhook_received') {
+    if (!active) {
+      return NextResponse.json(
+        {
+          error: 'Cannot create webhook automation without a connection',
+          issues: [
+            {
+              path: 'trigger',
+              message:
+                'Automação webhook precisa de uma conexão WhatsApp configurada.',
+            },
+          ],
+        },
+        { status: 400 },
+      )
+    }
+    if (is_active) {
+      const metaIssues = await validateWebhookMetaTemplateFirst(
+        admin,
+        active.id,
+        (effectiveSteps ?? []) as unknown as StepLike[],
+      )
+      if (metaIssues.length > 0) {
+        return NextResponse.json(
+          {
+            error: 'Cannot activate automation with invalid configuration',
+            issues: metaIssues,
+          },
+          { status: 400 },
+        )
+      }
+    }
+    webhookToken = generateWebhookToken()
+  }
+
   const { data: automation, error: insertErr } = await admin
     .from('automations')
     .insert({
@@ -124,6 +168,7 @@ export async function POST(request: Request) {
       trigger_type: effectiveTriggerType,
       trigger_config: effectiveTriggerConfig ?? {},
       is_active: !!is_active,
+      webhook_token: webhookToken,
     })
     .select()
     .single()

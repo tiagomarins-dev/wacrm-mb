@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  firstSendStepType,
   validateStepsForActivation,
   validateTriggerForActivation,
 } from "./validate";
@@ -239,5 +240,65 @@ describe("validateTriggerForActivation", () => {
 
   it("does not flag unknown trigger types (handled elsewhere)", () => {
     expect(validateTriggerForActivation("some_future_trigger", {})).toEqual([]);
+  });
+});
+
+// Regra template-first do trigger webhook: primeiro step de ENVIO na
+// ordem do fluxo, com avaliação conservadora das branches de condition.
+describe("firstSendStepType", () => {
+  it("returns the first send step in a linear flow", () => {
+    expect(
+      firstSendStepType([
+        { step_type: "add_tag", step_config: { tag_id: "t1" } },
+        { step_type: "send_message", step_config: { text: "oi" } },
+        { step_type: "send_template", step_config: { template_name: "x" } },
+      ]),
+    ).toBe("send_message");
+    expect(
+      firstSendStepType([
+        { step_type: "send_template", step_config: { template_name: "x" } },
+        { step_type: "send_message", step_config: { text: "oi" } },
+      ]),
+    ).toBe("send_template");
+  });
+
+  it("returns null when no send step exists", () => {
+    expect(
+      firstSendStepType([
+        { step_type: "add_tag", step_config: { tag_id: "t1" } },
+        { step_type: "close_conversation", step_config: {} },
+      ]),
+    ).toBeNull();
+    expect(firstSendStepType([])).toBeNull();
+  });
+
+  it("reports send_message when ANY condition branch sends free text first", () => {
+    expect(
+      firstSendStepType([
+        {
+          step_type: "condition",
+          step_config: { subject: "tag_presence", operand: "t1" },
+          branches: {
+            yes: [{ step_type: "send_template", step_config: { template_name: "x" } }],
+            no: [{ step_type: "send_message", step_config: { text: "oi" } }],
+          },
+        },
+      ]),
+    ).toBe("send_message");
+  });
+
+  it("continues past a condition whose branches do not send", () => {
+    expect(
+      firstSendStepType([
+        {
+          step_type: "condition",
+          step_config: { subject: "tag_presence", operand: "t1" },
+          branches: {
+            yes: [{ step_type: "add_tag", step_config: { tag_id: "t2" } }],
+          },
+        },
+        { step_type: "send_template", step_config: { template_name: "x" } },
+      ]),
+    ).toBe("send_template");
   });
 });

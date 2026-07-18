@@ -11,6 +11,48 @@ and polish.
 
 ## [Unreleased]
 
+### Added
+
+- **Webhook trigger for automations.** A new "Webhook (HTTP)" trigger
+  gives each automation a unique public URL
+  (`POST /api/automations/webhook/<token>`) so external systems (forms,
+  enrollment platforms, Zapier) can fire it directly. The JSON payload
+  requires a digits-only `phone` (country code + area code + number);
+  optional `name`/`email` always overwrite the contact, and any extra
+  key must match an existing CRM custom field (unknown keys reject the
+  request with `invalid_fields`). The whole payload becomes
+  `{{vars.field}}` variables inside the automation's steps — including
+  template variables, which are now interpolated (previously sent as
+  literal placeholders). Supports optional `X-Idempotency-Key`
+  deduplication (24h window), per-IP rate limiting, and a token
+  regenerate button in the builder. Automations on official Meta
+  connections must start their sends with an approved template (24h
+  window rule) — activation is blocked otherwise.
+- **Template variables editor in the automation builder.** The "Send
+  Template" step now shows the selected template's body, derives its
+  `{{1}}, {{2}}, …` placeholders, and renders one input per variable —
+  each with a source picker (webhook payload fields, registered custom
+  fields, received-message text) plus a free-text mode that opens an
+  extra input. Falls back to a manual add/remove variable list when the
+  template body isn't synced. Previously variables could only be set by
+  editing the step config directly.
+- **CSV export of automation execution logs.** The logs page gains an
+  "Export CSV" button that downloads every execution (up to 10 000)
+  with timestamp, status, trigger, contact name / phone / email, step
+  count, and the failure reason (log error plus each failed step's
+  detail). Session-scoped — same visibility as the logs page itself.
+- **Wider automation builder cards.** Canvas grows to 896 px and node
+  cards to 520 px (640 px for conditions), fluid so nested branch
+  cards shrink instead of overflowing.
+
+### Migration required
+
+- `supabase/migrations/074_webhook_trigger.sql` — adds
+  `automations.webhook_token` (unique, nullable) and the
+  `automation_webhook_events` idempotency table (service-role only,
+  swept by the automations cron after 24h). Idempotent and safe to
+  re-run.
+
 Multi-user accounts ship. Every wacrm install is multi-tenant on the
 database side: a single user's signup creates a fresh "account", and
 every row is scoped to that account rather than to the user directly.
