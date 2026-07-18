@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest'
-import { execTool, buildToolDefs } from './tools'
+import { execTool, buildToolDefs, semanasAteProva } from './tools'
 import type { AgentCtx } from './llm'
 
 // Fake db por tabela: devolve `data` canned no terminal e captura
@@ -111,6 +111,47 @@ describe('get_curso', () => {
     const { db } = makeDb({ ai_courses: null })
     const r = await execTool(makeCtx(db), call('get_curso', { slug: 'x' }))
     expect((r.output as { error: string }).error).toMatch(/não encontrado/)
+  })
+
+  it('curso com data_prova → output.prova com semanas restantes; sem data → campo ausente', async () => {
+    const futuro = new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const { db } = makeDb({ ai_courses: { nome: 'Intensivo', data_prova: futuro } })
+    const r = await execTool(makeCtx(db), call('get_curso', { slug: 'intensivo' }))
+    const prova = (r.output as { prova?: { semanas_restantes: number; correcoes_semanais_estimadas: number } }).prova
+    expect(prova?.semanas_restantes).toBeGreaterThanOrEqual(2)
+    expect(prova?.correcoes_semanais_estimadas).toBe(prova?.semanas_restantes)
+
+    const { db: db2 } = makeDb({ ai_courses: { nome: 'Sem prova' } })
+    const r2 = await execTool(makeCtx(db2), call('get_curso', { slug: 'x' }))
+    expect((r2.output as { prova?: unknown }).prova).toBeUndefined()
+  })
+})
+
+// Helper puro: semanas de hoje (fuso SP) até a prova, arredondando p/ cima.
+describe('semanasAteProva', () => {
+  const now = new Date('2026-07-17T15:00:00-03:00') // 17/07/2026 em SP
+
+  it('17/07 → 08/11 (ENEM) = 114 dias → 17 semanas', () => {
+    expect(semanasAteProva('2026-11-08', now)).toBe(17)
+  })
+
+  it('exatamente 7 dias → 1; 8 dias → 2 (arredonda p/ cima)', () => {
+    expect(semanasAteProva('2026-07-24', now)).toBe(1)
+    expect(semanasAteProva('2026-07-25', now)).toBe(2)
+  })
+
+  it('prova hoje → 1 (nunca 0 com prova futura/atual)', () => {
+    expect(semanasAteProva('2026-07-17', now)).toBe(1)
+  })
+
+  it('prova no passado → null', () => {
+    expect(semanasAteProva('2026-07-16', now)).toBeNull()
+  })
+
+  it('null/inválida → null', () => {
+    expect(semanasAteProva(null, now)).toBeNull()
+    expect(semanasAteProva('08/11/2026', now)).toBeNull()
+    expect(semanasAteProva('', now)).toBeNull()
   })
 })
 

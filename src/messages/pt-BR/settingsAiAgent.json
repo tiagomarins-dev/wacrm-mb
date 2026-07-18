@@ -6,7 +6,6 @@
   "tabCourses": "Cursos",
   "tabSupport": "Suporte",
   "tabConnections": "Conexões",
-
   "connTitle": "Configuração por conexão",
   "connDesc": "Liga/desliga o agente, ajusta o debounce e a allowlist de teste por número de WhatsApp.",
   "connPrimary": "Principal",
@@ -20,7 +19,6 @@
   "connAutoUnassignHint": "0 = desligado. Conversa atribuída e parada por mais que isso perde o responsável e volta pra Fila.",
   "connEmpty": "Nenhuma conexão com o agente configurado.",
   "connSaved": "Configuração da conexão salva",
-
   "adminOnly": "Apenas administradores podem gerenciar o agente.",
   "loadError": "Falha ao carregar",
   "saveError": "Falha ao salvar",
@@ -40,7 +38,6 @@
   "deleteConfirmSuffix": "? Isso não pode ser desfeito.",
   "editAria": "Editar",
   "deleteAria": "Excluir",
-
   "profilesTitle": "Perfis de IA",
   "profilesDesc": "Cada perfil é um responsável atribuível, com persona, modelo e ferramentas próprias.",
   "p_name": "Nome",
@@ -64,7 +61,6 @@
   "tool_enviar_link_venda": "Enviar link de matrícula",
   "tool_buscar_suporte": "Buscar no suporte",
   "p_empty": "Nenhum perfil ainda.",
-
   "coursesTitle": "Cursos (base de vendas)",
   "coursesDesc": "Fichas que o agente consulta para cotar e enviar links de matrícula.",
   "c_slug": "Slug (identificador)",
@@ -79,7 +75,6 @@
   "c_garantia": "Garantia",
   "c_naoProm": "Não prometer",
   "c_empty": "Nenhum curso ainda.",
-
   "supportTitle": "Base de suporte",
   "supportDesc": "FAQ que o agente consulta para responder dúvidas de alunos.",
   "s_categoria": "Categoria",
@@ -87,5 +82,6 @@
   "s_titulo": "Título / pergunta",
   "s_conteudo": "Resposta",
   "s_keywords": "Palavras-chave (ajudam na busca)",
-  "s_empty": "Nenhum artigo ainda."
+  "s_empty": "Nenhum artigo ainda.",
+  "c_dataProva": "Data da prova"
 }
