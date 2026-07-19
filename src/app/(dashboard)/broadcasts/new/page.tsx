@@ -45,7 +45,7 @@ export default function NewBroadcastPage() {
     excludeTagIds?: string[];
   }>({ type: 'all' });
   const [variables, setVariables] = useState<
-    Record<string, { type: 'static' | 'field' | 'custom_field'; value: string }>
+    Record<string, { type: 'static' | 'field' | 'custom_field' | 'payload'; value: string }>
   >({});
   const [name, setName] = useState('');
   // ISO do agendamento (null = enviar agora).
@@ -53,6 +53,13 @@ export default function NewBroadcastPage() {
 
   async function handleSend() {
     if (!template) return;
+
+    // Variável de payload só resolve no disparo do webhook — envio
+    // imediato/agendado sairia com o placeholder vazio.
+    if (Object.values(variables).some((v) => v.type === 'payload')) {
+      toast.error(t('new.payloadNeedsWebhook'));
+      return;
+    }
 
     try {
       const broadcastId = await createAndSendBroadcast({
@@ -133,6 +140,52 @@ export default function NewBroadcastPage() {
     }
     toast.success(t('new.draftSaved'));
     router.push('/broadcasts');
+  }
+
+  /**
+   * Cria um broadcast BLUEPRINT (status 'webhook', mig 075): molde com
+   * template/variáveis/audiência + URL pública de disparo. O token nasce
+   * no servidor; o detalhe do broadcast mostra a URL pronta.
+   */
+  async function handleCreateWebhook() {
+    if (!template) return;
+    if (!name.trim()) {
+      toast.error(t('new.draftNameRequired'));
+      return;
+    }
+    // Webhook v1 resolve audiência all/tags no disparo (custom_field/csv fora)
+    if (audience.type !== 'all' && audience.type !== 'tags') {
+      toast.error(t('new.webhookAudienceUnsupported'));
+      return;
+    }
+    if (!activeConnectionId) {
+      toast.error(t('new.webhookNeedsConnection'));
+      return;
+    }
+
+    const res = await fetch('/api/broadcasts/blueprint', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: name.trim(),
+        connection_id: activeConnectionId,
+        template_name: template.name,
+        template_language: template.language ?? 'en_US',
+        template_variables: variables,
+        audience_filter: {
+          type: audience.type,
+          tagIds: audience.tagIds,
+          excludeTagIds: audience.excludeTagIds,
+        },
+      }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body?.id) {
+      toast.error(body?.error ?? t('new.webhookCreateFailed'));
+      return;
+    }
+    toast.success(t('new.webhookCreated'));
+    router.push(`/broadcasts/${body.id}`);
   }
 
   return (
@@ -227,6 +280,10 @@ export default function NewBroadcastPage() {
               audience={audience}
               onSend={handleSend}
               onSaveDraft={handleSaveDraft}
+              onCreateWebhook={handleCreateWebhook}
+              hasPayloadVars={Object.values(variables).some(
+                (v) => v.type === 'payload',
+              )}
               onBack={() => setCurrentStep(2)}
               isProcessing={isProcessing}
               progress={progress}

@@ -13,6 +13,9 @@ export type VariableMapping =
   | { type: 'static'; value: string }
   | { type: 'field'; value: string }
   | { type: 'custom_field'; value: string }
+  /** Valor vem do payload do webhook (value = chave, ex 'link_aula').
+   *  NUNCA chega no engine: o clone materializa em 'static' antes. */
+  | { type: 'payload'; value: string }
 
 /** contactId → (customFieldId → value). */
 export type CustomValueIndex = Map<string, Map<string, string>>
@@ -49,6 +52,13 @@ export function resolveVariables(
       return fieldMap[v.value] ?? ''
     }
 
+    // payload não deveria chegar aqui (o clone do webhook materializa em
+    // 'static' antes de gravar) — defensivo pra nunca vazar o placeholder
+    if (v.type === 'payload') {
+      console.warn('[broadcast] variável payload não materializada:', key)
+      return ''
+    }
+
     // custom_field
     return customValues?.get(v.value) ?? ''
   })
@@ -82,4 +92,37 @@ export async function fetchCustomValueIndex(
     }
   }
   return index
+}
+
+/**
+ * Chaves do payload referenciadas pelas variáveis do blueprint —
+ * usadas pra validar o request do webhook antes de qualquer efeito.
+ */
+export function collectPayloadKeys(
+  variables: Record<string, VariableMapping>,
+): string[] {
+  const keys = new Set<string>()
+  for (const v of Object.values(variables ?? {})) {
+    if (v.type === 'payload' && v.value) keys.add(v.value)
+  }
+  return [...keys]
+}
+
+/**
+ * Materializa variáveis 'payload' em 'static' com os valores do request —
+ * o clone grava o resultado e o engine (resolveVariables) segue intocado.
+ * Não muta o input.
+ */
+export function materializePayloadVariables(
+  variables: Record<string, VariableMapping>,
+  payload: Record<string, unknown>,
+): Record<string, VariableMapping> {
+  const out: Record<string, VariableMapping> = {}
+  for (const [key, v] of Object.entries(variables ?? {})) {
+    out[key] =
+      v.type === 'payload'
+        ? { type: 'static', value: String(payload[v.value] ?? '') }
+        : v
+  }
+  return out
 }

@@ -44,9 +44,29 @@ and polish.
 - **Wider automation builder cards.** Canvas grows to 896 px and node
   cards to 520 px (640 px for conditions), fluid so nested branch
   cards shrink instead of overflowing.
+- **Webhook-triggered broadcasts (blueprint + clone).** The broadcast
+  wizard gains a third send mode, "Webhook trigger": instead of sending
+  or scheduling, it saves the broadcast as a reusable *blueprint* with
+  a unique public URL (`POST /api/broadcasts/webhook/<token>`). Each
+  POST clones the blueprint into a real broadcast with the audience
+  (All/Tags) resolved *at trigger time* — so the list never goes stale —
+  and fires it through the existing scheduled-broadcast engine. Template
+  variables gain a "Webhook payload" source: the caller's JSON body
+  fills them per dispatch (e.g. `{"class_link": "..."}`). The
+  `X-Idempotency-Key` header is required (a replay would re-message the
+  whole audience; same key within 24h is deduplicated), `?dry=1`
+  previews the audience count without sending, and the blueprint detail
+  page shows the URL, a curl example, and a token-regenerate button.
+  Built for "notify students 30 minutes before every live class"-style
+  flows where an external system owns the schedule.
 
 ### Migration required
 
+- `supabase/migrations/075_broadcast_webhook.sql` — adds
+  `broadcasts.webhook_token` (unique) and `broadcasts.source_blueprint_id`,
+  extends the `broadcasts.status` CHECK with `'webhook'`, and creates the
+  `broadcast_webhook_events` idempotency table (service-role only, swept
+  by the broadcasts cron after 24h). Idempotent and safe to re-run.
 - `supabase/migrations/074_webhook_trigger.sql` — adds
   `automations.webhook_token` (unique, nullable) and the
   `automation_webhook_events` idempotency table (service-role only,

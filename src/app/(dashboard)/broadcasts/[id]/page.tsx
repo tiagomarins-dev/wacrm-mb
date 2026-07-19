@@ -34,12 +34,27 @@ import {
   Download,
   ChevronDown,
   Trash2,
+  Copy,
+  RefreshCw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   getBroadcastStatus,
   getRecipientStatus,
 } from '@/lib/broadcast-status';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  collectPayloadKeys,
+  type VariableMapping,
+} from '@/lib/broadcast/variables';
 
 interface StatCardProps {
   label: string;
@@ -269,6 +284,83 @@ export default function BroadcastDetailPage() {
   }
 
   const status = getBroadcastStatus(broadcast.status);
+
+  // Blueprint webhook (mig 075): não tem envio próprio (stats/recipients
+  // pertencem aos CLONES) — mostra a URL de disparo, curl e regeneração.
+  if (broadcast.status === 'webhook') {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-4">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => router.push('/broadcasts')}
+              className="border-border"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold text-foreground">{broadcast.name}</h1>
+                <span
+                  className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${status.classes}`}
+                >
+                  {t(status.labelKey, { defaultValue: status.label })}
+                </span>
+              </div>
+              <div className="mt-1 flex items-center gap-3 text-sm text-muted-foreground">
+                <span>{t('detail.templateLabel', { name: broadcast.template_name })}</span>
+                <span>-</span>
+                <span>{t('detail.createdAt', { date: formatDate(broadcast.created_at) })}</span>
+              </div>
+            </div>
+          </div>
+
+          {confirmDelete ? (
+            <div className="flex items-center gap-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-sm">
+              <span className="text-red-300">{t('detail.deleteConfirmQuestion')}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDelete(false)}
+                disabled={deleting}
+                className="h-7 border-border bg-transparent text-muted-foreground hover:bg-muted"
+              >
+                {t('common:cancel')}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleDelete}
+                disabled={deleting}
+                className="h-7 bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleting ? t('detail.deleting') : t('common:confirm')}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              title={t('detail.deleteTitle')}
+              className="border-red-500/30 bg-transparent text-red-400 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {t('common:delete')}
+            </Button>
+          )}
+        </div>
+
+        <BroadcastWebhookCard
+          broadcast={broadcast}
+          onTokenChange={(tok) =>
+            setBroadcast((b) => (b ? { ...b, webhook_token: tok } : b))
+          }
+        />
+      </div>
+    );
+  }
 
   const funnelSteps: FunnelStep[] = [
     { label: t('detail.funnelSent'), value: broadcast.sent_count, color: 'bg-primary' },
@@ -537,6 +629,154 @@ export default function BroadcastDetailPage() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// Card do blueprint webhook: URL pública de disparo, exemplo de curl com
+// X-Idempotency-Key determinística por aula, dica do dry-run e regeneração
+// de token (espelha o WebhookTriggerConfig do builder de automações).
+function BroadcastWebhookCard({
+  broadcast,
+  onTokenChange,
+}: {
+  broadcast: Broadcast;
+  onTokenChange: (token: string) => void;
+}) {
+  const { t } = useTranslation(['broadcasts', 'common']);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  // Origin só existe no browser — evita quebrar a pré-renderização.
+  const [origin, setOrigin] = useState('');
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  const token = broadcast.webhook_token ?? '';
+  const url = `${origin}/api/broadcasts/webhook/${token}`;
+  const payloadKeys = collectPayloadKeys(
+    (broadcast.template_variables ?? {}) as Record<string, VariableMapping>,
+  );
+  const exampleBody =
+    payloadKeys.length > 0
+      ? JSON.stringify(
+          Object.fromEntries(payloadKeys.map((k) => [k, `valor de ${k}`])),
+        )
+      : '{}';
+  const curl = `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Idempotency-Key: aula-2026-07-23-1830' \\\n  -d '${exampleBody}'`;
+
+  // Copiar com fallback: navigator.clipboard falha em HTTP puro
+  // (self-host por IP sem TLS).
+  async function copyUrl() {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = url;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      toast.success(t('detail.webhookCopied'));
+    } catch {
+      toast.error(t('detail.webhookCopyFailed'));
+    }
+  }
+
+  // Regenera o token no servidor — a URL antiga morre na hora.
+  async function regenerate() {
+    setRegenerating(true);
+    try {
+      const res = await fetch(
+        `/api/broadcasts/${broadcast.id}/regenerate-webhook-token`,
+        { method: 'POST' },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body?.webhook_token) {
+        toast.error(body?.error ?? t('detail.webhookRegenerateFailed'));
+        return;
+      }
+      onTokenChange(body.webhook_token);
+      toast.success(t('detail.webhookRegenerated'));
+      setConfirmOpen(false);
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
+      <div>
+        <label className="mb-1 block text-xs font-medium text-muted-foreground">
+          {t('detail.webhookCardTitle')}
+        </label>
+        <div className="flex items-center gap-1.5">
+          <Input
+            readOnly
+            value={url}
+            onFocus={(e) => e.currentTarget.select()}
+            className="bg-muted font-mono text-[11px] text-foreground"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={copyUrl}
+            title={t('detail.webhookCopy')}
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      <pre className="overflow-x-auto rounded-md border border-border bg-muted p-2 text-[10px] leading-relaxed text-muted-foreground">
+        {curl}
+      </pre>
+      <p className="text-[11px] text-muted-foreground">{t('detail.webhookKeyHint')}</p>
+      <p className="text-[11px] text-muted-foreground">{t('detail.webhookDryHint')}</p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setConfirmOpen(true)}
+      >
+        <RefreshCw className="h-3.5 w-3.5" />
+        {t('detail.webhookRegenerate')}
+      </Button>
+      <Dialog open={confirmOpen} onOpenChange={(v) => !v && setConfirmOpen(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('detail.webhookRegenerateTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('detail.webhookRegenerateDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={regenerating}
+            >
+              {t('common:cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={regenerate}
+              disabled={regenerating}
+            >
+              {regenerating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {t('detail.webhookRegenerate')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

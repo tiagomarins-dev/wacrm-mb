@@ -21,6 +21,7 @@
   "statusFailed": "Failed",
   "statusPending": "Pending",
   "statusCanceled": "Canceled",
+  "statusWebhook": "Webhook",
   "detail": {
     "loadError": "Failed to load broadcast",
     "notFound": "Broadcast not found",
@@ -67,7 +68,18 @@
     "csvDeliveredAt": "Delivered At",
     "csvReadAt": "Read At",
     "csvRepliedAt": "Replied At",
-    "csvError": "Error"
+    "csvError": "Error",
+    "webhookCardTitle": "Webhook URL",
+    "webhookCopy": "Copy URL",
+    "webhookCopied": "URL copied",
+    "webhookCopyFailed": "Clipboard blocked — copy the link manually",
+    "webhookRegenerate": "Regenerate token",
+    "webhookRegenerateTitle": "Regenerate webhook token",
+    "webhookRegenerateDescription": "The current URL stops working immediately. Systems using the old URL will need to be updated.",
+    "webhookRegenerated": "New token generated",
+    "webhookRegenerateFailed": "Failed to regenerate token",
+    "webhookKeyHint": "Use a deterministic X-Idempotency-Key per trigger (e.g. class-2026-07-23-1830) — the same key within 24h will not fire again.",
+    "webhookDryHint": "Append ?dry=1 to the URL to preview the audience count without sending (dry-run does not consume the key)."
   },
   "new": {
     "stepTemplate": "Template",
@@ -81,6 +93,11 @@
     "notSignedIn": "Not signed in.",
     "noAccountLinked": "Your profile is not linked to an account.",
     "draftSaveError": "Failed to save draft: {{message}}",
-    "draftSaved": "Draft saved"
+    "draftSaved": "Draft saved",
+    "payloadNeedsWebhook": "There are payload variables — use \"Webhook trigger\" mode.",
+    "webhookAudienceUnsupported": "The webhook only supports \"All\" or \"Tags\" audiences.",
+    "webhookNeedsConnection": "Select an active WhatsApp connection before creating the webhook.",
+    "webhookCreateFailed": "Failed to create webhook",
+    "webhookCreated": "Webhook created"
   }
 }

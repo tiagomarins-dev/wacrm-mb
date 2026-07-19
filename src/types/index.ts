@@ -660,7 +660,14 @@ export interface Deal {
   assignee?: Profile;
 }
 
-export type BroadcastStatus = 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+export type BroadcastStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'sending'
+  | 'sent'
+  | 'failed'
+  /** Blueprint disparável por POST externo (mig 075) — molde, nunca envia direto. */
+  | 'webhook';
 export type RecipientStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'replied' | 'failed';
 
 export interface Broadcast {
@@ -680,6 +687,12 @@ export interface Broadcast {
   replied_count: number;
   failed_count: number;
   created_at: string;
+  /** Conexão dona do broadcast (multi-número, 033). */
+  connection_id?: string | null;
+  /** Token público do blueprint webhook (bh_ + 32 hex, mig 075). */
+  webhook_token?: string | null;
+  /** Clone criado por webhook aponta pro blueprint de origem (mig 075). */
+  source_blueprint_id?: string | null;
 }
 
 export interface BroadcastRecipient {

@@ -40,6 +40,18 @@ export async function GET(request: Request) {
   }
 
   const admin = supabaseAdmin()
+
+  // TTL da idempotência de webhook-broadcast (mig 075): eventos > 24h saem —
+  // depois disso, a mesma X-Idempotency-Key volta a disparar (aceito por
+  // design). Antes do claim: o early-return de "nada agendado" não pode
+  // pular a limpeza. Best-effort: falha só loga.
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString()
+  const { error: ttlErr } = await admin
+    .from('broadcast_webhook_events')
+    .delete()
+    .lt('created_at', cutoff)
+  if (ttlErr) console.error('[broadcasts cron] webhook events TTL failed:', ttlErr)
+
   const nowIso = new Date().toISOString()
 
   // 1) Claim das agendadas vencidas — flip 'scheduled' → 'sending' por linha,

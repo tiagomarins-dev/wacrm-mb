@@ -48,6 +48,10 @@
     "staticValue": "Valor fixo",
     "contactField": "Campo do contato",
     "customField": "Campo personalizado",
+    "payloadKey": "Payload do webhook",
+    "payloadKeyLabel": "Chave do payload",
+    "payloadPlaceholder": "link_aula",
+    "payloadHint": "Preenchida pelo sistema que chama o webhook no momento do disparo.",
     "valuePlaceholder": "Digite o valor...",
     "selectFieldPlaceholder": "Selecionar campo...",
     "noCustomFieldsPlaceholder": "Nenhum campo personalizado",
@@ -95,7 +99,14 @@
     "confirmSendDescMiddle": "contatos usando o template",
     "confirmSendDescSuffix": ". Esta ação não pode ser desfeita.",
     "confirmAndSchedule": "Confirmar e agendar",
-    "confirmAndSend": "Confirmar e enviar"
+    "confirmAndSend": "Confirmar e enviar",
+    "webhookMode": "Disparo por webhook",
+    "webhookModeHint": "Cria uma URL única: cada POST dispara este broadcast com a audiência resolvida na hora e as variáveis de payload vindas do request.",
+    "payloadNeedsWebhook": "Há variáveis de payload — elas só funcionam no modo \"Disparo por webhook\".",
+    "createWebhook": "Criar webhook",
+    "confirmWebhookTitle": "Criar webhook de disparo",
+    "confirmWebhookDesc": "Será criada uma URL pública única para disparar este broadcast com o template {{template}}. Nada é enviado agora — o envio acontece a cada POST na URL.",
+    "confirmAndCreateWebhook": "Confirmar e criar"
   },
   "common": {
     "back": "Voltar",
