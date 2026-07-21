@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { resolveStatus, type ResolvedStatus } from "@/lib/inbox/conversation-statuses";
 import type { Conversation } from "@/types";
-import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen, Star } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
-import { classifyTab, sortByTab, countByTab, effectiveDir, type QueueTab } from "@/lib/inbox/queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst, type QueueTab } from "@/lib/inbox/queue";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { useTranslation } from "react-i18next";
@@ -41,6 +41,10 @@ interface ConversationListProps {
   resyncToken?: number;
   /** Marca uma conversa como não lida (via kebab da linha). */
   onMarkUnread: (id: string) => void;
+  /** Favoritos do usuário (076) — pina na aba "Minhas". */
+  favorites: ReadonlySet<string>;
+  /** Favorita/desfavorita via kebab da linha. */
+  onToggleFavorite: (id: string) => void;
 }
 
 
@@ -77,6 +81,8 @@ export function ConversationList({
   onConversationsLoaded,
   resyncToken = 0,
   onMarkUnread,
+  favorites,
+  onToggleFavorite,
 }: ConversationListProps) {
   const { t } = useTranslation("inbox");
   const { user, canManageMembers, accountId } = useAuth();
@@ -259,7 +265,7 @@ export function ConversationList({
   const filtered = useMemo(() => {
     // Classifica pela aba ativa (fila/minhas/sla/ia/geral), aplica a busca e ordena.
     let result = conversations.filter((c) =>
-      classifyTab(c, effectiveTab, user?.id, now, aiAgentIds)
+      classifyTab(c, effectiveTab, user?.id, now, aiAgentIds, favorites)
     );
 
     if (search.trim()) {
@@ -273,13 +279,15 @@ export function ConversationList({
     }
 
     // sortDir (override do usuário) vence; null = default por aba.
-    return sortByTab(result, effectiveTab, sortDir ?? undefined);
-  }, [conversations, effectiveTab, search, now, user?.id, aiAgentIds, sortDir]);
+    const sorted = sortByTab(result, effectiveTab, sortDir ?? undefined);
+    // Favoritas no topo — só na aba "minhas" (decisão de produto, 076).
+    return effectiveTab === "minhas" ? pinFavoritesFirst(sorted, favorites) : sorted;
+  }, [conversations, effectiveTab, search, now, user?.id, aiAgentIds, sortDir, favorites]);
 
   // Contadores de cada aba (badges em todas).
   const counts = useMemo(
-    () => countByTab(conversations, user?.id, now, aiAgentIds),
-    [conversations, user?.id, now, aiAgentIds]
+    () => countByTab(conversations, user?.id, now, aiAgentIds, favorites),
+    [conversations, user?.id, now, aiAgentIds, favorites]
   );
 
   // Status da conta (system+custom) — buscados 1× e repassados a cada linha
@@ -428,6 +436,8 @@ export function ConversationList({
                 onSelect={handleSelect}
                 statuses={statuses}
                 onMarkUnread={onMarkUnread}
+                isFavorite={favorites.has(conv.id)}
+                onToggleFavorite={onToggleFavorite}
               />
             ))}
           </div>
@@ -443,6 +453,9 @@ interface ConversationItemProps {
   onSelect: (conversation: Conversation) => void;
   statuses: ResolvedStatus[];
   onMarkUnread: (id: string) => void;
+  /** Favoritada pelo usuário (076) — estrela na linha + label do kebab. */
+  isFavorite: boolean;
+  onToggleFavorite: (id: string) => void;
 }
 
 function ConversationItem({
@@ -451,6 +464,8 @@ function ConversationItem({
   onSelect,
   statuses,
   onMarkUnread,
+  isFavorite,
+  onToggleFavorite,
 }: ConversationItemProps) {
   // Idioma ativo da UI: 'pt-BR' usa o locale ptBR; 'en' usa o default (en-US).
   const { t, i18n } = useTranslation("inbox");
@@ -512,6 +527,10 @@ function ConversationItem({
             {conversation.last_message_text || "No messages yet"}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* Estrela de favorito (076) */}
+            {isFavorite && (
+              <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
+            )}
             {conversation.unread_count > 0 && (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
                 {conversation.unread_count}
@@ -551,6 +570,13 @@ function ConversationItem({
             className="text-sm"
           >
             <MailOpen className="mr-2 h-3.5 w-3.5" /> {t("markUnread")}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => onToggleFavorite(conversation.id)}
+            className="text-sm"
+          >
+            <Star className="mr-2 h-3.5 w-3.5" />{" "}
+            {t(isFavorite ? "unfavorite" : "favorite")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

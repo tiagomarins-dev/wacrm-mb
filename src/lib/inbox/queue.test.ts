@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTab, sortByTab, countByTab, effectiveDir } from "./queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst } from "./queue";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import type { Conversation } from "@/types";
 
@@ -189,5 +189,65 @@ describe("closed — sai das abas de trabalho, mantém geral/ia", () => {
     const c = countByTab([conv({ assigned_agent_id: undefined, status: "closed" })], USER, NOW);
     expect(c.fila).toBe(0);
     expect(c.geral).toBe(1);
+  });
+});
+
+// Favorito (076): pina na aba "minhas" mesmo desatribuída/de outro/fechada.
+describe("classifyTab — favoritos (076)", () => {
+  const FAV = new Set(["c"]);
+  const NO_AI = new Set<string>();
+
+  it("favoritada entra na minhas: desatribuída, de outro user e fechada", () => {
+    expect(classifyTab(conv({ assigned_agent_id: undefined }), "minhas", USER, NOW, NO_AI, FAV)).toBe(true);
+    expect(classifyTab(conv({ assigned_agent_id: "outro" }), "minhas", USER, NOW, NO_AI, FAV)).toBe(true);
+    expect(classifyTab(conv({ assigned_agent_id: undefined, status: "closed" }), "minhas", USER, NOW, NO_AI, FAV)).toBe(true);
+  });
+
+  it("favoritada + atribuída a mim continua entrando (mesma linha, sem duplicar)", () => {
+    expect(classifyTab(conv({ assigned_agent_id: USER }), "minhas", USER, NOW, NO_AI, FAV)).toBe(true);
+  });
+
+  it("não-favoritada fechada + minha NÃO entra (regra atual preservada)", () => {
+    expect(classifyTab(conv({ assigned_agent_id: USER, status: "closed" }), "minhas", USER, NOW)).toBe(false);
+  });
+
+  it("userId null → false mesmo favoritada", () => {
+    expect(classifyTab(conv({}), "minhas", null, NOW, NO_AI, FAV)).toBe(false);
+  });
+
+  it("fechada favoritada NÃO entra na fila nem no sla", () => {
+    const closedFav = conv({ assigned_agent_id: undefined, status: "closed" });
+    expect(classifyTab(closedFav, "fila", USER, NOW, NO_AI, FAV)).toBe(false);
+    expect(classifyTab(closedFav, "sla", USER, NOW, NO_AI, FAV)).toBe(false);
+  });
+
+  it("countByTab conta favoritada desatribuída/fechada na minhas", () => {
+    const list = [
+      conv({ id: "c", assigned_agent_id: undefined, status: "closed" }),
+      conv({ id: "outra", assigned_agent_id: USER }),
+    ];
+    const counts = countByTab(list, USER, NOW, NO_AI, FAV);
+    expect(counts.minhas).toBe(2);
+    expect(counts.fila).toBe(0);
+  });
+});
+
+describe("pinFavoritesFirst", () => {
+  const mk = (id: string) => conv({ id });
+
+  it("favoritas sobem preservando a ordem relativa dos dois grupos", () => {
+    const list = [mk("a"), mk("b"), mk("c"), mk("d")];
+    const out = pinFavoritesFirst(list, new Set(["b", "d"]));
+    expect(out.map((c) => c.id)).toEqual(["b", "d", "a", "c"]);
+  });
+
+  it("Set vazio devolve a lista idêntica (mesma referência)", () => {
+    const list = [mk("a"), mk("b")];
+    expect(pinFavoritesFirst(list, new Set())).toBe(list);
+  });
+
+  it("id favoritado ausente da lista é no-op", () => {
+    const list = [mk("a")];
+    expect(pinFavoritesFirst(list, new Set(["zzz"])).map((c) => c.id)).toEqual(["a"]);
   });
 });

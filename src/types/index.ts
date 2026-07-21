@@ -420,6 +420,15 @@ export interface Conversation {
   report_taxonomy_version?: number | null;
 }
 
+/** Favorito de conversa por usuário (076) — pina na aba "Minhas" do inbox. */
+export interface ConversationFavorite {
+  id: string;
+  account_id: string;
+  conversation_id: string;
+  user_id: string;
+  created_at: string;
+}
+
 // Evento interno de conversa (migs 048/069). Gravado por trigger quando
 // assigned_agent_id ou status mudam; atribuições aparecem na thread,
 // status_changed é só telemetria (relatórios). Nunca enviado ao cliente.

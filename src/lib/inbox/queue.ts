@@ -16,6 +16,10 @@ const SLA_MS = SLA_THRESHOLD_MIN * 60_000;
 // compatibilidade com chamadas de 4 args — ver classifyTab abaixo).
 const NO_AI_IDS: ReadonlySet<string> = new Set();
 
+// Set vazio reaproveitado quando o caller não passa favoritos (mantém
+// compatibilidade com chamadas de 4/5 args).
+const NO_FAVORITES: ReadonlySet<string> = new Set();
+
 // Uma conversa pertence à aba? `userId` = id do usuário logado (Minhas).
 // `aiAgentIds` = ids tidos como "IA" (bot genérico + perfis), montados pela page
 // (admin+). Opcional p/ não quebrar chamadas legadas de 4 args.
@@ -25,6 +29,7 @@ export function classifyTab(
   userId: string | null | undefined,
   now: number,
   aiAgentIds: ReadonlySet<string> = NO_AI_IDS,
+  favorites: ReadonlySet<string> = NO_FAVORITES,
 ): boolean {
   const assigned = conv.assigned_agent_id ?? null;
   // "Finalizada" (status system `closed`, 062) sai das abas de trabalho —
@@ -35,7 +40,9 @@ export function classifyTab(
       // Sem atendente (nem humano nem bot) E não finalizada.
       return assigned === null && !closed;
     case "minhas":
-      return !!userId && assigned === userId && !closed;
+      // Favorito (076) pina a conversa aqui mesmo desatribuída/de outro/
+      // fechada — visibilidade, não reserva (a RPC 045 segue soltando).
+      return !!userId && (favorites.has(conv.id) || (assigned === userId && !closed));
     case "sla": {
       // Atribuída a HUMANO (não bot), última msg do cliente, parada > 30min.
       // Finalizada nunca é violação de SLA.
@@ -88,14 +95,30 @@ export function countByTab(
   userId: string | null | undefined,
   now: number,
   aiAgentIds: ReadonlySet<string> = NO_AI_IDS,
+  favorites: ReadonlySet<string> = NO_FAVORITES,
 ): Record<QueueTab, number> {
   const acc: Record<QueueTab, number> = { fila: 0, minhas: 0, sla: 0, ia: 0, geral: 0 };
   for (const c of list) {
     if (classifyTab(c, "fila", userId, now)) acc.fila++;
-    if (classifyTab(c, "minhas", userId, now)) acc.minhas++;
+    // aiAgentIds explícito só pra posicionar o favorites no 6º arg
+    if (classifyTab(c, "minhas", userId, now, NO_AI_IDS, favorites)) acc.minhas++;
     if (classifyTab(c, "sla", userId, now)) acc.sla++;
     if (classifyTab(c, "ia", userId, now, aiAgentIds)) acc.ia++;
     acc.geral++;
   }
   return acc;
+}
+
+// Favoritas primeiro, preservando a ordem relativa dos dois grupos
+// (partition estável). Aplicado pelo caller SÓ na aba "minhas", depois
+// do sortByTab — favoritas no topo, demais por last_message_at.
+export function pinFavoritesFirst(
+  list: Conversation[],
+  favorites: ReadonlySet<string>,
+): Conversation[] {
+  if (favorites.size === 0) return list;
+  const pinned: Conversation[] = [];
+  const rest: Conversation[] = [];
+  for (const c of list) (favorites.has(c.id) ? pinned : rest).push(c);
+  return [...pinned, ...rest];
 }

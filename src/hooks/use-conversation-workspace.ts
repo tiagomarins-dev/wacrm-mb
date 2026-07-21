@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useRealtime } from "@/hooks/use-realtime";
+import { useAuth } from "@/hooks/use-auth";
 import type { Conversation, Message, Contact } from "@/types";
 
 // Chave device-scoped do estado do painel de contato no desktop (espelha o inbox).
@@ -51,6 +52,9 @@ export function useConversationWorkspace({
   const [contactMobileOpen, setContactMobileOpen] = useState(false);
   // Painel destacado num modal full-screen (desktop). Um por vez.
   const [expanded, setExpanded] = useState<"thread" | "contact" | null>(null);
+  // Favoritos do usuário (076) — ids de conversa pinados na aba "Minhas".
+  const { user, accountId } = useAuth();
+  const [favorites, setFavorites] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
     try {
@@ -239,6 +243,71 @@ export function useConversationWorkspace({
     onClose?.();
   }, [onClose]);
 
+  // Carrega os favoritos do usuário (076). resyncToken nas deps = rede de
+  // segurança cross-device (reconnect/visibility recarregam).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!user?.id) {
+        if (!cancelled) setFavorites(new Set());
+        return;
+      }
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("conversation_favorites")
+        .select("conversation_id")
+        .eq("user_id", user.id);
+      if (cancelled) return;
+      if (error) {
+        // Supabase errors têm props não-enumeráveis — logar campos explícitos.
+        console.error("Failed to fetch conversation favorites:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        return;
+      }
+      setFavorites(new Set((data ?? []).map((r) => r.conversation_id as string)));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, resyncToken]);
+
+  // Favorita/desfavorita (076) — otimista com rollback. Guard de accountId:
+  // o profile pode ainda não ter carregado (use-auth derived) e o insert
+  // violaria NOT NULL.
+  const handleToggleFavorite = useCallback(
+    async (id: string) => {
+      if (!user?.id || !accountId) return;
+      const snapshot = favorites;
+      const wasFavorite = favorites.has(id);
+      const next = new Set(favorites);
+      if (wasFavorite) next.delete(id);
+      else next.add(id);
+      setFavorites(next);
+
+      const supabase = createClient();
+      const { error } = wasFavorite
+        ? await supabase
+            .from("conversation_favorites")
+            .delete()
+            .match({ conversation_id: id, user_id: user.id })
+        : await supabase
+            .from("conversation_favorites")
+            .upsert(
+              { account_id: accountId, conversation_id: id, user_id: user.id },
+              { onConflict: "user_id,conversation_id", ignoreDuplicates: true },
+            );
+      if (error) {
+        toast.error("Falha ao atualizar favorito");
+        setFavorites(snapshot);
+      }
+    },
+    [user?.id, accountId, favorites],
+  );
+
   // Marca a conversa como não lida (unread_count=1) + rollback local no erro.
   const handleMarkUnread = useCallback(
     async (id: string) => {
@@ -319,6 +388,8 @@ export function useConversationWorkspace({
     onAssignChange: handleAssignChange,
     onBack: close,
     onMarkUnread: handleMarkUnreadFromThread,
+    isFavorite: activeConversation ? favorites.has(activeConversation.id) : false,
+    onToggleFavorite: handleToggleFavorite,
     resyncToken,
     onRefresh: handleManualRefresh,
     contactPanelOpen,
@@ -352,6 +423,8 @@ export function useConversationWorkspace({
     select,
     close,
     handleMarkUnread,
+    favorites,
+    handleToggleFavorite,
     // props montadas
     threadProps,
     sidebarProps,
