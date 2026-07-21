@@ -181,6 +181,8 @@ export default function InboxPage() {
             onConversationsLoaded={handleConversationsLoaded}
             resyncToken={ws.resyncToken}
             onMarkUnread={ws.handleMarkUnread}
+            favorites={ws.favorites}
+            onToggleFavorite={ws.handleToggleFavorite}
           />
         </div>
 

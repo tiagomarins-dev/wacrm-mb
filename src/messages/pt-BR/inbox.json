@@ -31,6 +31,8 @@
   "note": "Nota",
   "notes": "Notas",
   "markUnread": "Marcar como não lida",
+  "favorite": "Favoritar",
+  "unfavorite": "Remover dos favoritos",
   "moreActions": "Mais ações",
   "addEmail": "Adicionar email",
   "addTag": "Adicionar tag",

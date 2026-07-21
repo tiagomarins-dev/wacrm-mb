@@ -34,6 +34,7 @@ import {
   Sparkles,
   MoreVertical,
   MailOpen,
+  Star,
   ChevronRight,
   Maximize2,
   Minimize2,
@@ -106,6 +107,10 @@ interface MessageThreadProps {
   backAlwaysVisible?: boolean;
   /** Marca a conversa como não lida (o pai deseleciona antes de gravar). */
   onMarkUnread?: (id: string) => void;
+  /** Conversa favoritada pelo usuário (076) — estrela no toolbar. */
+  isFavorite?: boolean;
+  /** Favorita/desfavorita — NÃO fecha a conversa (diferente do markUnread). */
+  onToggleFavorite?: (id: string) => void;
   /**
    * Increment to force the messages + reactions fetch effects to refire.
    * Parent bumps this on realtime reconnect / tab visibility → visible
@@ -193,6 +198,8 @@ export function MessageThread({
   onBack,
   backAlwaysVisible = false,
   onMarkUnread,
+  isFavorite = false,
+  onToggleFavorite,
   resyncToken = 0,
   onRefresh,
   contactPanelOpen,
@@ -1260,6 +1267,23 @@ export function MessageThread({
           >
             <MailOpen className="h-3.5 w-3.5" />
           </button>
+
+          {/* Favoritar (076) — pina na aba "Minhas"; não fecha a conversa. */}
+          <button
+            type="button"
+            onClick={() => onToggleFavorite?.(conversation.id)}
+            aria-label={t(isFavorite ? "unfavorite" : "favorite")}
+            title={t(isFavorite ? "unfavorite" : "favorite")}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Star
+              className={
+                isFavorite
+                  ? "h-3.5 w-3.5 fill-amber-400 text-amber-400"
+                  : "h-3.5 w-3.5"
+              }
+            />
+          </button>
           </div>
 
           {/* Kebab overflow — só no mobile (sm:hidden). Junta as ações
@@ -1289,6 +1313,12 @@ export function MessageThread({
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onMarkUnread?.(conversation.id)} className="text-sm">
                 <MailOpen className="mr-2 h-3.5 w-3.5" /> {t("markUnread")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => onToggleFavorite?.(conversation.id)}
+                className="text-sm"
+              >
+                <Star className="mr-2 h-3.5 w-3.5" /> {t(isFavorite ? "unfavorite" : "favorite")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -31,6 +31,8 @@
   "note": "Note",
   "notes": "Notes",
   "markUnread": "Mark as unread",
+  "favorite": "Add to favorites",
+  "unfavorite": "Remove from favorites",
   "moreActions": "More actions",
   "addEmail": "Add email",
   "addTag": "Add tag",
