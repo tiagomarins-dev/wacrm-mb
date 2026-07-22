@@ -58,5 +58,14 @@
   "loadFailed": "Failed to load data.",
   "noBusinessHours": "No business hours set for this connection — times count 24/7. Configure in Settings → Business hours.",
   "aiAgent": "AI agent",
-  "radarHint": "Current state — independent of the selected period"
+  "radarHint": "Current state — independent of the selected period",
+  "hourlyTitle": "Activity by hour",
+  "hourlyHint": "Messages sent by human agents, by hour of day (Brasília time)",
+  "typeText": "Text",
+  "typeImage": "Image",
+  "typeAudio": "Audio",
+  "typeVideo": "Video",
+  "typeDocument": "Document",
+  "typeTemplate": "Template",
+  "typeOther": "Other"
 }

@@ -13,6 +13,15 @@ and polish.
 
 ### Added
 
+- **Pulse: "Activity by hour" histogram.** New owner-only section on
+  /pulse showing messages sent by human agents per hour of day (0-23,
+  Brasília time) within the filtered period, stacked by message type
+  (text, image, audio, video, document, template, other). Inherits the
+  page's existing period, agent and connection filters — selecting an
+  agent in the dropdown drills the histogram down to that person.
+  Backed by the new `pulse_agent_hourly` RPC
+  (`supabase/migrations/077_pulse_agent_hourly.sql`, security definer,
+  owner-only guard, 400-day clamp).
 - **Webhook trigger for automations.** A new "Webhook (HTTP)" trigger
   gives each automation a unique public URL
   (`POST /api/automations/webhook/<token>`) so external systems (forms,

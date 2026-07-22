@@ -58,5 +58,14 @@
   "loadFailed": "Falha ao carregar os dados.",
   "noBusinessHours": "Sem horário de atendimento configurado nesta conexão — os tempos contam 24/7. Configure em Configurações → Horário de atendimento.",
   "aiAgent": "Agente de IA",
-  "radarHint": "Situação atual — independe do período selecionado"
+  "radarHint": "Situação atual — independe do período selecionado",
+  "hourlyTitle": "Atividade por hora",
+  "hourlyHint": "Mensagens enviadas por atendentes humanos, por hora do dia (horário de Brasília)",
+  "typeText": "Texto",
+  "typeImage": "Imagem",
+  "typeAudio": "Áudio",
+  "typeVideo": "Vídeo",
+  "typeDocument": "Documento",
+  "typeTemplate": "Template",
+  "typeOther": "Outros"
 }
