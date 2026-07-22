@@ -48,6 +48,10 @@
     "staticValue": "Static Value",
     "contactField": "Contact Field",
     "customField": "Custom Field",
+    "payloadKey": "Webhook payload",
+    "payloadKeyLabel": "Payload key",
+    "payloadPlaceholder": "class_link",
+    "payloadHint": "Filled by the system calling the webhook at trigger time.",
     "valuePlaceholder": "Enter value...",
     "selectFieldPlaceholder": "Select field...",
     "noCustomFieldsPlaceholder": "No custom fields",
@@ -95,7 +99,14 @@
     "confirmSendDescMiddle": "contacts using the",
     "confirmSendDescSuffix": "template. This action cannot be undone.",
     "confirmAndSchedule": "Confirm & Schedule",
-    "confirmAndSend": "Confirm & Send"
+    "confirmAndSend": "Confirm & Send",
+    "webhookMode": "Webhook trigger",
+    "webhookModeHint": "Creates a unique URL: each POST fires this broadcast with the audience resolved at trigger time and payload variables from the request.",
+    "payloadNeedsWebhook": "There are payload variables — they only work in \"Webhook trigger\" mode.",
+    "createWebhook": "Create webhook",
+    "confirmWebhookTitle": "Create trigger webhook",
+    "confirmWebhookDesc": "A unique public URL will be created to fire this broadcast with the {{template}} template. Nothing is sent now — sending happens on each POST to the URL.",
+    "confirmAndCreateWebhook": "Confirm & create"
   },
   "common": {
     "back": "Back",

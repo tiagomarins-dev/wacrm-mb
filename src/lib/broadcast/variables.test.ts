@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveVariables, type VariableMapping } from './variables'
+import {
+  collectPayloadKeys,
+  materializePayloadVariables,
+  resolveVariables,
+  type VariableMapping,
+} from './variables'
 import type { Contact } from '@/types'
 
 const contact = {
@@ -49,5 +54,59 @@ describe('resolveVariables', () => {
       'ana@example.com',
       'Acme',
     ])
+  })
+})
+
+// Helpers do webhook-broadcast (blueprint+clone)
+describe('collectPayloadKeys', () => {
+  it('coleta chaves payload dedupadas, ignorando outros tipos e value vazio', () => {
+    expect(
+      collectPayloadKeys({
+        '1': { type: 'payload', value: 'link_aula' },
+        '2': { type: 'static', value: 'x' },
+        '3': { type: 'payload', value: 'link_aula' },
+        '4': { type: 'payload', value: '' },
+        '5': { type: 'field', value: 'name' },
+      }),
+    ).toEqual(['link_aula'])
+    expect(collectPayloadKeys({})).toEqual([])
+  })
+})
+
+describe('materializePayloadVariables', () => {
+  it('converte payload→static com String() e preserva os demais tipos', () => {
+    const input = {
+      '1': { type: 'payload', value: 'link_aula' },
+      '2': { type: 'static', value: 'fixo' },
+      '3': { type: 'field', value: 'name' },
+      '4': { type: 'payload', value: 'vagas' },
+    } as const
+    const out = materializePayloadVariables(
+      input as unknown as Record<string, VariableMapping>,
+      { link_aula: 'https://aula.com/x', vagas: 12 },
+    )
+    expect(out['1']).toEqual({ type: 'static', value: 'https://aula.com/x' })
+    expect(out['2']).toEqual({ type: 'static', value: 'fixo' })
+    expect(out['3']).toEqual({ type: 'field', value: 'name' })
+    expect(out['4']).toEqual({ type: 'static', value: '12' })
+  })
+
+  it('não muta o input e usa "" pra chave ausente', () => {
+    const input: Record<string, VariableMapping> = {
+      '1': { type: 'payload', value: 'faltando' },
+    }
+    const out = materializePayloadVariables(input, {})
+    expect(out['1']).toEqual({ type: 'static', value: '' })
+    expect(input['1']).toEqual({ type: 'payload', value: 'faltando' })
+  })
+})
+
+describe('resolveVariables — defensivo payload', () => {
+  it('payload não materializada resolve como "" (nunca vaza placeholder)', () => {
+    const params = resolveVariables(
+      { '1': { type: 'payload', value: 'link_aula' } },
+      { id: 'c1', name: 'X' } as never,
+    )
+    expect(params).toEqual([''])
   })
 })

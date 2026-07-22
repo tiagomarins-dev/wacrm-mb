@@ -56,6 +56,11 @@ export const broadcastStatusConfig: Record<BroadcastStatus, StatusDisplay> = {
     labelKey: "statusFailed",
     classes: "bg-red-500/10 text-red-400 border-red-500/20",
   },
+  webhook: {
+    label: "Webhook",
+    labelKey: "statusWebhook",
+    classes: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+  },
 };
 
 export const recipientStatusConfig: Record<RecipientStatus, StatusDisplay> = {

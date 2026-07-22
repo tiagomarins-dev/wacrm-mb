@@ -149,6 +149,10 @@ export const RATE_LIMITS = {
    *  também frear enumeração de tokens — key por token criaria um bucket
    *  novo a cada tentativa e nunca estouraria. */
   automationWebhook: { limit: 60, windowMs: 60_000 },
+  /** Webhook público de broadcast (por IP). Disparo de turma é evento
+   *  raro (aulas, campanhas) — 10/min limita o dano de flood/replay
+   *  sem atrapalhar uso real. */
+  broadcastWebhook: { limit: 10, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't

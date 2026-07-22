@@ -21,6 +21,7 @@
   "statusFailed": "Falhou",
   "statusPending": "Pendente",
   "statusCanceled": "Cancelado",
+  "statusWebhook": "Webhook",
   "detail": {
     "loadError": "Falha ao carregar o disparo",
     "notFound": "Disparo não encontrado",
@@ -67,7 +68,18 @@
     "csvDeliveredAt": "Entregue em",
     "csvReadAt": "Lida em",
     "csvRepliedAt": "Respondida em",
-    "csvError": "Erro"
+    "csvError": "Erro",
+    "webhookCardTitle": "URL do webhook",
+    "webhookCopy": "Copiar URL",
+    "webhookCopied": "URL copiada",
+    "webhookCopyFailed": "Não foi possível copiar — copie manualmente",
+    "webhookRegenerate": "Regenerar token",
+    "webhookRegenerateTitle": "Regenerar token do webhook",
+    "webhookRegenerateDescription": "A URL atual deixa de funcionar imediatamente. Sistemas que usam a URL antiga precisarão ser atualizados.",
+    "webhookRegenerated": "Novo token gerado",
+    "webhookRegenerateFailed": "Falha ao regenerar o token",
+    "webhookKeyHint": "Use uma X-Idempotency-Key determinística por disparo (ex: aula-2026-07-23-1830) — a mesma chave em 24h não dispara de novo.",
+    "webhookDryHint": "Adicione ?dry=1 na URL para ver a contagem da audiência sem disparar (o dry-run não consome a chave)."
   },
   "new": {
     "stepTemplate": "Template",
@@ -81,6 +93,11 @@
     "notSignedIn": "Você não está autenticado.",
     "noAccountLinked": "Seu perfil não está vinculado a uma conta.",
     "draftSaveError": "Falha ao salvar rascunho: {{message}}",
-    "draftSaved": "Rascunho salvo"
+    "draftSaved": "Rascunho salvo",
+    "payloadNeedsWebhook": "Há variáveis de payload — use o modo \"Disparo por webhook\".",
+    "webhookAudienceUnsupported": "O webhook só suporta audiência \"Todos\" ou \"Tags\".",
+    "webhookNeedsConnection": "Selecione uma conexão WhatsApp ativa antes de criar o webhook.",
+    "webhookCreateFailed": "Falha ao criar o webhook",
+    "webhookCreated": "Webhook criado"
   }
 }

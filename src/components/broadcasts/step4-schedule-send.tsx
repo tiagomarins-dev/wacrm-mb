@@ -17,7 +17,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { ArrowLeft, Send, Loader2, Users, Save, CalendarClock } from 'lucide-react';
+import { ArrowLeft, Send, Loader2, Users, Save, CalendarClock, Webhook } from 'lucide-react';
 
 interface AudienceConfig {
   type: string;
@@ -32,6 +32,10 @@ interface Step4Props {
   audience: AudienceConfig;
   onSend: () => void;
   onSaveDraft?: () => void;
+  /** Cria um blueprint webhook (mig 075) em vez de enviar/agendar. */
+  onCreateWebhook?: () => void;
+  /** Alguma variável do step3 é do tipo 'payload' — trava now/schedule. */
+  hasPayloadVars?: boolean;
   onBack: () => void;
   isProcessing: boolean;
   progress: number;
@@ -47,6 +51,8 @@ export function Step4ScheduleSend({
   audience,
   onSend,
   onSaveDraft,
+  onCreateWebhook,
+  hasPayloadVars,
   onBack,
   isProcessing,
   progress,
@@ -60,13 +66,18 @@ export function Step4ScheduleSend({
   const [estimatedReach, setEstimatedReach] = useState<number>(0);
   const [loadingReach, setLoadingReach] = useState(true);
   // Modo de envio + valor do input datetime-local (hora local).
-  const [timing, setTiming] = useState<'now' | 'schedule'>('now');
+  const [timing, setTiming] = useState<'now' | 'schedule' | 'webhook'>(
+    hasPayloadVars ? 'webhook' : 'now',
+  );
   const [localDt, setLocalDt] = useState('');
 
   // Agendamento válido = modo schedule + data futura preenchida.
   const scheduleValid =
     timing === 'schedule' && !!localDt && isFuture(new Date(localDt));
   const scheduling = timing === 'schedule';
+  const webhookMode = timing === 'webhook';
+  // Variável de payload só resolve no disparo do webhook — trava now/schedule.
+  const payloadBlocked = !webhookMode && !!hasPayloadVars;
 
   // Converte o input local em ISO e propaga (null se inválido).
   function handleDtChange(value: string) {
@@ -75,9 +86,9 @@ export function Step4ScheduleSend({
     onScheduleChange(valid ? new Date(value).toISOString() : null);
   }
 
-  function selectTiming(mode: 'now' | 'schedule') {
+  function selectTiming(mode: 'now' | 'schedule' | 'webhook') {
     setTiming(mode);
-    if (mode === 'now') onScheduleChange(null);
+    if (mode === 'now' || mode === 'webhook') onScheduleChange(null);
     else handleDtChange(localDt); // revalida o valor atual
   }
 
@@ -206,6 +217,22 @@ export function Step4ScheduleSend({
             <CalendarClock className="h-4 w-4" />
             {t('step4.schedule')}
           </Button>
+          {onCreateWebhook && (
+            <Button
+              type="button"
+              variant={webhookMode ? 'default' : 'outline'}
+              onClick={() => selectTiming('webhook')}
+              disabled={isProcessing}
+              className={
+                webhookMode
+                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                  : 'border-border text-muted-foreground'
+              }
+            >
+              <Webhook className="h-4 w-4" />
+              {t('step4.webhookMode')}
+            </Button>
+          )}
         </div>
         {timing === 'schedule' && (
           <div className="space-y-1.5">
@@ -220,6 +247,16 @@ export function Step4ScheduleSend({
               <p className="text-xs text-red-400">{t('step4.pickFutureDate')}</p>
             )}
           </div>
+        )}
+        {webhookMode && (
+          <p className="text-xs text-muted-foreground">
+            {t('step4.webhookModeHint')}
+          </p>
+        )}
+        {payloadBlocked && (
+          <p className="text-xs text-amber-400">
+            {t('step4.payloadNeedsWebhook')}
+          </p>
         )}
       </div>
 
@@ -272,21 +309,42 @@ export function Step4ScheduleSend({
           <DialogTrigger
             render={
               <Button
-                disabled={!name.trim() || isProcessing || (scheduling && !scheduleValid)}
+                disabled={
+                  !name.trim() ||
+                  isProcessing ||
+                  (scheduling && !scheduleValid) ||
+                  payloadBlocked
+                }
                 className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               />
             }
           >
-            {scheduling ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            {scheduling ? t('step4.scheduleBroadcast') : t('step4.sendBroadcast')}
+            {webhookMode ? (
+              <Webhook className="h-4 w-4" />
+            ) : scheduling ? (
+              <CalendarClock className="h-4 w-4" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {webhookMode
+              ? t('step4.createWebhook')
+              : scheduling
+                ? t('step4.scheduleBroadcast')
+                : t('step4.sendBroadcast')}
           </DialogTrigger>
           <DialogContent className="border-border bg-popover sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-popover-foreground">
-                {scheduling ? t('step4.confirmScheduleTitle') : t('step4.confirmBroadcastTitle')}
+                {webhookMode
+                  ? t('step4.confirmWebhookTitle')
+                  : scheduling
+                    ? t('step4.confirmScheduleTitle')
+                    : t('step4.confirmBroadcastTitle')}
               </DialogTitle>
               <DialogDescription className="text-muted-foreground">
-                {scheduling ? (
+                {webhookMode ? (
+                  <>{t('step4.confirmWebhookDesc', { template: template.name })}</>
+                ) : scheduling ? (
                   <>
                     {t('step4.confirmScheduleDescPrefix')}{' '}
                     <span className="font-medium text-popover-foreground">{estimatedReach.toLocaleString()}</span>{' '}
@@ -320,12 +378,24 @@ export function Step4ScheduleSend({
               <Button
                 onClick={() => {
                   setShowConfirm(false);
-                  onSend();
+                  // Modo webhook cria o blueprint em vez de enviar/agendar.
+                  if (webhookMode) onCreateWebhook?.();
+                  else onSend();
                 }}
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
               >
-                {scheduling ? <CalendarClock className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-                {scheduling ? t('step4.confirmAndSchedule') : t('step4.confirmAndSend')}
+                {webhookMode ? (
+                  <Webhook className="h-4 w-4" />
+                ) : scheduling ? (
+                  <CalendarClock className="h-4 w-4" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {webhookMode
+                  ? t('step4.confirmAndCreateWebhook')
+                  : scheduling
+                    ? t('step4.confirmAndSchedule')
+                    : t('step4.confirmAndSend')}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { ArrowLeft, ArrowRight, Eye, Loader2 } from 'lucide-react';
 
-type VariableType = 'static' | 'field' | 'custom_field';
+type VariableType = 'static' | 'field' | 'custom_field' | 'payload';
 
 interface VariableMapping {
   type: VariableType;
@@ -170,6 +170,9 @@ export function Step3Personalize({
           replacement = fieldMap[mapping.value] ?? placeholder;
         } else if (mapping.type === 'custom_field' && mapping.value) {
           replacement = customValues.get(mapping.value) || placeholder;
+        } else if (mapping.type === 'payload' && mapping.value) {
+          // Valor só existe na hora do disparo — mostra a chave como placeholder
+          replacement = `{${mapping.value}}`;
         }
       }
       text = text.replaceAll(placeholder, replacement);
@@ -242,13 +245,18 @@ export function Step3Personalize({
                         <SelectItem value="custom_field">
                           {t('step3.customField')}
                         </SelectItem>
+                        <SelectItem value="payload">{t('step3.payloadKey')}</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                      {mapping.type === 'static' ? t('step3.value') : t('step3.field')}
+                      {mapping.type === 'static'
+                        ? t('step3.value')
+                        : mapping.type === 'payload'
+                          ? t('step3.payloadKeyLabel')
+                          : t('step3.field')}
                     </label>
                     {mapping.type === 'static' ? (
                       <Input
@@ -259,6 +267,22 @@ export function Step3Personalize({
                         placeholder={t('step3.valuePlaceholder')}
                         className="border-border bg-muted text-foreground placeholder:text-muted-foreground"
                       />
+                    ) : mapping.type === 'payload' ? (
+                      // Nome da chave do payload do webhook (ex: link_aula) —
+                      // o valor real chega no POST e é materializado no clone.
+                      <div>
+                        <Input
+                          value={mapping.value}
+                          onChange={(e) =>
+                            updateVariable(key, { value: e.target.value.trim() })
+                          }
+                          placeholder={t('step3.payloadPlaceholder')}
+                          className="border-border bg-muted font-mono text-foreground placeholder:text-muted-foreground"
+                        />
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {t('step3.payloadHint')}
+                        </p>
+                      </div>
                     ) : mapping.type === 'field' ? (
                       <Select
                         value={mapping.value || undefined}

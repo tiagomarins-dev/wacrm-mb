@@ -49,3 +49,11 @@ describe("getRecipientStatus", () => {
     expect(getRecipientStatus("???")).toBe(recipientStatusConfig.pending);
   });
 });
+
+describe("getBroadcastStatus — webhook blueprint (mig 075)", () => {
+  it("returns the webhook entry with its own badge", () => {
+    const display = getBroadcastStatus("webhook");
+    expect(display).toBe(broadcastStatusConfig.webhook);
+    expect(display.labelKey).toBe("statusWebhook");
+  });
+});
