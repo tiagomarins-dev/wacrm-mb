@@ -1008,6 +1008,13 @@ export interface PulseTimelinePoint {
   outro: number;
 }
 
+// Linha da RPC pulse_agent_hourly (077): msgs de humanos por hora (0-23, SP) × content_type.
+export interface PulseHourlyRow {
+  hora: number;
+  content_type: string;
+  msgs: number;
+}
+
 // Retorno jsonb da RPC pulse_breakdowns.
 export interface PulseBreakdowns {
   conexoes: { name: string; total: number }[];

@@ -17,12 +17,13 @@ import { cn } from "@/lib/utils";
 import { Info } from "lucide-react";
 import { Tiles } from "@/components/pulse/tiles";
 import { Timeline } from "@/components/pulse/timeline";
+import { Hourly } from "@/components/pulse/hourly";
 import { HBars } from "@/components/pulse/hbars";
 import { Radar } from "@/components/pulse/radar";
 import { AgentsTable } from "@/components/pulse/agents-table";
 import { resolvePulseWindow, type PulsePreset } from "@/lib/reports/pulse-params";
 import type {
-  AiProfilePublic, PulseTiles as PulseTilesData, PulseTimelinePoint, PulseBreakdowns, PulseRadar, ReportMember,
+  AiProfilePublic, PulseTiles as PulseTilesData, PulseTimelinePoint, PulseHourlyRow, PulseBreakdowns, PulseRadar, ReportMember,
 } from "@/types";
 
 const PRESETS: { key: PulsePreset; labelKey: string }[] = [
@@ -56,6 +57,7 @@ export default function PulsePage() {
   const [tiles, setTiles] = useState<PulseTilesData | null>(null);
   const [prevTiles, setPrevTiles] = useState<PulseTilesData | null>(null);
   const [timeline, setTimeline] = useState<PulseTimelinePoint[]>([]);
+  const [hourly, setHourly] = useState<PulseHourlyRow[]>([]);
   const [breakdowns, setBreakdowns] = useState<PulseBreakdowns | null>(null);
   const [radar, setRadar] = useState<PulseRadar | null>(null);
   const [loading, setLoading] = useState(true);
@@ -91,12 +93,13 @@ export default function PulsePage() {
         const base = { p_agent_id: selectedAgent, p_connection_id: activeConnectionId };
         const cur = { p_from: win.from.toISOString(), p_to: win.to.toISOString(), ...base };
         const prev = { p_from: win.prevFrom.toISOString(), p_to: win.prevTo.toISOString(), ...base };
-        const [tc, tp, tl, bd, rd, bh] = await Promise.all([
+        const [tc, tp, tl, bd, rd, hr, bh] = await Promise.all([
           supabase.rpc("pulse_tiles", cur),
           supabase.rpc("pulse_tiles", prev),
           supabase.rpc("pulse_timeline", cur),
           supabase.rpc("pulse_breakdowns", cur),
           supabase.rpc("pulse_radar", base),
+          supabase.rpc("pulse_agent_hourly", cur),
           // aviso 24/7: só quando há conexão ativa sem horário configurado (reports :87-89)
           activeConnectionId
             ? supabase.from("business_hours").select("id").eq("connection_id", activeConnectionId).maybeSingle()
@@ -106,12 +109,13 @@ export default function PulsePage() {
         setTiles(((tc.data as PulseTilesData[]) ?? [])[0] ?? null);
         setPrevTiles(((tp.data as PulseTilesData[]) ?? [])[0] ?? null);
         setTimeline((tl.data as PulseTimelinePoint[]) ?? []);
+        setHourly((hr.data as PulseHourlyRow[]) ?? []);
         setBreakdowns((bd.data as PulseBreakdowns | null) ?? null);
         setRadar((rd.data as PulseRadar | null) ?? null);
         setNoHours(Boolean(activeConnectionId) && !bh.data);
       } catch {
         if (!cancelled) {
-          setTiles(null); setPrevTiles(null); setTimeline([]); setBreakdowns(null); setRadar(null);
+          setTiles(null); setPrevTiles(null); setTimeline([]); setHourly([]); setBreakdowns(null); setRadar(null);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -217,6 +221,8 @@ export default function PulsePage() {
       <Tiles current={tiles} previous={prevTiles} loading={loading} />
 
       <Timeline data={timeline} loading={loading} />
+
+      <Hourly data={hourly} loading={loading} />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <HBars
