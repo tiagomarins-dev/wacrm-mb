@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { resolveStatus, type ResolvedStatus } from "@/lib/inbox/conversation-statuses";
 import type { Conversation } from "@/types";
-import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen, Star } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen, Star, AlertTriangle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -23,6 +23,7 @@ import {
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
 import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst, type QueueTab } from "@/lib/inbox/queue";
+import { buildInboxListFilter, isInboxListTruncated, INBOX_LIST_LIMIT } from "@/lib/inbox/inbox-list-query";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import { useTranslation } from "react-i18next";
@@ -43,6 +44,8 @@ interface ConversationListProps {
   onMarkUnread: (id: string) => void;
   /** Favoritos do usuário (076) — pina na aba "Minhas". */
   favorites: ReadonlySet<string>;
+  /** Gate: enquanto true a query não pode sair (perderia as favoritas fechadas). */
+  favoritesLoading: boolean;
   /** Favorita/desfavorita via kebab da linha. */
   onToggleFavorite: (id: string) => void;
 }
@@ -82,6 +85,7 @@ export function ConversationList({
   resyncToken = 0,
   onMarkUnread,
   favorites,
+  favoritesLoading,
   onToggleFavorite,
 }: ConversationListProps) {
   const { t } = useTranslation("inbox");
@@ -112,13 +116,16 @@ export function ConversationList({
     }
   }, []);
   const [loading, setLoading] = useState(true);
+  // Truncamento da lista (null = tudo carregado). O PostgREST corta em
+  // INBOX_LIST_LIMIT sem avisar; isto alimenta o banner que torna o corte visível.
+  const [truncation, setTruncation] = useState<{ shown: number; total: number } | null>(null);
   // Ids tidos como "IA" p/ a aba Agente IA: bot genérico + perfis de IA da conta.
   // Base sempre tem o bot; perfis entram via fetch admin (effect abaixo).
   const [aiAgentIds, setAiAgentIds] = useState<ReadonlySet<string>>(
     () => new Set([AI_AGENT_USER_ID])
   );
   // Conexão ativa (multi-número, 033): só as conversas desta conexão.
-  const { activeConnectionId } = useActiveConnection();
+  const { activeConnectionId, loading: connLoading } = useActiveConnection();
   // Ticker p/ a aba SLA "virar" sozinha (sem msg/evento): recomputa a cada 30s.
   // Sem isso, Date.now() ficaria congelado no useMemo e a conversa nunca entraria
   // no SLA depois de 30min parada.
@@ -161,21 +168,56 @@ export function ConversationList({
     onConversationsLoadedRef.current = onConversationsLoaded;
   });
 
+  // Favoritas lidas por REF na hora do fetch. Nas deps do effect, cada clique na
+  // estrela refetcharia a lista inteira (~800 linhas + COUNT) — e sem trazer
+  // nada, porque só se favorita conversa já renderizada. O resyncToken segue
+  // cobrindo o caso cross-device (reconnect/visibility).
+  const favoritesRef = useRef(favorites);
   useEffect(() => {
+    favoritesRef.current = favorites;
+  });
+
+  // Loga o truncamento só quando o total MUDA: o fetch roda a cada
+  // visibilitychange e um warn por refetch viraria spam no console.
+  const loggedTruncationRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!truncation) return;
+    if (loggedTruncationRef.current === truncation.total) return;
+    loggedTruncationRef.current = truncation.total;
+    console.warn("Inbox list truncated:", {
+      shown: truncation.shown,
+      total: truncation.total,
+      limit: INBOX_LIST_LIMIT,
+    });
+  }, [truncation]);
+
+  useEffect(() => {
+    // Dois gates. Sem a conexão ativa resolvida, a query sairia sem o filtro de
+    // conexão — trazendo 1000 linhas de todas as conexões e sem usar o índice
+    // 044. Sem as favoritas resolvidas, sairia sem a cláusula que preserva as
+    // favoritas finalizadas, que sumiriam da aba "Minhas" na primeira pintura.
+    if (connLoading || favoritesLoading) return;
+
     const supabase = createClient();
     let cancelled = false;
 
     (async () => {
       let q = supabase
         .from("conversations")
-        .select("*, contact:contacts(*)")
-        // nullsFirst:false — conversas sem mensagem (last_message_at null,
-        // ex: criadas por evento de reação) afundam pro fim da lista em vez
-        // de fixar no topo (default do DESC no Postgres é NULLS FIRST).
+        // count exato do conjunto FILTRADO: é ele que revela o truncamento.
+        // Contar linhas === limit não distingue "cortado" de "exatamente no limite".
+        .select("*, contact:contacts(*)", { count: "exact" })
+        // Working set das abas renderizadas: não-finalizadas + favoritas de
+        // qualquer status. Espelha o classifyTab (queue.ts) em SQL.
+        .or(buildInboxListFilter([...favoritesRef.current]))
+        .limit(INBOX_LIST_LIMIT)
+        // nullsFirst:false decide apenas QUEM SOBREVIVE ao corte — a exibição é
+        // sempre reordenada no cliente por sortByTab. Mantido assim para a query
+        // servir-se do índice 044 (connection_id, last_message_at DESC NULLS LAST).
         .order("last_message_at", { ascending: false, nullsFirst: false });
       // Multi-número (033): filtra pela conexão ativa.
       if (activeConnectionId) q = q.eq("connection_id", activeConnectionId);
-      const { data, error } = await q;
+      const { data, error, count } = await q;
 
       if (cancelled) return;
 
@@ -191,7 +233,13 @@ export function ConversationList({
         return;
       }
 
-      onConversationsLoadedRef.current(data ?? []);
+      const rows = data ?? [];
+      setTruncation(
+        isInboxListTruncated({ rows: rows.length, total: count, limit: INBOX_LIST_LIMIT })
+          ? { shown: rows.length, total: count ?? rows.length }
+          : null,
+      );
+      onConversationsLoadedRef.current(rows);
       setLoading(false);
     })();
 
@@ -201,7 +249,7 @@ export function ConversationList({
     // `resyncToken` is included so the parent can force a refetch when
     // the realtime channel reconnects or the tab regains focus — catches
     // up on any events sent while the WS was disconnected or throttled.
-  }, [resyncToken, activeConnectionId]);
+  }, [resyncToken, activeConnectionId, connLoading, favoritesLoading]);
 
   // Carrega os ids dos perfis de IA da conta p/ classificar a aba "Agente IA".
   // Só admin/owner (canManageMembers) — a base table ai_profiles é admin-only
@@ -410,6 +458,23 @@ export function ConversationList({
           </Button>
         </div>
       </div>
+
+      {/* Truncamento da lista. Fica FORA do ScrollArea pra não sumir no scroll.
+          Sem este aviso o corte do PostgREST é invisível — e os badges das abas,
+          derivados da lista em memória (countByTab), passam a contar só o que
+          foi carregado, então o texto precisa mencioná-los. */}
+      {truncation && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex shrink-0 items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-3 py-2"
+        >
+          <AlertTriangle className="size-4 shrink-0 text-amber-400" />
+          <p className="text-xs text-amber-400">
+            {t("listTruncated", { shown: truncation.shown, total: truncation.total })}
+          </p>
+        </div>
+      )}
 
       {/* Conversation Items.
           `min-h-0` is load-bearing: a flex child defaults to

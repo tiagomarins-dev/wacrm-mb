@@ -53,8 +53,16 @@ export function useConversationWorkspace({
   // Painel destacado num modal full-screen (desktop). Um por vez.
   const [expanded, setExpanded] = useState<"thread" | "contact" | null>(null);
   // Favoritos do usuário (076) — ids de conversa pinados na aba "Minhas".
-  const { user, accountId } = useAuth();
+  const { user, accountId, loading: authLoading } = useAuth();
   const [favorites, setFavorites] = useState<ReadonlySet<string>>(() => new Set());
+  // Gate para quem filtra a lista por favoritas: enquanto true, a query sairia
+  // com o Set vazio e perderia as conversas favoritadas que estão finalizadas
+  // (queue.ts:45 pina favorito na aba "Minhas" mesmo fechado).
+  const [favoritesLoading, setFavoritesLoading] = useState(true);
+  // Só o MOUNT gateia. `resyncToken` está nas deps do effect abaixo: sem este
+  // ref, cada troca de aba do navegador voltaria o gate a true e refaria a
+  // query inteira da lista.
+  const favoritesFirstLoadRef = useRef(true);
 
   useEffect(() => {
     try {
@@ -247,9 +255,19 @@ export function useConversationWorkspace({
   // segurança cross-device (reconnect/visibility recarregam).
   useEffect(() => {
     let cancelled = false;
+    // Libera o gate uma única vez, no primeiro desfecho do mount — qualquer que
+    // ele seja (sucesso, erro ou sem user). Um gate que não abre trava a lista.
+    const settle = () => {
+      if (cancelled || !favoritesFirstLoadRef.current) return;
+      favoritesFirstLoadRef.current = false;
+      setFavoritesLoading(false);
+    };
     (async () => {
       if (!user?.id) {
         if (!cancelled) setFavorites(new Set());
+        // Sem user: só libera se a AUTH já resolveu. Liberar antes disso abriria
+        // a query com o Set vazio, porque o `user` ainda está a caminho.
+        if (!authLoading) settle();
         return;
       }
       const supabase = createClient();
@@ -266,14 +284,17 @@ export function useConversationWorkspace({
           hint: error.hint,
           code: error.code,
         });
+        // Erro também libera: lista sem favoritas é melhor que inbox travado.
+        settle();
         return;
       }
       setFavorites(new Set((data ?? []).map((r) => r.conversation_id as string)));
+      settle();
     })();
     return () => {
       cancelled = true;
     };
-  }, [user?.id, resyncToken]);
+  }, [user?.id, resyncToken, authLoading]);
 
   // Favorita/desfavorita (076) — otimista com rollback. Guard de accountId:
   // o profile pode ainda não ter carregado (use-auth derived) e o insert
@@ -424,6 +445,7 @@ export function useConversationWorkspace({
     close,
     handleMarkUnread,
     favorites,
+    favoritesLoading,
     handleToggleFavorite,
     // props montadas
     threadProps,

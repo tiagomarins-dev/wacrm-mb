@@ -78,6 +78,12 @@ describe("classifyTab", () => {
     it("sem aiAgentIds (4 args) → false", () => {
       expect(classifyTab(conv({ assigned_agent_id: AI_AGENT_USER_ID }), "ia", USER, NOW)).toBe(false);
     });
+    // Finalizada sai da aba, igual às demais abas de trabalho. É o que permite a
+    // query da lista filtrar status != closed sem esconder a lente de IA.
+    it("finalizada não entra, mesmo atribuída à IA", () => {
+      expect(classifyTab(conv({ assigned_agent_id: AI_AGENT_USER_ID, status: "closed" }), "ia", USER, NOW, AI_IDS)).toBe(false);
+      expect(classifyTab(conv({ assigned_agent_id: "perfil-ia-1", status: "closed" }), "ia", USER, NOW, AI_IDS)).toBe(false);
+    });
   });
 });
 
@@ -166,9 +172,9 @@ describe("desatribuição → volta pra fila", () => {
   });
 });
 
-// Status "Finalizada" (closed) sai das abas de trabalho (fila/minhas/sla),
-// mas permanece em geral/ia. Aberta mantém o comportamento atual (regressão).
-describe("closed — sai das abas de trabalho, mantém geral/ia", () => {
+// Status "Finalizada" (closed) sai das abas de trabalho (fila/minhas/sla/ia),
+// mas permanece em geral. Aberta mantém o comportamento atual (regressão).
+describe("closed — sai das abas de trabalho, mantém geral", () => {
   it("closed + sem dono → fora da fila; open → dentro (regressão)", () => {
     expect(classifyTab(conv({ assigned_agent_id: undefined, status: "closed" }), "fila", USER, NOW)).toBe(false);
     expect(classifyTab(conv({ assigned_agent_id: undefined, status: "open" }), "fila", USER, NOW)).toBe(true);

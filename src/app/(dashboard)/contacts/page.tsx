@@ -69,7 +69,7 @@ export default function ContactsPage() {
   const router = useRouter();
   const supabase = createClient();
   // Conexão ativa (multi-número, 033): filtra os contatos por conexão.
-  const { activeConnectionId } = useActiveConnection();
+  const { activeConnectionId, loading: connLoading } = useActiveConnection();
   const canEdit = useCan('send-messages');
   const canEditSettings = useCan('edit-settings');
 
@@ -216,7 +216,10 @@ export default function ContactsPage() {
   // Abre/cria a conversa do contato pela conexão ATIVA e navega pro inbox.
   // pendingOpenId trava a UI durante o fetch (a idempotência do banco cobre o resto).
   async function openConversation(contactId: string) {
-    if (pendingOpenId) return;
+    // connLoading: com a conexão ativa ainda indefinida, o body sairia com
+    // connection_id null e a rota cairia na conexão PRIMÁRIA da conta — a
+    // conversa nasceria no número errado e o deep-link não acharia nada.
+    if (pendingOpenId || connLoading) return;
     setPendingOpenId(contactId);
     try {
       const res = await fetch('/api/conversations/open', {
@@ -558,7 +561,7 @@ export default function ContactsPage() {
                         {/* Abrir conversa — só p/ quem pode agir (esconde de viewer) */}
                         {canEdit && (
                           <DropdownMenuItem
-                            disabled={pendingOpenId === contact.id}
+                            disabled={connLoading || pendingOpenId === contact.id}
                             onClick={(e) => {
                               e.stopPropagation();
                               openConversation(contact.id);

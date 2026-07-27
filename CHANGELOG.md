@@ -11,6 +11,28 @@ and polish.
 
 ## [Unreleased]
 
+### Fixed
+
+- **"Open conversation" now always opens the conversation screen.** The
+  inbox list fetched every conversation with no row limit, and PostgREST
+  silently caps responses at 1000 rows. Because the list is ordered by
+  `last_message_at DESC NULLS LAST`, brand-new conversations (no messages
+  yet — exactly the ones "Open conversation" creates) sorted to the very
+  end and fell outside the cap, so the `?c=` deep link searched a
+  truncated list and gave up. The deep link now fetches the conversation
+  by id, which makes it independent of the list size, and the list query
+  loads only the working set (non-closed conversations plus your
+  favourites) with an explicit limit — recovering 164 conversations that
+  were invisible in the inbox on large accounts. If the limit is ever hit
+  again, a banner now says so instead of the list silently going short.
+- **"Open conversation" could create the conversation on the wrong
+  number.** Clicking before the active connection finished loading sent a
+  null connection to the API, which fell back to the account's primary
+  number. The button is now disabled until the connection resolves.
+- **AI Agent tab no longer lists finished conversations,** matching the
+  Queue, Mine and SLA tabs. Finished conversations remain available on the
+  Conversations screen.
+
 ### Added
 
 - **Pulse: "Activity by hour" histogram.** New owner-only section on
