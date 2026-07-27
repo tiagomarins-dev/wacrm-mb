@@ -65,5 +65,8 @@
   "statusOpen": "Open",
   "statusPending": "Pending",
   "statusClosed": "Closed",
-  "linkClicks": "Link clicks"
+  "linkClicks": "Link clicks",
+  "listTruncated": "Showing {{shown}} of {{total}} conversations. Tab counters only reflect the loaded ones — use Conversations to see them all.",
+  "deepLinkNotFound": "Conversation not found or not accessible.",
+  "switchedConnection": "Conversation from number {{label}} — the active connection was switched."
 }

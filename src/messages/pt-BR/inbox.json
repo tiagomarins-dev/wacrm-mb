@@ -65,5 +65,8 @@
   "statusOpen": "Aberta",
   "statusPending": "Pendente",
   "statusClosed": "Finalizada",
-  "linkClicks": "Cliques no link"
+  "linkClicks": "Cliques no link",
+  "listTruncated": "Mostrando {{shown}} de {{total}} conversas. Os contadores das abas refletem só as carregadas — use Conversas para ver todas.",
+  "deepLinkNotFound": "Conversa não encontrada ou sem acesso.",
+  "switchedConnection": "Conversa do número {{label}} — a conexão ativa foi trocada."
 }

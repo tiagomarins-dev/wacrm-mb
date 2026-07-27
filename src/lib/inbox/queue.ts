@@ -32,8 +32,9 @@ export function classifyTab(
   favorites: ReadonlySet<string> = NO_FAVORITES,
 ): boolean {
   const assigned = conv.assigned_agent_id ?? null;
-  // "Finalizada" (status system `closed`, 062) sai das abas de trabalho —
-  // fila/minhas/sla. Permanece em geral e ia (decisão de produto).
+  // "Finalizada" (status system `closed`, 062) sai de TODAS as abas de trabalho
+  // — fila/minhas/sla/ia. Permanece só em geral, que vive na tela própria
+  // /conversations (paginada). A exceção é o favorito, que pina em "Minhas".
   const closed = conv.status === "closed";
   switch (tab) {
     case "fila":
@@ -54,7 +55,9 @@ export function classifyTab(
     }
     case "ia":
       // Atribuída à IA: bot genérico ou um perfil de IA (set já inclui ambos).
-      return assigned !== null && aiAgentIds.has(assigned);
+      // Finalizada sai, como nas demais abas de trabalho — e é o que permite a
+      // query da lista filtrar `status != closed` sem esconder esta aba.
+      return assigned !== null && !closed && aiAgentIds.has(assigned);
     case "geral":
       return true;
   }

@@ -69,7 +69,7 @@ function writeCookie(id: string): void {
 }
 
 export function ActiveConnectionProvider({ children }: { children: ReactNode }) {
-  const { accountId } = useAuth();
+  const { accountId, profileLoading } = useAuth();
   const [connections, setConnections] = useState<Connection[]>([]);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(
     null,
@@ -80,7 +80,15 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
   // Reutilizável: chamado no mount e quando uma conexão é criada/alterada
   // (evento CONNECTIONS_CHANGED_EVENT, disparado pela tela de Settings).
   const refresh = useCallback(async () => {
-    if (!accountId) return;
+    if (!accountId) {
+      // Auth já resolvida e ainda sem conta: não há conexão a buscar, mas quem
+      // gateia em `loading` (inbox, botão de abrir conversa em Contatos) precisa
+      // ser liberado — senão a tela trava esperando um fetch que nunca vem.
+      // Enquanto `profileLoading` é true o accountId ainda está a caminho, e aí
+      // manter `loading` é o correto.
+      if (!profileLoading) setLoading(false);
+      return;
+    }
     const supabase = createClient();
     const { data } = await supabase
       .from("whatsapp_config")
@@ -95,7 +103,7 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
       pickActiveConnectionId(list, readCookie(), prev),
     );
     setLoading(false);
-  }, [accountId]);
+  }, [accountId, profileLoading]);
 
   useEffect(() => {
     // refresh() só faz setState DEPOIS do await (não-síncrono) — o aviso de
