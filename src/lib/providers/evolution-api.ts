@@ -13,6 +13,37 @@ interface EvoBase {
   instance: string
 }
 
+// Erro HTTP normalizado da Evolution: preserva status e body p/ o chamador
+// decidir por código (404 = instância inexistente; 403 = nome em uso).
+// A message mantém o formato `Evolution API error: <status> <body>` que os
+// logs e os 502 das rotas repassam.
+export class EvolutionApiError extends Error {
+  readonly status: number
+  readonly body: string
+  constructor(status: number, body: string) {
+    super(`Evolution API error: ${status} ${body}`)
+    this.name = 'EvolutionApiError'
+    this.status = status
+    this.body = body
+  }
+}
+
+// A instância não existe (mais) no servidor Evolution.
+export function isEvoInstanceNotFound(err: unknown): boolean {
+  return err instanceof EvolutionApiError && err.status === 404
+}
+
+// O nome de instância já está em uso no servidor (create com nome duplicado).
+// Match por substring case-insensitive: o texto vem da Evolution e pode
+// variar de case entre versões; o status sozinho (403) é amplo demais.
+export function isEvoNameInUse(err: unknown): boolean {
+  return (
+    err instanceof EvolutionApiError &&
+    err.status === 403 &&
+    err.body.toLowerCase().includes('already in use')
+  )
+}
+
 // Request + erro normalizado (espelha throwMetaError de meta-api.ts).
 async function evoFetch(
   url: string,
@@ -29,7 +60,7 @@ async function evoFetch(
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
-    throw new Error(`Evolution API error: ${res.status} ${body}`)
+    throw new EvolutionApiError(res.status, body)
   }
   return res.json()
 }
@@ -63,13 +94,15 @@ export async function evoConnect(a: EvoBase): Promise<{ qrBase64: string | null 
   return { qrBase64: pickQrBase64(data) }
 }
 
-// Estado da conexão: 'open' (conectada) | 'connecting' | 'close'.
+// Estado da conexão: 'open' (conectada) | 'connecting' | 'close'. Shape
+// desconhecido → 'unknown': quem consome trata como transitório — presumir
+// 'close' aqui derrubaria o poll do cron por falso positivo.
 export async function evoConnectionState(a: EvoBase): Promise<{ state: string }> {
   const data = (await evoFetch(
     `${a.baseUrl}/instance/connectionState/${a.instance}`,
     a.apiKey,
   )) as { instance?: { state?: string }; state?: string } | null
-  return { state: data?.instance?.state ?? data?.state ?? 'close' }
+  return { state: data?.instance?.state ?? data?.state ?? 'unknown' }
 }
 
 // Conteúdo de uma mensagem (campos usados; o resto fica em [k]).

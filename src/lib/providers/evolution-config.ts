@@ -8,7 +8,7 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { encrypt } from '@/lib/whatsapp/encryption'
-import { evoCreateInstance } from './evolution-api'
+import { evoCreateInstance, isEvoNameInUse } from './evolution-api'
 
 interface HandleArgs {
   supabase: SupabaseClient
@@ -46,6 +46,25 @@ export async function handleEvolutionConfig({
     )
   }
 
+  // Criação: barra nome já usado por outra conexão da conta ANTES de tocar
+  // a Evolution — o índice único (account_id, instance_name) vale inclusive
+  // p/ conexões arquivadas, que continuam donas do nome.
+  if (!body.connection_id) {
+    const { data: clash } = await supabase
+      .from('whatsapp_config')
+      .select('id, label, archived_at')
+      .eq('account_id', accountId)
+      .eq('provider', 'evolution')
+      .eq('instance_name', instanceName)
+      .maybeSingle()
+    if (clash) {
+      const msg = clash.archived_at
+        ? `O nome de instância "${instanceName}" já foi usado por uma conexão arquivada. Escolha outro nome.`
+        : `O nome de instância "${instanceName}" já é usado pela conexão "${clash.label || instanceName}". Selecione essa conexão em "Números conectados" e use "Reconectar / novo QR".`
+      return NextResponse.json({ error: msg }, { status: 409 })
+    }
+  }
+
   // Edição: carrega a conexão existente SEMPRE escopada à conta (H1).
   const { data: existing } = body.connection_id
     ? await supabase
@@ -62,6 +81,14 @@ export async function handleEvolutionConfig({
     const r = await evoCreateInstance({ baseUrl, apiKey, instanceName })
     qrBase64 = r.qrBase64
   } catch (err) {
+    // Nome já em uso no servidor (instância de outra conta ou órfã): sem
+    // reuso automático — a apikey é global e reusar sequestraria a sessão.
+    if (isEvoNameInUse(err)) {
+      return NextResponse.json(
+        { error: `O nome de instância "${instanceName}" já existe no servidor Evolution. Escolha outro nome.` },
+        { status: 409 },
+      )
+    }
     return NextResponse.json(
       { error: `Falha ao criar instância na Evolution: ${err instanceof Error ? err.message : err}` },
       { status: 502 },
@@ -89,6 +116,13 @@ export async function handleEvolutionConfig({
       .eq('id', existing.id)
       .eq('account_id', accountId)
     if (error) {
+      // Renomeou p/ um nome que outra row (inclusive arquivada) já usa.
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: `O nome de instância "${instanceName}" já é usado por outra conexão. Escolha outro nome.` },
+          { status: 409 },
+        )
+      }
       return NextResponse.json({ error: 'Failed to update Evolution connection' }, { status: 500 })
     }
     return NextResponse.json({ success: true, provider: 'evolution', connection_id: existing.id, qr_base64: qrBase64 })
@@ -107,6 +141,13 @@ export async function handleEvolutionConfig({
     .select('id')
     .single()
   if (error || !inserted) {
+    // Corrida entre o pré-check e o INSERT: o índice único é a defesa final.
+    if (error?.code === '23505') {
+      return NextResponse.json(
+        { error: `O nome de instância "${instanceName}" já é usado por outra conexão. Escolha outro nome.` },
+        { status: 409 },
+      )
+    }
     return NextResponse.json({ error: 'Failed to create Evolution connection' }, { status: 500 })
   }
   return NextResponse.json({ success: true, provider: 'evolution', connection_id: inserted.id, qr_base64: qrBase64 })

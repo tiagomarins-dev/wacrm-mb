@@ -5,7 +5,7 @@
 // ============================================================
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { evoConnectionState, evoConnect } from '@/lib/providers/evolution-api'
+import { evoConnectionState, evoConnect, isEvoInstanceNotFound } from '@/lib/providers/evolution-api'
 
 export const runtime = 'nodejs'
 
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
     .eq('id', connectionId)
     .eq('account_id', accountId)
     .eq('provider', 'evolution')
+    .is('archived_at', null)
     .maybeSingle()
 
   if (!config?.instance_name) {
@@ -57,8 +58,30 @@ export async function GET(request: Request) {
   }
   const instance = config.instance_name
 
+  // Consulta o estado; instância apagada do servidor não é exceção do poll:
+  // reflete no banco e devolve not_found — recriar é decisão do usuário
+  // (POST /evolution/reconnect).
+  let state: string
+  try {
+    ;({ state } = await evoConnectionState({ baseUrl, apiKey, instance }))
+  } catch (err) {
+    if (isEvoInstanceNotFound(err)) {
+      if (config.status === 'connected') {
+        await supabase
+          .from('whatsapp_config')
+          .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+          .eq('id', config.id)
+          .eq('account_id', accountId)
+      }
+      return NextResponse.json({ status: 'not_found' })
+    }
+    return NextResponse.json(
+      { error: `Falha ao consultar o servidor Evolution: ${err instanceof Error ? err.message : err}` },
+      { status: 502 },
+    )
+  }
+
   // Conectada? marca status (idempotente) e encerra o poll.
-  const { state } = await evoConnectionState({ baseUrl, apiKey, instance })
   if (state === 'open') {
     if (config.status !== 'connected') {
       await supabase
@@ -70,7 +93,23 @@ export async function GET(request: Request) {
     return NextResponse.json({ status: 'connected' })
   }
 
+  // Sessão caiu com a row ainda 'connected' → sincroniza antes de re-emitir QR.
+  if (config.status === 'connected') {
+    await supabase
+      .from('whatsapp_config')
+      .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+      .eq('id', config.id)
+      .eq('account_id', accountId)
+  }
+
   // Ainda não pareada — devolve um QR novo (expira ~60s; não persistir).
-  const { qrBase64 } = await evoConnect({ baseUrl, apiKey, instance })
-  return NextResponse.json({ status: 'pending', qr_base64: qrBase64 })
+  try {
+    const { qrBase64 } = await evoConnect({ baseUrl, apiKey, instance })
+    return NextResponse.json({ status: 'pending', qr_base64: qrBase64 })
+  } catch (err) {
+    return NextResponse.json(
+      { error: `Falha ao gerar QR na Evolution: ${err instanceof Error ? err.message : err}` },
+      { status: 502 },
+    )
+  }
 }
