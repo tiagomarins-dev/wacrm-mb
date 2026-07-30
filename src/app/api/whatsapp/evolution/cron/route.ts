@@ -2,7 +2,7 @@ import { timingSafeEqual, randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabaseAdmin } from '@/lib/broadcast/admin-client'
-import { evoFetchMessages, evoBase64FromMedia, evoFetchGroupSubject } from '@/lib/providers/evolution-api'
+import { evoFetchMessages, evoBase64FromMedia, evoFetchGroupSubject, evoConnectionState, isEvoInstanceNotFound } from '@/lib/providers/evolution-api'
 import { normalizeEvolutionInbound } from '@/lib/providers/evolution-inbound'
 import {
   findOrCreateContact,
@@ -74,6 +74,7 @@ export async function GET(request: Request) {
     .select('id, account_id, user_id, instance_name, evolution_base_url, last_evo_timestamp')
     .eq('provider', 'evolution')
     .eq('status', 'connected')
+    .is('archived_at', null)
 
   if (connErr) {
     return NextResponse.json({ error: connErr.message }, { status: 500 })
@@ -86,6 +87,36 @@ export async function GET(request: Request) {
   for (const conn of conns ?? []) {
     const baseUrl = conn.evolution_base_url ?? process.env.EVOLUTION_API_URL
     if (!baseUrl || !apiKey || !conn.instance_name) continue
+
+    // Estado da sessão antes de buscar mensagens: instância apagada do
+    // servidor ou sessão encerrada ('close') → marca desconectada e para de
+    // pollar (a volta é pelo Reconectar da UI). Erro de rede e estados
+    // transitórios ('connecting'/'unknown') não mudam status — marcar
+    // 'disconnected' tira a conexão deste select, então só sinal definitivo
+    // (404 da instância ou 'close' vindo de resposta 2xx) pode fazer isso.
+    try {
+      const { state } = await evoConnectionState({ baseUrl, apiKey, instance: conn.instance_name })
+      if (state === 'close') {
+        await admin
+          .from('whatsapp_config')
+          .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+          .eq('id', conn.id)
+        console.error('[evolution/cron] session closed, marked disconnected', conn.instance_name)
+        continue
+      }
+      if (state !== 'open') continue
+    } catch (err) {
+      if (isEvoInstanceNotFound(err)) {
+        await admin
+          .from('whatsapp_config')
+          .update({ status: 'disconnected', updated_at: new Date().toISOString() })
+          .eq('id', conn.id)
+        console.error('[evolution/cron] instance gone, marked disconnected', conn.instance_name)
+      } else {
+        console.error('[evolution/cron] state check failed', conn.instance_name, err instanceof Error ? err.message : err)
+      }
+      continue
+    }
 
     let records
     try {

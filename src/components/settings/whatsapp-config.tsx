@@ -664,9 +664,12 @@ export function WhatsAppConfig() {
           </Button>
         </div>
 
-        {/* Evolution: form isolado (cria instância + QR). Meta: form abaixo. */}
+        {/* Evolution: gerenciar a conexão selecionada; criar só em "+ Adicionar número". */}
         {provider === 'evolution' ? (
-          <EvolutionConnectionForm onSaved={() => accountId && loadConnections(accountId)} />
+          <EvolutionConnectionForm
+            connection={config?.provider === 'evolution' ? config : null}
+            onSaved={() => accountId && loadConnections(accountId)}
+          />
         ) : (
         <>
         {/* API Credentials */}

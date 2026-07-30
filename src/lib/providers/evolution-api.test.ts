@@ -12,6 +12,9 @@ import {
   evoConnect,
   evoConnectionState,
   evoSendText,
+  EvolutionApiError,
+  isEvoInstanceNotFound,
+  isEvoNameInUse,
 } from "./evolution-api";
 
 const BASE = "http://evo.test:8080";
@@ -72,14 +75,47 @@ describe("evolution-api — boundary HTTP", () => {
     expect((await evoConnectionState({ baseUrl: BASE, apiKey: KEY, instance: "inst1" })).state).toBe("open");
   });
 
-  it("erro HTTP vira Error normalizado", async () => {
+  it("erro HTTP vira EvolutionApiError com status e body", async () => {
     server.use(
       http.post(`${BASE}/message/sendText/:instance`, () =>
         HttpResponse.json({ error: "bad" }, { status: 400 }),
       ),
     );
-    await expect(
-      evoSendText({ baseUrl: BASE, apiKey: KEY, instance: "i", number: "1", text: "x" }),
-    ).rejects.toThrow(/Evolution API error: 400/);
+    const err = await evoSendText({
+      baseUrl: BASE, apiKey: KEY, instance: "i", number: "1", text: "x",
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(EvolutionApiError);
+    expect((err as EvolutionApiError).status).toBe(400);
+    expect((err as EvolutionApiError).body).toContain("bad");
+    expect((err as EvolutionApiError).message).toMatch(/Evolution API error: 400/);
+  });
+
+  it("evoConnectionState: shape desconhecido → 'unknown' (não presume queda)", async () => {
+    server.use(
+      http.get(`${BASE}/instance/connectionState/:instance`, () =>
+        HttpResponse.json({}),
+      ),
+    );
+    expect(
+      (await evoConnectionState({ baseUrl: BASE, apiKey: KEY, instance: "i" })).state,
+    ).toBe("unknown");
+  });
+});
+
+describe("evolution-api — helpers de erro", () => {
+  it("isEvoInstanceNotFound: true só p/ EvolutionApiError 404", () => {
+    expect(isEvoInstanceNotFound(new EvolutionApiError(404, "not found"))).toBe(true);
+    expect(isEvoInstanceNotFound(new EvolutionApiError(403, "x"))).toBe(false);
+    expect(isEvoInstanceNotFound(new Error("Evolution API error: 404"))).toBe(false);
+  });
+
+  it("isEvoNameInUse: 403 + 'already in use' case-insensitive", () => {
+    expect(
+      isEvoNameInUse(new EvolutionApiError(403, '{"response":{"message":["This name \\"x\\" is already in use."]}}')),
+    ).toBe(true);
+    expect(isEvoNameInUse(new EvolutionApiError(403, "This name is ALREADY IN USE."))).toBe(true);
+    expect(isEvoNameInUse(new EvolutionApiError(403, "forbidden"))).toBe(false);
+    expect(isEvoNameInUse(new EvolutionApiError(404, "already in use"))).toBe(false);
+    expect(isEvoNameInUse(new Error("already in use"))).toBe(false);
   });
 });

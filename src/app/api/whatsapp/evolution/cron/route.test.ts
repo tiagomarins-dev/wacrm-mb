@@ -16,6 +16,10 @@ const store = vi.hoisted(() => ({
   lastInsert: null as Record<string, unknown> | null,
   groupConvCalls: [] as unknown[],
   cursorUpdates: 0,
+  statusUpdates: [] as Record<string, unknown>[],
+  // Estado da sessão reportado pelo mock (default 'open' = fluxo normal).
+  state: 'open',
+  stateThrows: null as unknown,
   // Controles dos mocks de dispatch/contato.
   wasCreated: false,
   priorCustomerMsgCount: 1, // >0 → não é primeira msg (default)
@@ -30,14 +34,15 @@ vi.mock('@/lib/broadcast/admin-client', () => {
     const f: {
       table: string; filters: Record<string, unknown>
       ins: Record<string, unknown> | null; upd: boolean; count: boolean
-    } = { table, filters: {}, ins: null, upd: false, count: false }
+      updPayload: Record<string, unknown> | null; isFilters: Record<string, unknown>
+    } = { table, filters: {}, ins: null, upd: false, count: false, updPayload: null, isFilters: {} }
     const b: Record<string, unknown> = {
       // count:'exact'/head → query de contagem (isFirstInboundMessage).
       select: (_cols?: unknown, opts?: { count?: string }) => {
         if (opts && opts.count) f.count = true
         return b
       },
-      update: () => ((f.upd = true), b),
+      update: (p: Record<string, unknown>) => ((f.upd = true), (f.updPayload = p), b),
       // Suporta a cadeia nova .insert(row).select('id').single() (C2).
       insert: (row: Record<string, unknown>) => {
         f.ins = row
@@ -53,13 +58,23 @@ vi.mock('@/lib/broadcast/admin-client', () => {
         }
       },
       eq: (k: string, v: unknown) => ((f.filters[k] = v), b),
+      is: (k: string, v: unknown) => ((f.isFilters[k] = v), b),
       maybeSingle: () => Promise.resolve(resolve()),
       then: (res: (v: unknown) => unknown) => Promise.resolve(resolve()).then(res),
     }
     function resolve() {
       if (f.table === 'whatsapp_config') {
-        if (f.upd) { store.cursorUpdates++; return { error: null } }
-        return { data: store.conns, error: null }
+        // Update de status (sync do cron) conta separado do avanço do cursor.
+        if (f.upd) {
+          if (f.updPayload && 'status' in f.updPayload) store.statusUpdates.push(f.updPayload)
+          else store.cursorUpdates++
+          return { error: null }
+        }
+        // O select do cron exige archived_at IS NULL — o mock honra o filtro.
+        const conns = 'archived_at' in f.isFilters
+          ? store.conns.filter((c) => (c.archived_at ?? null) === null)
+          : store.conns
+        return { data: conns, error: null }
       }
       if (f.table === 'messages') {
         if (f.count) return { count: store.priorCustomerMsgCount, error: null }
@@ -78,11 +93,21 @@ vi.mock('@/lib/broadcast/admin-client', () => {
   }
 })
 
-vi.mock('@/lib/providers/evolution-api', () => ({
-  evoFetchMessages: async () => store.records,
-  evoBase64FromMedia: async () => store.media,
-  evoFetchGroupSubject: async () => 'Turma 2026',
-}))
+// Mocka só as funções de rede; helpers/classe de erro seguem reais p/ o
+// cron reconhecer o 404 tipado da instância.
+vi.mock('@/lib/providers/evolution-api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/providers/evolution-api')>()
+  return {
+    ...actual,
+    evoFetchMessages: async () => store.records,
+    evoBase64FromMedia: async () => store.media,
+    evoFetchGroupSubject: async () => 'Turma 2026',
+    evoConnectionState: async () => {
+      if (store.stateThrows) throw store.stateThrows
+      return { state: store.state }
+    },
+  }
+})
 
 vi.mock('@/lib/whatsapp/inbound', () => ({
   findOrCreateContact: async () => ({ contact: { id: 'c1' }, wasCreated: store.wasCreated }),
@@ -107,6 +132,7 @@ vi.mock('@/lib/ai-agent/dispatch', () => ({ dispatchInboundToAiAgent: vi.fn(asyn
 vi.mock('@/lib/transcription/dispatch', () => ({ dispatchTranscription: vi.fn(async () => {}) }))
 
 import { GET } from './route'
+import { EvolutionApiError } from '@/lib/providers/evolution-api'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiAgent } from '@/lib/ai-agent/dispatch'
@@ -139,6 +165,9 @@ beforeEach(() => {
   store.lastInsert = null
   store.groupConvCalls = []
   store.cursorUpdates = 0
+  store.statusUpdates = []
+  store.state = 'open'
+  store.stateThrows = null
   store.wasCreated = false
   store.priorCustomerMsgCount = 1
   store.flowConsumed = false
@@ -276,5 +305,47 @@ describe('GET /api/whatsapp/evolution/cron — grupo + resiliência', () => {
     const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
     expect(r.imported).toBe(1)
     expect(store.inserted).toBe(1)
+  })
+})
+
+describe('GET /api/whatsapp/evolution/cron — sync de status da sessão', () => {
+  beforeEach(() => { process.env.AUTOMATION_CRON_SECRET = 'certo' })
+
+  it('instância inexistente (404) → marca disconnected e não busca mensagens', async () => {
+    store.stateThrows = new EvolutionApiError(404, 'The "inst1" instance does not exist')
+    const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
+    expect(store.statusUpdates).toEqual([expect.objectContaining({ status: 'disconnected' })])
+    expect(r.imported).toBe(0)
+    expect(store.inserted).toBe(0)
+  })
+
+  it("state='close' → marca disconnected e pula a conexão", async () => {
+    store.state = 'close'
+    const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
+    expect(store.statusUpdates).toEqual([expect.objectContaining({ status: 'disconnected' })])
+    expect(r.imported).toBe(0)
+  })
+
+  it('erro transitório de rede no state → status intocado, conexão pulada', async () => {
+    store.stateThrows = new Error('fetch failed')
+    const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
+    expect(store.statusUpdates).toEqual([])
+    expect(r.imported).toBe(0)
+  })
+
+  it("state='connecting' → transitório: status intocado, sem fetch", async () => {
+    store.state = 'connecting'
+    const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
+    expect(store.statusUpdates).toEqual([])
+    expect(r.imported).toBe(0)
+  })
+
+  it('conexão arquivada fica fora do poll', async () => {
+    store.conns = [
+      { id: 'k1', account_id: 'a1', user_id: 'u1', instance_name: 'inst1', evolution_base_url: null, last_evo_timestamp: null, archived_at: '2026-07-09T00:00:00Z' },
+    ]
+    const r = await (await GET(req({ 'x-cron-secret': 'certo' }))).json()
+    expect(r.imported).toBe(0)
+    expect(store.inserted).toBe(0)
   })
 })
