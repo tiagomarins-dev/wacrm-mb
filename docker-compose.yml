@@ -95,7 +95,9 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: wacrm-tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
+    # http2 (TCP) em vez de QUIC (UDP): sobrevive a redes com MTU baixo /
+    # UDP instável (hotspot), onde o QUIC derruba o túnel e a borda dá 502.
+    command: tunnel --no-autoupdate --protocol http2 run
     environment:
       - TUNNEL_TOKEN=${CF_TUNNEL_TOKEN:-}
     depends_on:
