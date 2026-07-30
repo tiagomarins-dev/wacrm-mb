@@ -110,6 +110,8 @@ interface MessageComposerProps {
   quickReplies?: QuickReply[];
   /** Conversa de grupo (058): esconde Templates (capability Evolution não tem). */
   isGroup?: boolean;
+  /** Provider da conexão suporta template (Meta). Evolution não tem — esconde o botão. */
+  templatesSupported?: boolean;
   /** Soft gate: conversa atribuída a OUTRO humano → mostra "Assumir" no lugar do input. */
   assignedToOtherHuman?: boolean;
   /** Nome do responsável atual (p/ o texto do overlay). */
@@ -140,6 +142,7 @@ export function MessageComposer({
   onClearReply,
   contact,
   isGroup = false,
+  templatesSupported = true,
   quickReplies = [],
   assignedToOtherHuman = false,
   assigneeName = null,
@@ -680,8 +683,9 @@ export function MessageComposer({
           </DropdownMenu>
           )}
 
-          {/* Template é capability Meta — escondido em grupo (Evolution) e em modo nota. */}
-          {!isGroup && !noteMode && (
+          {/* Template é capability Meta — escondido em grupo, em provider sem
+              template (Evolution) e em modo nota. */}
+          {!isGroup && templatesSupported && !noteMode && (
             <GatedButton
               variant="ghost"
               size="sm"

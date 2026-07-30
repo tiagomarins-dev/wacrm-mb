@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next";
 import { createClient } from "@/lib/supabase/client";
 import { findUrls, extractManualToken } from "@/lib/link-tracking/url-detect";
 import { useAuth } from "@/hooks/use-auth";
+import { useActiveConnection } from "@/hooks/use-active-connection";
+import { capabilitiesFor } from "@/lib/providers/types";
 import { cn } from "@/lib/utils";
 import type { AiProfilePublic } from "@/types";
 import type {
@@ -364,8 +366,17 @@ export function MessageThread({
     setShareOpen(true);
   }, []);
 
+  // Janela de 24h + templates são conceito da Meta Cloud API. Provider sem
+  // template (Evolution) manda texto livre sempre — o timer não se aplica.
+  const { connections } = useActiveConnection();
+  const sessionApplies = useMemo(() => {
+    const conn = connections.find((c) => c.id === conversation?.connection_id);
+    return capabilitiesFor(conn?.provider).template;
+  }, [connections, conversation?.connection_id]);
+
   // 24-hour session timer
   const sessionInfo = useMemo(() => {
+    if (!sessionApplies) return { expired: false, remaining: "" };
     if (!messages.length) return { expired: false, remaining: "" };
 
     // Find last customer message
@@ -389,7 +400,7 @@ export function MessageThread({
         : `${Math.floor(hoursLeft * 60)}m remaining`;
 
     return { expired, remaining };
-  }, [messages]);
+  }, [messages, sessionApplies]);
 
   // Store latest callback in a ref so fetchMessages doesn't need to
   // depend on `onMessagesLoaded` — otherwise parent re-renders cause
@@ -1147,17 +1158,20 @@ export function MessageThread({
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground lg:hidden" />
           </button>
           {/* Session timer badge — hidden on the narrowest phones so
-              the name + back arrow keep their room. */}
-          <Badge
-            variant="outline"
-            className={cn(
-              "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
-              sessionInfo.expired ? "text-red-400" : "text-primary"
-            )}
-          >
-            <Clock className="h-3 w-3" />
-            {sessionInfo.remaining}
-          </Badge>
+              the name + back arrow keep their room. Só para provider com
+              janela de 24h (Meta); Evolution não tem esse conceito. */}
+          {sessionApplies && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "ml-1 hidden gap-1 border-border text-[10px] sm:inline-flex sm:ml-2",
+                sessionInfo.expired ? "text-red-400" : "text-primary"
+              )}
+            >
+              <Clock className="h-3 w-3" />
+              {sessionInfo.remaining}
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -1546,6 +1560,7 @@ export function MessageThread({
       <MessageComposer
         conversationId={conversation.id}
         sessionExpired={sessionInfo.expired}
+        templatesSupported={sessionApplies}
         onSend={handleSend}
         onSendNote={handleSendNote}
         onSendMedia={handleSendMedia}
