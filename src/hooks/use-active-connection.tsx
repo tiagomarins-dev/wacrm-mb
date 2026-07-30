@@ -33,6 +33,9 @@ export interface Connection {
   is_primary: boolean;
   // Apelido (055) — rótulo de exibição preferido no dropdown (fallback no phone).
   label?: string | null;
+  // Provider da conexão — decide capacidades no front (ex.: janela de 24h e
+  // templates só existem na Meta; Evolution manda texto livre sempre).
+  provider?: "meta" | "evolution" | null;
 }
 
 export const CONNECTIONS_CHANGED_EVENT = "wacrm:connections-changed";
@@ -92,7 +95,7 @@ export function ActiveConnectionProvider({ children }: { children: ReactNode }) 
     const supabase = createClient();
     const { data } = await supabase
       .from("whatsapp_config")
-      .select("id, phone_number_id, status, is_primary, label")
+      .select("id, phone_number_id, status, is_primary, label, provider")
       .eq("account_id", accountId)
       // Esconde conexões arquivadas (064) do seletor.
       .is("archived_at", null);
