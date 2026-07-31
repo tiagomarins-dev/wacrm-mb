@@ -75,6 +75,8 @@ interface WhatsAppWebhookEntry {
         status: string
         timestamp: string
         recipient_id: string
+        // Presente quando status='failed': motivo da falha de entrega.
+        errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>
       }>
     }
     field: string
@@ -353,6 +355,7 @@ async function handleStatusUpdate(status: {
   status: string
   timestamp: string
   recipient_id: string
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>
 }) {
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status.
@@ -391,6 +394,14 @@ async function handleStatusUpdate(status: {
   if (status.status === 'sent' && !('sent_at' in update)) update.sent_at = tsIso
   if (status.status === 'delivered') update.delivered_at = tsIso
   if (status.status === 'read') update.read_at = tsIso
+  // Falha de entrega: persiste o motivo que a Meta manda no recibo (código +
+  // título + detalhe) — sem isso o painel mostra "Falhou" sem causa.
+  if (status.status === 'failed' && status.errors?.length) {
+    update.error_message = status.errors
+      .map((e) => [e.code, e.title, e.message, e.error_data?.details].filter(Boolean).join(' — '))
+      .join(' | ')
+      .slice(0, 500)
+  }
 
   const { error: recUpdateErr } = await supabaseAdmin()
     .from('broadcast_recipients')
