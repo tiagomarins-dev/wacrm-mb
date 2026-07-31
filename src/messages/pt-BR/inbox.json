@@ -68,5 +68,12 @@
   "linkClicks": "Cliques no link",
   "listTruncated": "Mostrando {{shown}} de {{total}} conversas. Os contadores das abas refletem só as carregadas — use Conversas para ver todas.",
   "deepLinkNotFound": "Conversa não encontrada ou sem acesso.",
-  "switchedConnection": "Conversa do número {{label}} — a conexão ativa foi trocada."
+  "switchedConnection": "Conversa do número {{label}} — a conexão ativa foi trocada.",
+  "clearConversation": "Limpar conversa",
+  "clearConversationConfirmTitle": "Limpar esta conversa?",
+  "clearConversationConfirmDescription": "Todas as mensagens e o histórico do agente de IA com {{name}} serão apagados. A ação é irreversível.",
+  "clearConversationConfirm": "Limpar conversa",
+  "clearConversationCancel": "Cancelar",
+  "clearConversationSuccess": "Conversa limpa",
+  "clearConversationError": "Falha ao limpar a conversa"
 }

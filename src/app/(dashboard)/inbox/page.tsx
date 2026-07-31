@@ -119,6 +119,9 @@ export default function InboxPage() {
     conversations,
     patchConversation,
     upsertConversation: hydrateConversation,
+    // "Limpar conversa" (owner): tira a conversa apagada da lista local.
+    removeConversation: (id) =>
+      setConversations((prev) => prev.filter((c) => c.id !== id)),
     onSelect: (conv) => {
       // Atualiza a URL (?c=) só p/ deep-link/reload — via history API, NÃO router.replace.
       // router.replace dispara navegação RSC que passa no middleware (getUser + refresh de

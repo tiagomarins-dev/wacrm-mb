@@ -27,6 +27,8 @@ export interface UseConversationWorkspaceArgs {
   patchConversation: (id: string, updater: (c: Conversation) => Conversation) => void;
   /** Conv desconhecida (fora da lista): inbox hidrata+prepend; /conversations = noop. */
   upsertConversation: (convId: string) => void;
+  /** Remove uma conversa da lista (dona: a página) — usado pelo "Limpar conversa". */
+  removeConversation: (id: string) => void;
   /** Efeito de página após selecionar (inbox: grava ref + router.replace). */
   onSelect?: (conv: Conversation) => void;
   /** Efeito de página ao fechar (inbox: router.replace("/inbox")). */
@@ -38,6 +40,7 @@ export function useConversationWorkspace({
   conversations,
   patchConversation,
   upsertConversation,
+  removeConversation,
   onSelect,
   onClose,
 }: UseConversationWorkspaceArgs) {
@@ -53,7 +56,7 @@ export function useConversationWorkspace({
   // Painel destacado num modal full-screen (desktop). Um por vez.
   const [expanded, setExpanded] = useState<"thread" | "contact" | null>(null);
   // Favoritos do usuário (076) — ids de conversa pinados na aba "Minhas".
-  const { user, accountId, loading: authLoading } = useAuth();
+  const { user, accountId, loading: authLoading, isOwner } = useAuth();
   const [favorites, setFavorites] = useState<ReadonlySet<string>>(() => new Set());
   // Gate para quem filtra a lista por favoritas: enquanto true, a query sairia
   // com o Set vazio e perderia as conversas favoritadas que estão finalizadas
@@ -355,6 +358,29 @@ export function useConversationWorkspace({
     [close, handleMarkUnread],
   );
 
+  // Limpa (apaga) a conversa — reset de teste de agente. Fecha antes de deletar
+  // (senão o auto-reset do thread recarrega uma conversa morta) e só remove da
+  // lista após o servidor confirmar; erro mostra a mensagem da API (ex.: 409 de
+  // negócio vinculado). Owner-only — o gate real é o requireRole da rota.
+  const handleClearConversation = useCallback(
+    async (id: string) => {
+      close();
+      try {
+        const res = await fetch(`/api/conversations/${id}`, { method: "DELETE" });
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { error?: string } | null;
+          toast.error(body?.error ?? "Falha ao limpar a conversa");
+          return;
+        }
+        removeConversation(id);
+        toast.success("Conversa limpa");
+      } catch {
+        toast.error("Falha ao limpar a conversa");
+      }
+    },
+    [close, removeConversation],
+  );
+
   const handleMessagesLoaded = useCallback((loaded: Message[]) => {
     setMessages(loaded);
   }, []);
@@ -409,6 +435,8 @@ export function useConversationWorkspace({
     onAssignChange: handleAssignChange,
     onBack: close,
     onMarkUnread: handleMarkUnreadFromThread,
+    onClearConversation: handleClearConversation,
+    canClearConversation: isOwner,
     isFavorite: activeConversation ? favorites.has(activeConversation.id) : false,
     onToggleFavorite: handleToggleFavorite,
     resyncToken,

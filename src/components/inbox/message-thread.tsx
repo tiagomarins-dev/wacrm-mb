@@ -40,6 +40,7 @@ import {
   ChevronRight,
   Maximize2,
   Minimize2,
+  Trash2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { MessageBubble } from "./message-bubble";
 import { MessageActions } from "./message-actions";
 import { ShareModal, type ShareProvider } from "./share-modal";
@@ -109,6 +119,9 @@ interface MessageThreadProps {
   backAlwaysVisible?: boolean;
   /** Marca a conversa como não lida (o pai deseleciona antes de gravar). */
   onMarkUnread?: (id: string) => void;
+  /** Limpa (apaga) a conversa — só Owner; confirmação no próprio thread. */
+  onClearConversation?: (id: string) => void;
+  canClearConversation?: boolean;
   /** Conversa favoritada pelo usuário (076) — estrela no toolbar. */
   isFavorite?: boolean;
   /** Favorita/desfavorita — NÃO fecha a conversa (diferente do markUnread). */
@@ -200,6 +213,8 @@ export function MessageThread({
   onBack,
   backAlwaysVisible = false,
   onMarkUnread,
+  onClearConversation,
+  canClearConversation = false,
   isFavorite = false,
   onToggleFavorite,
   resyncToken = 0,
@@ -221,6 +236,8 @@ export function MessageThread({
   // respeita a leitura do histórico.
   const nearBottomRef = useRef(true);
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  // Confirmação do "Limpar conversa" (owner) — ação irreversível.
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [aiProfiles, setAiProfiles] = useState<AiProfilePublic[]>([]);
   const [reactions, setReactions] = useState<MessageReaction[]>([]);
@@ -1298,6 +1315,19 @@ export function MessageThread({
               }
             />
           </button>
+
+          {/* Limpar conversa (owner) — reset de teste de agente; irreversível. */}
+          {canClearConversation && (
+            <button
+              type="button"
+              onClick={() => setClearConfirmOpen(true)}
+              aria-label={t("clearConversation")}
+              title={t("clearConversation")}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-400 transition-colors hover:bg-muted hover:text-red-300"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
           </div>
 
           {/* Kebab overflow — só no mobile (sm:hidden). Junta as ações
@@ -1334,6 +1364,17 @@ export function MessageThread({
               >
                 <Star className="mr-2 h-3.5 w-3.5" /> {t(isFavorite ? "unfavorite" : "favorite")}
               </DropdownMenuItem>
+              {canClearConversation && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => setClearConfirmOpen(true)}
+                    className="text-sm text-red-400 focus:text-red-300"
+                  >
+                    <Trash2 className="mr-2 h-3.5 w-3.5" /> {t("clearConversation")}
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -1598,6 +1639,36 @@ export function MessageThread({
         onOpenChange={setBriefingOpen}
         conversationId={conversation.id}
       />
+
+      {/* Confirmação do "Limpar conversa" (owner) — apaga tudo, irreversível. */}
+      <Dialog open={clearConfirmOpen} onOpenChange={setClearConfirmOpen}>
+        <DialogContent className="border-border bg-popover">
+          <DialogHeader>
+            <DialogTitle>{t("clearConversationConfirmTitle")}</DialogTitle>
+            <DialogDescription>
+              {t("clearConversationConfirmDescription", { name: contactDisplayName })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setClearConfirmOpen(false)}
+              className="border-border text-muted-foreground"
+            >
+              {t("clearConversationCancel")}
+            </Button>
+            <Button
+              className="bg-red-600 text-white hover:bg-red-700"
+              onClick={() => {
+                setClearConfirmOpen(false);
+                onClearConversation?.(conversation.id);
+              }}
+            >
+              {t("clearConversationConfirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

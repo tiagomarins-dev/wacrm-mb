@@ -68,5 +68,12 @@
   "linkClicks": "Link clicks",
   "listTruncated": "Showing {{shown}} of {{total}} conversations. Tab counters only reflect the loaded ones — use Conversations to see them all.",
   "deepLinkNotFound": "Conversation not found or not accessible.",
-  "switchedConnection": "Conversation from number {{label}} — the active connection was switched."
+  "switchedConnection": "Conversation from number {{label}} — the active connection was switched.",
+  "clearConversation": "Clear conversation",
+  "clearConversationConfirmTitle": "Clear this conversation?",
+  "clearConversationConfirmDescription": "All messages and the AI agent history with {{name}} will be deleted. This cannot be undone.",
+  "clearConversationConfirm": "Clear conversation",
+  "clearConversationCancel": "Cancel",
+  "clearConversationSuccess": "Conversation cleared",
+  "clearConversationError": "Failed to clear the conversation"
 }

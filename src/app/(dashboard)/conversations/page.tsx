@@ -240,6 +240,8 @@ export default function ConversationsPage() {
     patchConversation: (id, updater) =>
       setRows((prev) => prev.map((c) => (c.id === id ? updater(c) : c))),
     upsertConversation: () => {},
+    // "Limpar conversa" (owner): tira a conversa apagada da lista da página.
+    removeConversation: (id) => setRows((prev) => prev.filter((c) => c.id !== id)),
   });
 
   const totalPages = Math.ceil(totalCount / PAGE_SIZE);
