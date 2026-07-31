@@ -38,6 +38,7 @@ export interface PendingRow {
 export type AiAgentOutcome =
   | 'ok' | 'no_reply' | 'blocked' | 'error' | 'superseded'
   | 'skipped:no_profile' | 'skipped:disabled' | 'skipped:no_history'
+  | 'skipped:already_answered'
 
 // Executa o agente p/ uma conversa: monta contexto, roda o loop, aplica
 // guardrail, recheca controle humano e envia a resposta. Retorna o desfecho.
@@ -64,6 +65,21 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
   // Histórico recente (chat) + se é aluno (student_info) → sinal de roteamento.
   const messages = await serializeRecentMessages(db, row.conversation_id)
   if (messages.length === 0) return 'skipped:no_history' // nada a responder
+
+  // Já atendida: se a ÚLTIMA mensagem da conversa não é do cliente (bot ou
+  // humano falou por último), não há nada novo a responder. Evita resposta
+  // dupla quando um ai_reply inline (automação) atende o inbound que TAMBÉM
+  // foi enfileirado no debounce (corrida automação × dispatch): a 2ª execução
+  // vê a resposta já enviada e desiste. Checado na row crua porque o coalesce
+  // do histórico descarta o sufixo não-user (o LLM nem veria a resposta).
+  const { data: lastRows } = await db
+    .from('messages')
+    .select('sender_type')
+    .eq('conversation_id', row.conversation_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+  const lastSender = (lastRows as { sender_type: string }[] | null)?.[0]?.sender_type
+  if (lastSender && lastSender !== 'customer') return 'skipped:already_answered'
 
   // Refresca o "digitando..." agora que o engine assumiu (cobre o tempo do LLM).
   if (row.last_inbound_message_id) {

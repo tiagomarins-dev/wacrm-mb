@@ -99,6 +99,19 @@ describe('runAiAgentForConversation', () => {
     expect(engineSendText).not.toHaveBeenCalled()
   })
 
+  it('última mensagem é do bot (ai_reply inline já atendeu) → skipped:already_answered', async () => {
+    const t = baseTables()
+    // Fake db não ordena: o [0] simula a mais recente (bot falou por último).
+    t.messages = [
+      { sender_type: 'bot', content_text: 'já respondi', content_type: 'text' },
+      { sender_type: 'customer', content_text: 'oi', content_type: 'text' },
+    ]
+    holder.db = makeDb(t).db
+    const outcome = await runAiAgentForConversation(row)
+    expect(outcome).toBe('skipped:already_answered')
+    expect(vi.mocked(engineSendText)).not.toHaveBeenCalled()
+  })
+
   it('sem mensagens → não envia', async () => {
     const t = baseTables()
     t.messages = []
