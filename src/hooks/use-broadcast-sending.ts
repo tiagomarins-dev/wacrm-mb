@@ -178,19 +178,25 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     }
     const phones = [...uniqueByPhone.keys()];
 
-    // Single round-trip lookup of existing contacts by phone.
+    // Single round-trip lookup of existing contacts by phone. Escopo de CONTA
+    // (não de usuário): o webhook inbound casa contato por account_id+phone
+    // (inbound.ts) — usar user_id aqui pendurava o recipient num contato
+    // diferente do que recebe a resposta, e a atribuição de agente/lead_context
+    // nunca casava. Com duplicados, o mais ANTIGO vence (mesma heurística do
+    // webhook), por isso a ordem + o guard de "primeiro vence" no Map.
     const { data: existing, error: lookupErr } = await supabase
       .from('contacts')
       .select('*')
-      .eq('user_id', user.id)
-      .in('phone', phones);
+      .eq('account_id', accountId)
+      .in('phone', phones)
+      .order('created_at', { ascending: true });
     if (lookupErr) {
       throw new Error(`Failed to look up CSV contacts: ${lookupErr.message}`);
     }
 
     const byPhone = new Map<string, Contact>();
     for (const c of (existing ?? []) as Contact[]) {
-      if (c.phone) byPhone.set(c.phone, c);
+      if (c.phone && !byPhone.has(c.phone)) byPhone.set(c.phone, c);
     }
 
     // Insert only missing contacts, in one batch per 200 rows (PostgREST
