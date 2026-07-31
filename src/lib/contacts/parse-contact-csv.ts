@@ -10,6 +10,8 @@ export interface ParsedContactRow {
   company?: string;
   /** Tag names from the optional `tags` column (comma/semicolon separated). */
   tagNames: string[];
+  /** Colunas extras do CSV (header → célula) — viram lead_context no broadcast. */
+  extras?: Record<string, string>;
 }
 
 /** Split a CSV cell into unique tag names (case-insensitive de-dupe). */
@@ -59,6 +61,14 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
   const companyIdx = headers.indexOf('company');
   const tagsIdx = headers.indexOf('tags');
 
+  // Índices das colunas reconhecidas; o resto vira "extras" (contexto de lead).
+  // Re-trim no header: a limpeza de :48-50 remove aspas DEPOIS do trim, então
+  // um header entre aspas com espaços internos sobreviveria com espaços.
+  const knownIdx = new Set([phoneIdx, nameIdx, emailIdx, companyIdx, tagsIdx]);
+  const extraCols = headers
+    .map((h, i) => ({ h: h.trim(), i }))
+    .filter(({ h, i }) => !knownIdx.has(i) && h.length > 0);
+
   const rows: ParsedContactRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -68,6 +78,14 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     const values = parseCsvLine(line);
     const phone = values[phoneIdx]?.replace(/["']/g, '').trim();
     if (!phone) continue;
+
+    // Extras da linha: só células não-vazias (chave = header em lowercase).
+    let extras: Record<string, string> | undefined;
+    for (const { h, i } of extraCols) {
+      const v = values[i]?.replace(/["']/g, '').trim();
+      if (!v) continue;
+      (extras ??= {})[h] = v;
+    }
 
     rows.push({
       phone,
@@ -85,6 +103,7 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
           : undefined,
       tagNames:
         tagsIdx >= 0 ? parseTagCell(values[tagsIdx]?.replace(/["']/g, '')) : [],
+      extras,
     });
   }
 

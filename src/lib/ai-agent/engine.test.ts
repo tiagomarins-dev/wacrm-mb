@@ -42,6 +42,7 @@ function makeDb(byTable: Record<string, any>, opts: { insertThrows?: boolean } =
       select: () => b,
       eq: () => b,
       in: () => b,
+      not: () => b,
       order: () => b,
       limit: () => b,
       update: (p: unknown) => ((op.type = 'update'), (op.payload = p), b),
@@ -115,6 +116,26 @@ describe('runAiAgentForConversation', () => {
     expect(vi.mocked(engineSendText).mock.calls[0][0].text).toBe('Você pode garantir agora')
     const upd = updates.find((u) => u.table === 'conversations')
     expect((upd?.payload as { ai_topic: string }).ai_topic).toBe('vendas')
+  })
+
+  it('lead_context do broadcast entra no system prompt (CONTEXTO DO LEAD)', async () => {
+    const t = baseTables()
+    t.broadcast_recipients = [
+      { lead_context: { objetivo: 'Passar no ENEM' }, broadcasts: { account_id: 'acc-1' } },
+    ]
+    holder.db = makeDb(t).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    await runAiAgentForConversation(row)
+    const system = vi.mocked(runAgentLoop).mock.calls[0][0].system
+    expect(system).toContain('CONTEXTO DO LEAD')
+    expect(system).toContain('- objetivo: Passar no ENEM')
+  })
+
+  it('sem recipient com lead_context → prompt sem o bloco (comportamento atual)', async () => {
+    holder.db = makeDb(baseTables()).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    await runAiAgentForConversation(row)
+    expect(vi.mocked(runAgentLoop).mock.calls[0][0].system).not.toContain('CONTEXTO DO LEAD')
   })
 
   it('reatribuíram no meio do turno (perfil mudou/humano assumiu) → NÃO envia (M1)', async () => {

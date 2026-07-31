@@ -70,4 +70,36 @@ describe('parseContactCsv', () => {
       ],
     });
   });
+
+  // Colunas extras (fora de phone/name/email/company/tags) viram `extras` —
+  // o background do lead usado pelo agente de IA no broadcast.
+  it('captures unrecognized columns as extras', () => {
+    const csv = `phone,name,objetivo,dificuldade
++15551234567,Alice,Passar no ENEM,"Argumentação, repertório"
++15559876543,Bob,,Tempo de estudo`;
+
+    const { rows } = parseContactCsv(csv);
+    expect(rows[0].extras).toEqual({
+      objetivo: 'Passar no ENEM',
+      dificuldade: 'Argumentação, repertório',
+    });
+    // Célula extra vazia não vira chave.
+    expect(rows[1].extras).toEqual({ dificuldade: 'Tempo de estudo' });
+  });
+
+  it('leaves extras undefined when there are no extra columns', () => {
+    const csv = `phone,name
++15551234567,Alice`;
+
+    expect(parseContactCsv(csv).rows[0].extras).toBeUndefined();
+  });
+
+  it('normalizes extra headers (quotes/whitespace) via the shared header cleanup', () => {
+    const csv = `phone," Objetivo "
++15551234567,Passar de ano`;
+
+    expect(parseContactCsv(csv).rows[0].extras).toEqual({
+      objetivo: 'Passar de ano',
+    });
+  });
 });

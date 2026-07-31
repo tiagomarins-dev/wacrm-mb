@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
+import { parseContactCsv } from '@/lib/contacts/parse-contact-csv';
 import { CustomField, Tag } from '@/types';
 import { Button } from '@/components/ui/button';
 import {
@@ -29,7 +30,7 @@ interface AudienceConfig {
   type: AudienceType;
   tagIds?: string[];
   customField?: CustomFieldFilter;
-  csvContacts?: { phone: string; name?: string }[];
+  csvContacts?: { phone: string; name?: string; extras?: Record<string, string> }[];
   excludeTagIds?: string[];
 }
 
@@ -94,6 +95,7 @@ export function Step2SelectAudience({
   const [loadingFields, setLoadingFields] = useState(false);
   const [estimatedCount, setEstimatedCount] = useState<number | null>(null);
   const [loadingCount, setLoadingCount] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
 
   // Tags are used both by the primary "Filter by Tags" audience type
   // AND by the exclude-list below — so always load once on mount.
@@ -239,6 +241,29 @@ export function Step2SelectAudience({
       value: '',
     };
     onUpdate({ ...audience, customField: { ...prev, ...patch } });
+  }
+
+  // Lê o CSV, parseia e sobe {phone, name, extras} pro estado do wizard.
+  // Colunas extras viram o background do lead (lead_context no recipient).
+  function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCsvError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const { rows } = parseContactCsv(String(reader.result ?? ''));
+      if (rows.length === 0) {
+        // Parser retorna vazio sem coluna `phone` ou sem linhas de dados.
+        setCsvError(t('step2.csvNoPhone'));
+        onUpdate({ ...audience, csvContacts: undefined });
+        return;
+      }
+      onUpdate({
+        ...audience,
+        csvContacts: rows.map((r) => ({ phone: r.phone, name: r.name, extras: r.extras })),
+      });
+    };
+    reader.readAsText(file);
   }
 
   const isValid =
@@ -390,6 +415,26 @@ export function Step2SelectAudience({
                 className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
+          )}
+        </div>
+      )}
+
+      {audience.type === 'csv' && (
+        <div className="space-y-3 rounded-xl border border-border bg-card/50 p-4">
+          <p className="text-sm font-medium text-foreground">{t('step2.csvUploadTitle')}</p>
+          <p className="text-xs text-muted-foreground">{t('step2.csvUploadHint')}</p>
+          {/* Input de arquivo: molde do modal de importação de contatos (import-modal) */}
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleCsvFile}
+            className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary"
+          />
+          {csvError && <p className="text-xs text-red-400">{csvError}</p>}
+          {audience.csvContacts && audience.csvContacts.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {t('step2.csvLoaded', { count: audience.csvContacts.length })}
+            </p>
           )}
         </div>
       )}

@@ -36,7 +36,11 @@
     "summaryTitle": "Audience Summary",
     "calculating": "Calculating…",
     "estimatedRecipients": "estimated recipients",
-    "selectTypeHint": "Select an audience type to see the estimate."
+    "selectTypeHint": "Select an audience type to see the estimate.",
+    "csvUploadTitle": "CSV file",
+    "csvUploadHint": "Required column: phone. Optional: name, email, company, tags. Any other column becomes lead context for the AI agent.",
+    "csvNoPhone": "Invalid CSV: \"phone\" column not found.",
+    "csvLoaded": "{{count}} contacts loaded"
   },
   "step3": {
     "title": "Personalize Message",
@@ -106,7 +110,10 @@
     "createWebhook": "Create webhook",
     "confirmWebhookTitle": "Create trigger webhook",
     "confirmWebhookDesc": "A unique public URL will be created to fire this broadcast with the {{template}} template. Nothing is sent now — sending happens on each POST to the URL.",
-    "confirmAndCreateWebhook": "Confirm & create"
+    "confirmAndCreateWebhook": "Confirm & create",
+    "aiProfileLabel": "AI-assisted conversation (optional)",
+    "aiProfileNone": "No agent — human support",
+    "aiProfileHint": "When the lead replies to the template, this agent takes over the conversation using the CSV data as context."
   },
   "common": {
     "back": "Back",

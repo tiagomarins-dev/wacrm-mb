@@ -41,7 +41,7 @@ export default function NewBroadcastPage() {
       operator: 'is' | 'is_not' | 'contains';
       value: string;
     };
-    csvContacts?: { phone: string; name?: string }[];
+    csvContacts?: { phone: string; name?: string; extras?: Record<string, string> }[];
     excludeTagIds?: string[];
   }>({ type: 'all' });
   const [variables, setVariables] = useState<
@@ -50,6 +50,8 @@ export default function NewBroadcastPage() {
   const [name, setName] = useState('');
   // ISO do agendamento (null = enviar agora).
   const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  // Perfil de IA vinculado à campanha (null = atendimento humano).
+  const [aiProfileId, setAiProfileId] = useState<string | null>(null);
 
   async function handleSend() {
     if (!template) return;
@@ -74,6 +76,7 @@ export default function NewBroadcastPage() {
         },
         variables,
         scheduledAt,
+        aiProfileId,
       });
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
@@ -289,6 +292,8 @@ export default function NewBroadcastPage() {
               progress={progress}
               scheduledAt={scheduledAt}
               onScheduleChange={setScheduledAt}
+              aiProfileId={aiProfileId}
+              onAiProfileChange={setAiProfileId}
             />
           )}
         </div>

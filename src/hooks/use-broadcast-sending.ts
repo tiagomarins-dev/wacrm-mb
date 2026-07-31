@@ -23,7 +23,7 @@ export interface AudienceConfig {
   type: 'all' | 'tags' | 'custom_field' | 'csv';
   tagIds?: string[];
   customField?: CustomFieldFilter;
-  csvContacts?: { phone: string; name?: string }[];
+  csvContacts?: { phone: string; name?: string; extras?: Record<string, string> }[];
   /** Contacts carrying any of these tags are subtracted from the result. */
   excludeTagIds?: string[];
 }
@@ -45,6 +45,11 @@ interface BroadcastPayload {
    * = enviar agora (comportamento original).
    */
   scheduledAt?: string | null;
+  /**
+   * Perfil de IA vinculado à campanha (broadcasts.ai_profile_id). Quando o lead
+   * responde ao template, o webhook atribui a conversa a esse perfil.
+   */
+  aiProfileId?: string | null;
 }
 
 /** Limite superior de agendamento — evita datas absurdas (1 ano). */
@@ -317,6 +322,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           },
           status: isScheduled ? 'scheduled' : 'sending',
           scheduled_at: isScheduled ? payload.scheduledAt : null,
+          ai_profile_id: payload.aiProfileId ?? null,
           total_recipients: contacts.length,
           sent_count: 0,
           delivered_count: 0,
@@ -335,10 +341,19 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       // ── Step 3: Insert recipient rows ─────────────────────────────
       setProgress(20);
+      // lead_context por contato: extras do CSV indexados por phone (verbatim —
+      // o contato criado em upsertCsvContacts guarda o mesmo string do arquivo).
+      const extrasByPhone = new Map<string, Record<string, string>>();
+      for (const row of payload.audience.csvContacts ?? []) {
+        if (row.extras && Object.keys(row.extras).length > 0) {
+          extrasByPhone.set(row.phone, row.extras);
+        }
+      }
       const recipientRows = contacts.map((contact) => ({
         broadcast_id: broadcast.id,
         contact_id: contact.id,
         status: 'pending' as const,
+        lead_context: (contact.phone && extrasByPhone.get(contact.phone)) || null,
       }));
 
       for (let i = 0; i < recipientRows.length; i += INSERT_BATCH_SIZE) {

@@ -22,7 +22,7 @@ import { ArrowLeft, Send, Loader2, Users, Save, CalendarClock, Webhook } from 'l
 interface AudienceConfig {
   type: string;
   tagIds?: string[];
-  csvContacts?: { phone: string; name?: string }[];
+  csvContacts?: { phone: string; name?: string; extras?: Record<string, string> }[];
 }
 
 interface Step4Props {
@@ -42,6 +42,9 @@ interface Step4Props {
   /** ISO do agendamento (null = enviar agora). */
   scheduledAt: string | null;
   onScheduleChange: (iso: string | null) => void;
+  /** Perfil de IA vinculado à campanha (null = atendimento humano). */
+  aiProfileId: string | null;
+  onAiProfileChange: (id: string | null) => void;
 }
 
 export function Step4ScheduleSend({
@@ -58,6 +61,8 @@ export function Step4ScheduleSend({
   progress,
   scheduledAt,
   onScheduleChange,
+  aiProfileId,
+  onAiProfileChange,
 }: Step4Props) {
   const { t } = useTranslation(['broadcastWizard', 'common']);
   // Formatação de data/hora pelo idioma ativo (substitui o `format` do date-fns).
@@ -70,6 +75,17 @@ export function Step4ScheduleSend({
     hasPayloadVars ? 'webhook' : 'now',
   );
   const [localDt, setLocalDt] = useState('');
+  // Perfis de IA atribuíveis — view pública (RLS escopa por conta; a base é admin-only).
+  const [aiProfiles, setAiProfiles] = useState<{ id: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    const supabase = createClient();
+    void supabase
+      .from('ai_profiles_public')
+      .select('id, nome, enabled')
+      .eq('enabled', true)
+      .then(({ data }) => setAiProfiles((data as { id: string; nome: string }[] | null) ?? []));
+  }, []);
 
   // Agendamento válido = modo schedule + data futura preenchida.
   const scheduleValid =
@@ -183,6 +199,23 @@ export function Step4ScheduleSend({
             <p className="text-foreground">{template.language ?? 'en_US'}</p>
           </div>
         </div>
+      </div>
+
+      {/* Agente de IA da campanha: quem responde quando o lead retorna o template */}
+      <div className="rounded-xl border border-border bg-card/50 p-4">
+        <p className="mb-1 text-sm font-medium text-foreground">{t('step4.aiProfileLabel')}</p>
+        <select
+          value={aiProfileId ?? ''}
+          onChange={(e) => onAiProfileChange(e.target.value || null)}
+          disabled={isProcessing}
+          className="h-9 w-full rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+        >
+          <option value="">{t('step4.aiProfileNone')}</option>
+          {aiProfiles.map((p) => (
+            <option key={p.id} value={p.id}>{p.nome}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">{t('step4.aiProfileHint')}</p>
       </div>
 
       {/* Send timing */}

@@ -91,6 +91,21 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
   const contact = contactRow as { name: string | null; email: string | null; phone: string | null } | null
   const studentCourses = extractStudentCourses(student)
 
+  // Contexto de lead (broadcast com agente): último lead_context não-nulo do
+  // contato. Join com broadcasts pro filtro explícito de conta (service-role
+  // bypassa RLS — mesmo racional de knowledge.ts).
+  const { data: leadRecs } = await db
+    .from('broadcast_recipients')
+    .select('lead_context, broadcasts!inner(account_id)')
+    .eq('contact_id', row.contact_id)
+    .eq('broadcasts.account_id', row.account_id)
+    .not('lead_context', 'is', null)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+  const leadContext =
+    (leadRecs?.[0] as { lead_context: Record<string, string> | null } | undefined)
+      ?.lead_context ?? null
+
   // Catálogo p/ o prompt (cursos ativos + categorias de suporte).
   const courses = await listCursos(db, row.account_id)
   const supportCategories = await listSupportCategories(db, row.account_id)
@@ -104,6 +119,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
     contactName: contact?.name ?? null,
     contactEmail: contact?.email ?? null,
     studentCourses,
+    leadContext,
     opening: row.opening ?? false, // abertura: injeta a diretriz de cumprimento
   })
 

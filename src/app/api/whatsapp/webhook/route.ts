@@ -8,6 +8,7 @@ import { verifyMetaWebhookSignature } from '@/lib/whatsapp/webhook-signature'
 import { runAutomationsForTrigger } from '@/lib/automations/engine'
 import { dispatchInboundToFlows } from '@/lib/flows/engine'
 import { dispatchInboundToAiAgent } from '@/lib/ai-agent/dispatch'
+import { assignBroadcastAgentIfAny } from '@/lib/broadcast/assign-broadcast-agent'
 import { dispatchTranscription } from '@/lib/transcription/dispatch'
 import {
   handleTemplateWebhookChange,
@@ -685,6 +686,10 @@ async function processMessage(
   // so the broadcast's `replied_count` advances (via the aggregate
   // trigger installed in migration 003).
   await flagBroadcastReplyIfAny(accountId, contactRecord.id)
+
+  // Broadcast com agente de IA: atribui a conversa ao perfil da campanha ANTES
+  // do dispatch do agente (o gate resolveAssignedProfile exige conversa atribuída).
+  await assignBroadcastAgentIfAny(supabaseAdmin(), accountId, contactRecord.id, conversation.id)
 
   // ============================================================
   // Flow runner dispatch.

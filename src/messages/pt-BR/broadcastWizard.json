@@ -36,7 +36,11 @@
     "summaryTitle": "Resumo do público",
     "calculating": "Calculando…",
     "estimatedRecipients": "destinatários estimados",
-    "selectTypeHint": "Selecione um tipo de público para ver a estimativa."
+    "selectTypeHint": "Selecione um tipo de público para ver a estimativa.",
+    "csvUploadTitle": "Arquivo CSV",
+    "csvUploadHint": "Coluna obrigatória: phone. Opcionais: name, email, company, tags. Qualquer outra coluna vira contexto do lead para o agente de IA.",
+    "csvNoPhone": "CSV inválido: coluna \"phone\" não encontrada.",
+    "csvLoaded": "{{count}} contatos carregados"
   },
   "step3": {
     "title": "Personalizar mensagem",
@@ -106,7 +110,10 @@
     "createWebhook": "Criar webhook",
     "confirmWebhookTitle": "Criar webhook de disparo",
     "confirmWebhookDesc": "Será criada uma URL pública única para disparar este broadcast com o template {{template}}. Nada é enviado agora — o envio acontece a cada POST na URL.",
-    "confirmAndCreateWebhook": "Confirmar e criar"
+    "confirmAndCreateWebhook": "Confirmar e criar",
+    "aiProfileLabel": "Conversa assistida por IA (opcional)",
+    "aiProfileNone": "Sem agente — atendimento humano",
+    "aiProfileHint": "Quando o lead responder ao template, este agente assume a conversa usando os dados do CSV como contexto."
   },
   "common": {
     "back": "Voltar",
