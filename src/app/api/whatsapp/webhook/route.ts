@@ -52,6 +52,13 @@ interface WhatsAppMessage {
     button_reply?: { id: string; title: string }
     list_reply?: { id: string; title: string; description?: string }
   }
+  /**
+   * Set when the customer taps a quick-reply button on a TEMPLATE message
+   * (type 'button' — distinto de 'interactive', que cobre botões/listas de
+   * mensagens interativas). `text` é o rótulo do botão; `payload` é o valor
+   * configurado no template.
+   */
+  button?: { text?: string; payload?: string }
   /** Present when the customer swipe-replies to one of our messages. */
   context?: { id: string }
 }
@@ -915,6 +922,22 @@ async function parseMessageContent(
 
     case 'reaction':
       return { ...empty, contentText: message.reaction?.emoji || null }
+
+    case 'button': {
+      // Quick-reply de TEMPLATE (difere de 'interactive'). O rótulo do botão
+      // vira o texto da mensagem — legível no inbox, no histórico do agente e
+      // casável pelo gatilho keyword_match das automações. O payload vai em
+      // interactive_reply_id p/ roteamento estável (flows/automações).
+      const label = message.button?.text?.trim()
+      if (label) {
+        return {
+          ...empty,
+          contentText: label,
+          interactiveReplyId: message.button?.payload ?? null,
+        }
+      }
+      return { ...empty, contentText: '[botão]' }
+    }
 
     case 'interactive': {
       // The customer tapped a reply button or a list row on a message
