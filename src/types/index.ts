@@ -288,6 +288,8 @@ export interface AiProfile {
   slug: string | null;
   enabled: boolean;
   persona_prompt: string | null;
+  /** Diretriz da 1ª resposta em modo abertura; null = texto padrão (cumprimenta+pergunta). */
+  opening_prompt: string | null;
   model: string;
   classifier_model: string | null;
   max_bot_turns: number;

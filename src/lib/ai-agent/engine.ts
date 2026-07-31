@@ -121,6 +121,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
     studentCourses,
     leadContext,
     opening: row.opening ?? false, // abertura: injeta a diretriz de cumprimento
+    openingPrompt: profile.opening_prompt, // diretriz custom do perfil (campanha)
   })
 
   // Loop LLM com tool-calling. O LLM roteia o assunto via a tool que escolhe.

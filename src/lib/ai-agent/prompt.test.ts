@@ -135,6 +135,18 @@ describe('buildSystemPrompt', () => {
     expect(buildSystemPrompt({ ...baseArgs, leadContext: null })).toEqual(p)
   })
 
+  it('opening com openingPrompt do perfil usa a diretriz custom, mantendo a proibição de transferir', () => {
+    const p = buildSystemPrompt({
+      ...baseArgs,
+      opening: true,
+      openingPrompt: 'Diga que tem uma ótima notícia e fale do curso certo.',
+    })
+    expect(p).toContain('ABERTURA DE NOVA CONVERSA')
+    expect(p).toContain('ótima notícia')
+    expect(p).not.toContain('pergunta aberta de como pode ajudar') // padrão substituído
+    expect(p).toContain('PROIBIDO nesta resposta: transferir') // guarda permanece
+  })
+
   it('opening:true injeta a diretriz de abertura (cumprimenta, não transfere)', () => {
     const p = buildSystemPrompt({ ...baseArgs, opening: true })
     expect(p).toContain('ABERTURA DE NOVA CONVERSA')

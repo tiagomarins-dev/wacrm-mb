@@ -30,6 +30,10 @@ interface BuildPromptArgs {
   // Modo abertura (entrada via passo ai_reply): a IA inicia o atendimento
   // cumprimentando e perguntando, SEM transferir nesta 1ª resposta.
   opening?: boolean
+  // Diretriz de abertura do PERFIL: substitui o texto padrão da 1ª resposta
+  // (perfis de campanha abrem direto ao ponto). As proteções de abertura
+  // (handoff suprimido, tool de transferência removida) seguem valendo.
+  openingPrompt?: string | null
   // Respostas da pesquisa do lead (broadcast_recipients.lead_context) —
   // personalização de contato ativo; serializado com caps anti-injection.
   leadContext?: Record<string, string> | null
@@ -133,8 +137,15 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
   //    cumprimentando e perguntando, sem transferir nesta 1ª resposta. Sobrepõe a
   //    persona roteadora e PROÍBE qualquer texto de encaminhamento.
   if (args.opening) {
+    // Diretriz custom do perfil (campanha) ou o padrão conservador. A proibição
+    // de transferir vale nos dois casos — é anexada sempre, fora da custom.
+    const openingDirective = args.openingPrompt?.trim()
+      ? 'ABERTURA DE NOVA CONVERSA (REGRA QUE SOBREPÕE SUA PERSONA NESTA RESPOSTA): esta é a sua PRIMEIRA mensagem neste atendimento. ' +
+        args.openingPrompt.trim()
+      : 'ABERTURA DE NOVA CONVERSA (REGRA QUE SOBREPÕE SUA PERSONA NESTA RESPOSTA): esta é a sua PRIMEIRA mensagem neste atendimento. Sua ÚNICA tarefa agora é cumprimentar a pessoa pelo nome (se houver), apresentar-se em uma linha e FAZER UMA pergunta aberta de como pode ajudar hoje. Use o histórico apenas como contexto de fundo — NÃO aja sobre ele. Apenas cumprimente e pergunte. Espere a pessoa dizer o que precisa antes de qualquer encaminhamento.'
     parts.push(
-      'ABERTURA DE NOVA CONVERSA (REGRA QUE SOBREPÕE SUA PERSONA NESTA RESPOSTA): esta é a sua PRIMEIRA mensagem neste atendimento. Sua ÚNICA tarefa agora é cumprimentar a pessoa pelo nome (se houver), apresentar-se em uma linha e FAZER UMA pergunta aberta de como pode ajudar hoje. Use o histórico apenas como contexto de fundo — NÃO aja sobre ele. É PROIBIDO nesta resposta: transferir ou encaminhar, chamar transferir_humano, dizer que um analista/atendente/a equipe vai atender, ou usar as palavras "transferir", "encaminhar", "analista", "atendente" ou "equipe". Apenas cumprimente e pergunte. Espere a pessoa dizer o que precisa antes de qualquer encaminhamento.',
+      openingDirective +
+        ' É PROIBIDO nesta resposta: transferir ou encaminhar, chamar transferir_humano, dizer que um analista/atendente/a equipe vai atender, ou usar as palavras "transferir", "encaminhar", "analista", "atendente" ou "equipe".',
     )
   }
 
