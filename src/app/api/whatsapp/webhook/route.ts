@@ -693,6 +693,10 @@ async function processMessage(
       last_message_at: new Date().toISOString(),
       unread_count: (conversation.unread_count || 0) + 1,
       updated_at: new Date().toISOString(),
+      // Mensagem do cliente reabre conversa fechada: o inbox filtra
+      // status != 'closed' (inbox-list-query), então sem reabrir aqui a
+      // conversa fica invisível na fila/abas e o retorno do aluno se perde.
+      ...(conversation.status === 'closed' ? { status: 'open' } : {}),
     })
     .eq('id', conversation.id)
 
