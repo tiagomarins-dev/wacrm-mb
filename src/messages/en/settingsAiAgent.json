@@ -17,6 +17,8 @@
   "connAllowlistHint": "Empty = replies to everyone. Fill (one number per line, digits only) to reply ONLY to those — test mode.",
   "connAutoUnassign": "Unassign after (minutes)",
   "connAutoUnassignHint": "0 = off. An assigned conversation idle longer than this loses its assignee and returns to the Queue.",
+  "connAutoClose": "Close after (days)",
+  "connAutoCloseHint": "0 = off. A conversation with no new message for longer than this is closed automatically. Favorites and custom statuses are skipped.",
   "connEmpty": "No connection has the agent configured.",
   "connSaved": "Connection settings saved",
   "adminOnly": "Only admins can manage the agent.",

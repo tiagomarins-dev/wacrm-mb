@@ -28,6 +28,7 @@ interface ConnRow {
   enabled: boolean;
   debounce_seconds: number;
   auto_unassign_minutes: number; // minutos sem interação p/ desatribuir (0 = off)
+  auto_close_days: number; // dias sem mensagem p/ finalizar a conversa (0 = off)
   allowed_phones: string; // textarea (um número por linha) — convertido p/ array no save
 }
 
@@ -48,7 +49,7 @@ export function AiConnectionConfig() {
   const fetchRows = useCallback(async () => {
     setLoading(true);
     const [cfgRes, connRes] = await Promise.all([
-      supabase.from('ai_agent_config').select('connection_id, enabled, debounce_seconds, allowed_phones, auto_unassign_minutes'),
+      supabase.from('ai_agent_config').select('connection_id, enabled, debounce_seconds, allowed_phones, auto_unassign_minutes, auto_close_days'),
       supabase.from('whatsapp_config').select('id, phone_number_id, is_primary, label').is('archived_at', null),
     ]);
     if (cfgRes.error) {
@@ -72,6 +73,7 @@ export function AiConnectionConfig() {
         enabled: c?.enabled ?? false,
         debounce_seconds: c?.debounce_seconds ?? 12,
         auto_unassign_minutes: c?.auto_unassign_minutes ?? 60,
+        auto_close_days: c?.auto_close_days ?? 30,
         allowed_phones: ((c?.allowed_phones as string[] | null) ?? []).join('\n'),
       };
     });
@@ -114,6 +116,7 @@ export function AiConnectionConfig() {
         debounce_seconds: row.debounce_seconds,
         allowed_phones: phones.length ? phones : null,
         auto_unassign_minutes: row.auto_unassign_minutes,
+        auto_close_days: row.auto_close_days,
       },
       { onConflict: 'connection_id' },
     );
@@ -188,6 +191,18 @@ export function AiConnectionConfig() {
                     className="border-border bg-background text-foreground"
                   />
                   <p className="mt-1 text-[11px] text-muted-foreground">{t('connAutoUnassignHint')}</p>
+                </div>
+                <div className="sm:w-40">
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('connAutoClose')}</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={r.auto_close_days}
+                    onChange={(e) => patch(r.connection_id, { auto_close_days: Number(e.target.value) || 0 })}
+                    className="border-border bg-background text-foreground"
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">{t('connAutoCloseHint')}</p>
                 </div>
                 <div className="flex-1">
                   <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('connAllowlist')}</label>

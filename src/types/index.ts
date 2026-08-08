@@ -195,6 +195,8 @@ export interface AiAgentConfig {
   debounce_seconds: number;
   /** Minutos sem interação p/ desatribuir a conversa (volta pra Fila). 0 = off. */
   auto_unassign_minutes: number;
+  /** Dias sem mensagem p/ finalizar a conversa (status 'closed'). 0 = off. */
+  auto_close_days: number;
   model: string;
   classifier_model: string | null;
   persona_prompt: string | null;
