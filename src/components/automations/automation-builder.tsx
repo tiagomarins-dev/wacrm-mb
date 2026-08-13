@@ -238,7 +238,8 @@ function blankConfig(type: AutomationStepType): Record<string, unknown> {
     case "close_conversation":
       return {}
     case "ai_reply":
-      return {}
+      // Campo opcional: nasce vazio p/ o passo continuar válido sem preenchimento.
+      return { campaign_context: "" }
     default:
       return {}
   }
@@ -1791,12 +1792,26 @@ function StepEditor({
           {t("closeConversationNote")}
         </p>
       )
-    case "ai_reply":
+    case "ai_reply": {
+      // Contexto da campanha (081): texto livre que descreve a ação alvo e o que o
+      // template prometeu. Vai pro system prompt do agente e vale a conversa toda.
+      const campaign = (cfg.campaign_context as string) ?? ""
       return (
-        <p className="text-xs text-muted-foreground">
-          {t("aiReplyNote")}
-        </p>
+        <>
+          <p className="mb-2 text-xs text-muted-foreground">{t("aiReplyNote")}</p>
+          <FieldBlock label={`${t("campaignContext")} · ${campaign.length}/2.000`}>
+            <Textarea
+              value={campaign}
+              onChange={(e) => set({ campaign_context: e.target.value })}
+              maxLength={2000}
+              placeholder={t("campaignContextPlaceholder")}
+              className="min-h-24 bg-muted text-foreground"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">{t("campaignContextHint")}</p>
+          </FieldBlock>
+        </>
       )
+    }
     default:
       return null
   }
@@ -1831,6 +1846,9 @@ function previewFor(step: BuilderStep, t: TFunction): string {
       return t("previewConditionWhen", { subject: step.step_config.subject ?? "?" })
     case "send_webhook":
       return (step.step_config.url as string) || t("previewNoUrl")
+    case "ai_reply":
+      // Sem contexto cai em "" (igual a hoje): passo antigo não muda de aparência.
+      return (step.step_config.campaign_context as string) || ""
     default:
       return ""
   }

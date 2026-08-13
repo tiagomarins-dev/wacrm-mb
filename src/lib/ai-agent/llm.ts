@@ -49,6 +49,15 @@ export interface AgentCtx {
   allowedTools: string[] | null
   // Abertura: remove a tool transferir_humano (a IA não encaminha na 1ª resposta).
   opening?: boolean
+  // Modo playground: enviar_link_venda devolve o destino do curso SEM criar
+  // link_tokens (nenhuma escrita). Ausente/false = produção intocada.
+  linkDryRun?: boolean
+  // Modo playground: rascunho de ficha por slug — get_curso sobrepõe estes
+  // campos ao que veio do banco (teste de condição/posicionamento sem escrita).
+  courseOverrides?: Record<
+    string,
+    { posicionamento?: string | null; condicao_vigente?: string | null }
+  >
 }
 
 // Resolve a chave do OpenRouter da conta (reusa integrations_config, já

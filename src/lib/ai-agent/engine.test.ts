@@ -144,6 +144,32 @@ describe('runAiAgentForConversation', () => {
     expect(system).toContain('- objetivo: Passar no ENEM')
   })
 
+  it('campaign_context da conversa entra no system prompt (CONTEXTO DA CAMPANHA)', async () => {
+    const t = baseTables()
+    t.conversations = {
+      campaign_context: 'Ação: oferecer o curso de ENEM.',
+      campaign_context_at: new Date().toISOString(),
+    }
+    holder.db = makeDb(t).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    await runAiAgentForConversation(row)
+    const system = vi.mocked(runAgentLoop).mock.calls[0][0].system
+    expect(system).toContain('CONTEXTO DA CAMPANHA')
+    expect(system).toContain('Ação: oferecer o curso de ENEM.')
+  })
+
+  it('campaign_context vencido (fora do TTL de 60 dias) NÃO entra no prompt', async () => {
+    const t = baseTables()
+    t.conversations = {
+      campaign_context: 'Ação: campanha encerrada há muito tempo.',
+      campaign_context_at: new Date(Date.now() - 90 * 86_400_000).toISOString(),
+    }
+    holder.db = makeDb(t).db
+    vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })
+    await runAiAgentForConversation(row)
+    expect(vi.mocked(runAgentLoop).mock.calls[0][0].system).not.toContain('CONTEXTO DA CAMPANHA')
+  })
+
   it('sem recipient com lead_context → prompt sem o bloco (comportamento atual)', async () => {
     holder.db = makeDb(baseTables()).db
     vi.mocked(runAgentLoop).mockResolvedValue({ reply: 'oi', topic: null, handoff: null, telemetry: TEL })

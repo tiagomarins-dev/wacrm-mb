@@ -110,6 +110,29 @@ describe("validateStepsForActivation", () => {
     ]);
   });
 
+  it("ai_reply com campaign_context válido passa", () => {
+    const issues = validateStepsForActivation([
+      { step_type: "ai_reply", step_config: { campaign_context: "Ação: oferecer o ENEM." } },
+    ]);
+    expect(issues).toHaveLength(0);
+  });
+
+  it("ai_reply com campaign_context acima de 2000 chars falha", () => {
+    const issues = validateStepsForActivation([
+      { step_type: "ai_reply", step_config: { campaign_context: "x".repeat(2001) } },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].path).toBe("steps[0].campaign_context");
+  });
+
+  it("ai_reply com campaign_context não-string falha", () => {
+    const issues = validateStepsForActivation([
+      { step_type: "ai_reply", step_config: { campaign_context: 42 } },
+    ]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].message).toMatch(/must be text/);
+  });
+
   it("validates ai_reply with no config (não cai em 'unknown step type')", () => {
     const issues = validateStepsForActivation([
       { step_type: "ai_reply", step_config: {} },

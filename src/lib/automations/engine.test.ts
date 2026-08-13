@@ -9,7 +9,13 @@ const h = vi.hoisted(() => ({
     automations: [] as Record<string, unknown>[],
     steps: [] as Record<string, unknown>[],
     fromCalls: [] as string[],
-    updateCalls: [] as { table: string; filters: [string, string, unknown][] }[],
+    // payload é opcional: só o ramo de `conversations` o captura (p/ asserir o que foi
+    // gravado, ex.: campaign_context da 081). Os demais ramos guardam só os filtros.
+    updateCalls: [] as {
+      table: string;
+      payload?: unknown;
+      filters: [string, string, unknown][];
+    }[],
     upsertCalls: [] as { table: string; payload: unknown }[],
     // ai_reply: conversa devolvida pelo lookup de connection_id + deletes capturados.
     conversation: null as Record<string, unknown> | null,
@@ -49,7 +55,9 @@ vi.mock("./admin-client", () => {
     }
     if (table === "conversations") {
       if (type === "update") {
-        state.updateCalls.push({ table, filters: ops.filters });
+        // payload capturado p/ asserir O QUE foi gravado (ex.: campaign_context, 081).
+        // Asserts antigos usam só .filters e seguem funcionando.
+        state.updateCalls.push({ table, payload: ops.payload, filters: ops.filters });
         return { data: null, error: null };
       }
       return { data: state.conversation, error: null };
@@ -300,14 +308,14 @@ function automationWithAiReply() {
   };
 }
 
-function aiReplyStep() {
+function aiReplyStep(config: Record<string, unknown> = {}) {
   return {
     id: "s1",
     automation_id: "a1",
     step_type: "ai_reply",
     position: 0,
     parent_step_id: null,
-    step_config: {},
+    step_config: config,
   };
 }
 
@@ -346,6 +354,71 @@ describe("ai_reply step", () => {
       "conversation_id",
       "conv-1",
     ]);
+  });
+
+  it("com campaign_context: grava o contexto na conversa antes de rodar o agente (081)", async () => {
+    setup();
+    h.state.steps = [aiReplyStep({ campaign_context: "Ação: oferecer o curso de ENEM." })];
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    const upd = h.state.updateCalls.find(
+      (u) =>
+        u.table === "conversations" &&
+        (u.payload as { campaign_context?: string })?.campaign_context !== undefined,
+    );
+    expect(upd).toBeDefined();
+    expect((upd!.payload as { campaign_context: string }).campaign_context).toBe(
+      "Ação: oferecer o curso de ENEM.",
+    );
+    expect((upd!.payload as { campaign_context_at: string }).campaign_context_at).toBeTruthy();
+    expect(upd!.filters).toContainEqual(["eq", "id", "conv-1"]);
+    expect(upd!.filters).toContainEqual(["eq", "account_id", ACCOUNT]);
+  });
+
+  it("sem campaign_context (step_config {}): NÃO grava — não apaga contexto de outra campanha", async () => {
+    setup(); // aiReplyStep() padrão = step_config {}
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    const upd = h.state.updateCalls.find(
+      (u) =>
+        u.table === "conversations" &&
+        (u.payload as { campaign_context?: string })?.campaign_context !== undefined,
+    );
+    expect(upd).toBeUndefined();
+  });
+
+  it("campaign_context só com espaços: NÃO grava", async () => {
+    setup();
+    h.state.steps = [aiReplyStep({ campaign_context: "   \n  " })];
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    const upd = h.state.updateCalls.find(
+      (u) =>
+        u.table === "conversations" &&
+        (u.payload as { campaign_context?: string })?.campaign_context !== undefined,
+    );
+    expect(upd).toBeUndefined();
   });
 
   it("loga o desfecho REAL do agente no detail do step (R3 — log honesto)", async () => {

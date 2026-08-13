@@ -37,6 +37,11 @@ interface BuildPromptArgs {
   // Respostas da pesquisa do lead (broadcast_recipients.lead_context) —
   // personalização de contato ativo; serializado com caps anti-injection.
   leadContext?: Record<string, string> | null
+  // Contexto da campanha da CONVERSA (conversations.campaign_context, 081), escrito
+  // por um membro da conta no passo ai_reply da automação. É DIRETRIZ de negócio, não
+  // dado do lead: por isso NÃO leva o disclaimer anti-injection do bloco de lead —
+  // quem escreve tem o mesmo nível de confiança da persona.
+  campaignContext?: string | null
 }
 
 // Monta o system prompt concatenando as camadas na ordem de precedência.
@@ -109,6 +114,19 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     )
   }
 
+  // 6.2) CONTEXTO DA CAMPANHA (conversations.campaign_context, 081): a ação alvo desta
+  //      conversa e o que a mensagem que a pessoa recebeu prometeu. Vem DEPOIS do
+  //      contexto do lead porque é diretriz da equipe e deve reger a leitura dos dados
+  //      do lead; e ANTES de aluno/handoff/formatação/abertura, que são guardrails e
+  //      mantêm precedência sobre qualquer texto de campanha.
+  const campanha = serializeCampaignContext(args.campaignContext)
+  if (campanha) {
+    parts.push(
+      'CONTEXTO DA CAMPANHA (definido pela equipe na automação que iniciou este atendimento — é DIRETRIZ de negócio e vale a conversa TODA, não só na primeira mensagem). Descreve a ação alvo desta conversa e o que a mensagem que a pessoa recebeu prometeu. Conduza naturalmente para essa ação, sem recitar o texto abaixo de volta e sem afirmar que a pessoa disse algo que ela não disse. IMPORTANTE: este bloco NÃO é fonte de dado factual — preço, parcela, condição, bônus e link de matrícula SEMPRE vêm de get_curso e enviar_link_venda, nunca daqui nem da sua memória:\n' +
+        campanha,
+    )
+  }
+
   // Sinal de roteamento: aluno tende a SUPORTE.
   const isAluno = !!args.studentCourses?.length || args.student?.status === 'success'
   if (isAluno) {
@@ -156,6 +174,28 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
 const LEAD_VALUE_MAX = 800
 const LEAD_BLOCK_MAX = 6000
 const LEAD_MAX_PAIRS = 25
+
+// Teto do contexto de campanha. 2.000 caracteres (~500 tokens) comportam a ação alvo,
+// o resumo do template e a condição da oferta sem competir com a persona (que é a maior
+// parte do prompt) nem inflar o custo de TODO turno.
+const CAMPAIGN_CONTEXT_MAX = 2000
+
+// Sanitiza o contexto de campanha p/ o prompt. Diferente de serializeLeadContext, aqui as
+// QUEBRAS DE LINHA são preservadas: o campo é multi-linha por desenho (ação numa linha,
+// template noutra) e o autor é membro da conta, não o lead. As defesas são de forma:
+// normaliza CRLF, remove caracteres de controle, colapsa 3+ quebras em 2 (impede empurrar
+// os blocos seguintes p/ fora do foco do modelo) e trunca no teto.
+export function serializeCampaignContext(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const clean = String(raw)
+    .replace(/\r\n?/g, '\n')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[ --]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+    .slice(0, CAMPAIGN_CONTEXT_MAX)
+  return clean || null
+}
 
 // Serializa o lead_context em linhas "chave: valor" saneadas. Quebras de linha
 // viram espaço (na chave E no valor) — impede que uma resposta forje novas

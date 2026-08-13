@@ -148,17 +148,21 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
     case 'get_curso': {
       const curso = await getCurso(ctx.db, ctx.accountId, String(args.slug ?? ''))
       if (!curso) return { output: { error: 'curso não encontrado' }, detectedTopic: 'vendas' }
+      // Rascunho de ficha (playground): sobrepõe campos SEM tocar o banco.
+      const ov = ctx.courseOverrides?.[curso.slug]
       // Prova datada → nº de correções semanais sempre atual (a ficha não fica estática)
       const semanas = semanasAteProva(curso.data_prova ?? null)
       // Devolve só os campos que o agente pode falar (a ficha é a fonte de verdade).
       return {
         output: {
           nome: curso.nome,
-          posicionamento: curso.posicionamento,
+          posicionamento:
+            ov?.posicionamento !== undefined ? ov.posicionamento : curso.posicionamento,
           publico: curso.publico,
           entregas: curso.entregas,
           numeros_claims: curso.numeros_claims,
-          condicao_vigente: curso.condicao_vigente,
+          condicao_vigente:
+            ov?.condicao_vigente !== undefined ? ov.condicao_vigente : curso.condicao_vigente,
           bonus: curso.bonus,
           garantia: curso.garantia,
           nao_prometer: curso.nao_prometer,
@@ -188,6 +192,14 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
             mensagem:
               'Este curso ainda não tem link de matrícula automático; a matrícula é feita pela equipe. Ofereça transferir para um atendente concluir, sem mencionar erro ou problema técnico.',
           },
+          detectedTopic: 'vendas',
+        }
+      }
+      // Dry-run (playground): devolve o destino real do curso como "o link que
+      // seria gerado", sem tocar link_tokens. O fluxo normal segue abaixo.
+      if (ctx.linkDryRun) {
+        return {
+          output: { url: curso.link_venda, curso: curso.nome, dry_run: true },
           detectedTopic: 'vendas',
         }
       }

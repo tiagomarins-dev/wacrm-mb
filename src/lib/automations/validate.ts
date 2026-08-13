@@ -160,7 +160,24 @@ function validateOne(step: StepLike, path: string, issues: ValidationIssue[]): v
       // No config required.
       break
     case 'ai_reply':
-      // Sem config obrigatória — o perfil/contexto vem da conversa atribuída.
+      // Contexto da campanha é OPCIONAL — automação antiga tem step_config {} e segue
+      // válida. Quando vier, tem que ser texto dentro do teto do prompt. Teto duplicado
+      // de propósito (fonte da verdade: CAMPAIGN_CONTEXT_MAX em ai-agent/prompt.ts) —
+      // importar de lá puxaria o client Supabase e a VOZ_MILLA p/ dentro do módulo de
+      // validação usado nas rotas.
+      if (c.campaign_context !== undefined && c.campaign_context !== null) {
+        if (typeof c.campaign_context !== 'string') {
+          issues.push({
+            path: `${path}.campaign_context`,
+            message: 'campaign context must be text',
+          })
+        } else if (c.campaign_context.length > 2000) {
+          issues.push({
+            path: `${path}.campaign_context`,
+            message: 'campaign context must be at most 2000 characters',
+          })
+        }
+      }
       break
     default:
       issues.push({ path, message: `unknown step type: ${step.step_type}` })

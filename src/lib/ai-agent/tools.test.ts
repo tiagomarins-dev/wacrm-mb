@@ -176,6 +176,63 @@ describe('enviar_link_venda', () => {
     expect((r.output as { sem_link: boolean }).sem_link).toBe(true)
     expect(r.detectedTopic).toBe('vendas')
   })
+
+  // Dry-run do playground: devolve o destino sem mintar token (zero escrita).
+  it('linkDryRun: devolve destino + dry_run e NÃO insere em link_tokens', async () => {
+    const { db, captured } = makeDb({ ai_courses: { nome: 'MB', link_venda: 'https://pay.x/mb' } })
+    const r = await execTool(makeCtx(db, { linkDryRun: true }), call('enviar_link_venda', { slug: 'mb' }))
+    expect(r.output).toMatchObject({ url: 'https://pay.x/mb', curso: 'MB', dry_run: true })
+    expect(captured.inserts).toHaveLength(0)
+  })
+
+  it('linkDryRun com contactId vazio (modo passivo) tampouco insere', async () => {
+    const { db, captured } = makeDb({ ai_courses: { nome: 'MB', link_venda: 'https://pay.x/mb' } })
+    const r = await execTool(
+      makeCtx(db, { linkDryRun: true, contactId: '' }),
+      call('enviar_link_venda', { slug: 'mb' }),
+    )
+    expect((r.output as { dry_run?: boolean }).dry_run).toBe(true)
+    expect(captured.inserts).toHaveLength(0)
+  })
+
+  it('sem a flag: caminho atual intocado (minta token e insere em link_tokens)', async () => {
+    const { db, captured } = makeDb({ ai_courses: { nome: 'MB', link_venda: 'https://pay.x/mb' } })
+    const r = await execTool(makeCtx(db), call('enviar_link_venda', { slug: 'mb' }))
+    expect((r.output as { url: string }).url).toMatch(/^https:\/\/app\.example\.com\/r\/[0-9a-f]{32}$/)
+    expect(captured.inserts.filter((i) => i.table === 'link_tokens')).toHaveLength(1)
+  })
+})
+
+describe('get_curso — courseOverrides (playground)', () => {
+  const ficha = {
+    slug: 'mb',
+    nome: 'MB',
+    posicionamento: 'original',
+    condicao_vigente: '12x de R$ 96,24',
+    data_prova: null,
+  }
+
+  it('override sobrepõe posicionamento e condição sem tocar o banco', async () => {
+    const { db, captured } = makeDb({ ai_courses: ficha })
+    const ctx = makeCtx(db, {
+      courseOverrides: { mb: { posicionamento: 'rascunho v2', condicao_vigente: 'Matrículas encerradas' } },
+    })
+    const r = await execTool(ctx, call('get_curso', { slug: 'mb' }))
+    const out = r.output as { posicionamento: string; condicao_vigente: string }
+    expect(out.posicionamento).toBe('rascunho v2')
+    expect(out.condicao_vigente).toBe('Matrículas encerradas')
+    expect(captured.inserts).toHaveLength(0)
+    expect(captured.updates).toHaveLength(0)
+  })
+
+  it('sem override (ou de outro slug): ficha do banco intocada', async () => {
+    const { db } = makeDb({ ai_courses: ficha })
+    const ctx = makeCtx(db, { courseOverrides: { outro: { condicao_vigente: 'x' } } })
+    const r = await execTool(ctx, call('get_curso', { slug: 'mb' }))
+    const out = r.output as { posicionamento: string; condicao_vigente: string }
+    expect(out.posicionamento).toBe('original')
+    expect(out.condicao_vigente).toBe('12x de R$ 96,24')
+  })
 })
 
 describe('buscar_suporte', () => {

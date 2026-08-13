@@ -18,6 +18,11 @@ import { applyGuardrail, hasForbidden } from './guardrail'
 import { recordAgentRun, type AgentRunInsert } from './telemetry'
 import type { AiAgentConfig, AiAgentRun } from '@/types'
 
+// TTL do contexto de campanha (081): campanha encerrada não pode ser reoferecida numa
+// conversa reaberta meses depois pra pedir suporte. 60 dias cobrem o ciclo de um
+// lançamento com folga, sem exigir limpeza manual.
+const CAMPAIGN_CONTEXT_TTL_MS = 60 * 86_400_000
+
 // Subconjunto da row de ai_agent_pending que o engine precisa.
 export interface PendingRow {
   id: string
@@ -122,6 +127,25 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
     (leadRecs?.[0] as { lead_context: Record<string, string> | null } | undefined)
       ?.lead_context ?? null
 
+  // Contexto de campanha da conversa (081), gravado pelo passo ai_reply. Lido do BANCO
+  // pelo mesmo motivo do lead_context: a fila do cron (ai_agent_pending) não carrega
+  // campo livre, então só a coluna faz o contexto valer da 2ª resposta em diante.
+  // Filtro de conta explícito — service-role bypassa RLS.
+  const { data: convRow } = await db
+    .from('conversations')
+    .select('campaign_context, campaign_context_at')
+    .eq('id', row.conversation_id)
+    .eq('account_id', row.account_id)
+    .maybeSingle()
+  const conv = convRow as
+    | { campaign_context: string | null; campaign_context_at: string | null }
+    | null
+  const campaignFresh =
+    !!conv?.campaign_context &&
+    (!conv.campaign_context_at ||
+      Date.now() - new Date(conv.campaign_context_at).getTime() < CAMPAIGN_CONTEXT_TTL_MS)
+  const campaignContext = campaignFresh ? conv!.campaign_context : null
+
   // Catálogo p/ o prompt (cursos ativos + categorias de suporte).
   const courses = await listCursos(db, row.account_id)
   const supportCategories = await listSupportCategories(db, row.account_id)
@@ -136,6 +160,7 @@ export async function runAiAgentForConversation(row: PendingRow): Promise<AiAgen
     contactEmail: contact?.email ?? null,
     studentCourses,
     leadContext,
+    campaignContext, // contexto da campanha da conversa (081) — vale em todo turno
     opening: row.opening ?? false, // abertura: injeta a diretriz de cumprimento
     openingPrompt: profile.opening_prompt, // diretriz custom do perfil (campanha)
   })

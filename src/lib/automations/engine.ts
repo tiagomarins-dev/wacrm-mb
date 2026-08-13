@@ -13,6 +13,7 @@ import type {
   WaitStepConfig,
   CreateDealStepConfig,
   AssignConversationStepConfig,
+  AiReplyStepConfig,
 } from '@/types'
 import { supabaseAdmin } from './admin-client'
 import { engineSendText, engineSendTemplate } from './meta-send'
@@ -526,6 +527,25 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         .maybeSingle()
       if ((c as { ai_opt_out: boolean | null } | null)?.ai_opt_out) {
         return 'ai_reply: contato optou por não falar com bot'
+      }
+
+      // Contexto da campanha (081): grava na CONVERSA antes de rodar o agente, pra valer
+      // já na 1ª resposta (inline) e em todas as seguintes (o cron lê do banco). Só grava
+      // quando há texto: automação antiga tem step_config {} e NÃO pode apagar o contexto
+      // que outra campanha gravou nesta conversa.
+      // O slice é a última defesa de tamanho — a API aceita step_config cru, sem allowlist
+      // de chaves (steps-tree.ts), então um POST direto poderia gravar texto gigante.
+      const aiCfg = step.step_config as AiReplyStepConfig
+      const campaign =
+        typeof aiCfg.campaign_context === 'string'
+          ? aiCfg.campaign_context.trim().slice(0, 2000)
+          : ''
+      if (campaign) {
+        await db
+          .from('conversations')
+          .update({ campaign_context: campaign, campaign_context_at: new Date().toISOString() })
+          .eq('id', conversationId)
+          .eq('account_id', args.automation.account_id)
       }
 
       // Roda o agente inline. id='' é seguro: runAiAgentForConversation NÃO usa

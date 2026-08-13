@@ -153,6 +153,17 @@ export const RATE_LIMITS = {
    *  raro (aulas, campanhas) — 10/min limita o dano de flood/replay
    *  sem atrapalhar uso real. */
   broadcastWebhook: { limit: 10, windowMs: 60_000 },
+  /** Playground da Ruth — gate de senha (por IP), checado em TODA request
+   *  ANTES do compare. Incrementa sempre (o util não tem peek sem
+   *  incremento): 30/min cobre o uso legítimo (chat+lookup+profiles) e
+   *  trava brute force de senha. */
+  playgroundAuth: { limit: 30, windowMs: 60_000 },
+  /** Playground — turnos de chat (por IP). Cada turno é 1+ chamadas LLM
+   *  pagas; 10/min é folgado pra teste manual e limita queima de créditos. */
+  playgroundChat: { limit: 10, windowMs: 60_000 },
+  /** Playground — lookup de lead por sufixo de telefone (por IP). Read-only
+   *  e barato, mas freia enumeração de telefones. */
+  playgroundLookup: { limit: 30, windowMs: 60_000 },
 } as const;
 
 /** Test-only helper. Clears the in-memory state so unit tests don't

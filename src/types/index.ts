@@ -422,6 +422,10 @@ export interface Conversation {
   report_flags?: ReportFlags | null;
   /** Versão da taxonomia aplicada (068). NULL = só intent v0. */
   report_taxonomy_version?: number | null;
+  /** Contexto da campanha gravado pelo passo ai_reply da automação (081). */
+  campaign_context?: string | null;
+  /** Quando o contexto foi gravado — base do TTL aplicado no engine (081). */
+  campaign_context_at?: string | null;
 }
 
 /** Favorito de conversa por usuário (076) — pina na aba "Minhas" do inbox. */
@@ -852,6 +856,16 @@ export interface SendWebhookStepConfig {
   body_template?: string;
 }
 
+export interface AiReplyStepConfig {
+  /**
+   * Texto livre que descreve a campanha desta automação: a ação alvo e o que o
+   * template prometeu. Gravado em conversations.campaign_context (081) pelo passo e
+   * lido pelo engine do agente a cada run. OPCIONAL — automação antiga tem
+   * step_config {} e segue válida. Teto de 2.000 caracteres.
+   */
+  campaign_context?: string;
+}
+
 export type AutomationStepConfig =
   | SendMessageStepConfig
   | SendTemplateStepConfig
@@ -862,6 +876,7 @@ export type AutomationStepConfig =
   | WaitStepConfig
   | ConditionStepConfig
   | SendWebhookStepConfig
+  | AiReplyStepConfig
   | Record<string, never>
   | Record<string, unknown>;
 
