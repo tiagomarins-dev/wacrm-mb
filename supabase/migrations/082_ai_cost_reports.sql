@@ -49,8 +49,9 @@ begin
     and (p_connection_id is null or r.connection_id = p_connection_id);
 end $$;
 
--- Tabela: uma linha por conversa, da mais cara para a mais barata. Traz o nome do
--- contato para a linha ser clicável até /inbox?c=<conversation_id>.
+-- Tabela: uma linha por conversa, da resposta mais recente para a mais antiga —
+-- o relatório é lido como linha do tempo do que a IA acabou de atender. Traz o
+-- nome do contato para a linha ser clicável até /inbox?c=<conversation_id>.
 create or replace function ai_cost_by_conversation(
   p_window_days int default 30,
   p_connection_id uuid default null
@@ -91,8 +92,9 @@ begin
   -- inner join: conversa apagada sai do relatório (não há o que abrir no clique).
   join conversations c on c.id = p.cv
   left join contacts ct on ct.id = c.contact_id
-  order by coalesce(p.custo, 0) desc, p.ultima desc
-  limit 500;  -- teto defensivo; os cards trazem o total real do período
+  -- Desempate por custo: duas conversas no mesmo instante caem com a mais cara em cima.
+  order by p.ultima desc, coalesce(p.custo, 0) desc
+  limit 500;  -- teto defensivo (as 500 mais recentes); os cards trazem o total real do período
 end $$;
 
 grant execute on function ai_cost_summary(int, uuid) to authenticated;

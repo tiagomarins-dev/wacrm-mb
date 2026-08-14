@@ -64,6 +64,6 @@
   "aiCostColTokens": "Tokens",
   "aiCostColFlags": "Sinais",
   "aiCostColLast": "Última resposta",
-  "aiCostTruncated": "Mostrando as 500 conversas mais caras. Os cards acima somam o período inteiro.",
+  "aiCostTruncated": "Mostrando as 500 conversas mais recentes. Os cards acima somam o período inteiro.",
   "aiCostHint": "O custo vem do que o provedor cobrou por cada resposta, já com desconto de cache."
 }

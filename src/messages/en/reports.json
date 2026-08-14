@@ -64,6 +64,6 @@
   "aiCostColTokens": "Tokens",
   "aiCostColFlags": "Signals",
   "aiCostColLast": "Last reply",
-  "aiCostTruncated": "Showing the 500 most expensive conversations. The cards above cover the whole period.",
+  "aiCostTruncated": "Showing the 500 most recent conversations. The cards above cover the whole period.",
   "aiCostHint": "Cost comes from what the provider charged per reply, cache discount included."
 }
