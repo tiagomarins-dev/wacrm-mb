@@ -13,6 +13,41 @@ import { buildToolDefs, execTool } from './tools'
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions'
 const TIMEOUT_MS = 60_000
 
+// Famílias de modelo que só reaproveitam prefixo de prompt com marcação
+// EXPLÍCITA na requisição. OpenAI e Google cacheiam sozinhos; a Anthropic
+// exige `cache_control`, e sem ele o system inteiro é cobrado como entrada
+// nova em TODA chamada — inclusive nas iterações do loop de tools.
+const EXPLICIT_CACHE_PREFIXES = ['anthropic/']
+
+// Piso de tamanho pro ponto de corte. Prefixo curto não é cacheável pelo
+// provider e a marcação vira ruído; abaixo disso o ganho não existe mesmo.
+const CACHE_MIN_CHARS = 4_000
+
+// Converte as mensagens para o formato de rede, marcando o fim do system
+// prompt como ponto de corte de cache. No formato da Anthropic as definições
+// de tools vêm ANTES do system, então o corte cobre tools + persona + blocos
+// fixos — a parte do prompt que é idêntica em toda chamada. O histórico fica
+// de fora do prefixo de propósito: ele muda a cada turn e invalidaria o cache.
+function toWireMessages(model: string, msgs: ChatMsg[]): unknown[] {
+  const precisaMarcar = EXPLICIT_CACHE_PREFIXES.some((p) => model.startsWith(p))
+  const [system, ...rest] = msgs
+  if (
+    !precisaMarcar ||
+    system?.role !== 'system' ||
+    typeof system.content !== 'string' ||
+    system.content.length < CACHE_MIN_CHARS
+  ) {
+    return msgs
+  }
+  return [
+    {
+      role: 'system',
+      content: [{ type: 'text', text: system.content, cache_control: { type: 'ephemeral' } }],
+    },
+    ...rest,
+  ]
+}
+
 export type AgentTopic = 'vendas' | 'suporte' | null
 
 // Telemetria agregada de UMA execução do loop (somada nos turns). Vai para
@@ -114,7 +149,7 @@ export async function runAgentLoop(
         },
         body: JSON.stringify({
           model: ctx.model,
-          messages: msgs,
+          messages: toWireMessages(ctx.model, msgs),
           tools: toolDefs,
           tool_choice: 'auto',
           provider: { data_collection: 'deny' }, // M2: no-logging (PID do aluno)

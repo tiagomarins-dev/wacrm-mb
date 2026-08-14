@@ -146,3 +146,38 @@ describe('runAgentLoop', () => {
     expect(r.telemetry.costUsd).toBeNull()
   })
 })
+
+describe('ponto de corte de cache no system prompt', () => {
+  const SYS_LONGO = 'P'.repeat(5_000)
+
+  // Roda um turn simples e devolve o body serializado que foi pra rede.
+  async function bodyDe(over: Partial<AgentCtx>) {
+    const fetchMock = vi.fn().mockResolvedValue(reply({ content: 'ok' }))
+    vi.stubGlobal('fetch', fetchMock)
+    await runAgentLoop(ctx(makeDb({ openrouter_api_key: 'ENC' }), over))
+    return JSON.parse(fetchMock.mock.calls[0][1].body)
+  }
+
+  it('modelo anthropic + system longo → system vira bloco com cache_control', async () => {
+    const body = await bodyDe({ model: 'anthropic/claude-sonnet-4.6', system: SYS_LONGO })
+    expect(body.messages[0]).toEqual({
+      role: 'system',
+      content: [{ type: 'text', text: SYS_LONGO, cache_control: { type: 'ephemeral' } }],
+    })
+  })
+
+  it('histórico fica FORA do prefixo cacheado (muda a cada turn)', async () => {
+    const body = await bodyDe({ model: 'anthropic/claude-sonnet-4.6', system: SYS_LONGO })
+    expect(body.messages[1]).toEqual({ role: 'user', content: 'oi' })
+  })
+
+  it('modelo que cacheia sozinho → system segue string crua', async () => {
+    const body = await bodyDe({ model: 'openai/gpt-5.4-mini', system: SYS_LONGO })
+    expect(body.messages[0]).toEqual({ role: 'system', content: SYS_LONGO })
+  })
+
+  it('system curto demais p/ ser cacheável → não marca', async () => {
+    const body = await bodyDe({ model: 'anthropic/claude-sonnet-4.6', system: 'curto' })
+    expect(body.messages[0]).toEqual({ role: 'system', content: 'curto' })
+  })
+})
