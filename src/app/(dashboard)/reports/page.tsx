@@ -14,6 +14,7 @@ import { useFormat } from "@/lib/i18n/format";
 import { cn } from "@/lib/utils";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { SalesOverridePanel } from "@/components/reports/sales-override-panel";
+import { AiCostPanel } from "@/components/reports/ai-cost-panel";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -284,6 +285,11 @@ export default function ReportsPage() {
         <div className="mt-8 border-t border-border pt-6">
           <SalesOverridePanel windowDays={windowDays} connectionId={activeConnectionId} members={members} />
         </div>
+      )}
+
+      {/* Custo do agente de IA (082): admin+ apenas — é dado financeiro. */}
+      {canEditSettings && (
+        <AiCostPanel windowDays={windowDays} connectionId={activeConnectionId} />
       )}
 
       {/* Seção OWNER-only (065): conversas que passaram por um atendente no dia. */}

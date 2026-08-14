@@ -1023,6 +1023,38 @@ export interface AttributedSaleRow {
   sale_type: SaleType | null;
 }
 
+// Retorno da RPC ai_cost_summary (082): totais de custo do agente no período.
+// Numéricos do Postgres chegam como string no supabase-js — converta antes de somar.
+export interface AiCostSummary {
+  custo_usd: string | number;
+  conversas: number;
+  runs: number;
+  chamadas_llm: number;
+  tokens: number;
+  custo_medio_conversa: string | number | null;
+  handoffs: number;
+  // erros = status 'error' (LLM ou envio falhou). sem_resposta = a IA rodou e
+  // decidiu não responder — comportamento esperado, contado à parte.
+  erros: number;
+  sem_resposta: number;
+}
+
+// Linha da RPC ai_cost_by_conversation (082): custo do agente por conversa.
+export interface AiCostConversationRow {
+  conversation_id: string;
+  contact_id: string | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  custo_usd: string | number;
+  runs: number;
+  chamadas_llm: number;
+  tokens: number;
+  handoffs: number;
+  erros: number;
+  modelos: string[] | null;
+  ultima_run: string;
+}
+
 // Retorno da RPC pulse_tiles (F1). frt em minutos; resolucao em horas; sla em %.
 export interface PulseTiles {
   conversas: number;
