@@ -75,5 +75,9 @@
   "clearConversationConfirm": "Limpar conversa",
   "clearConversationCancel": "Cancelar",
   "clearConversationSuccess": "Conversa limpa",
-  "clearConversationError": "Falha ao limpar a conversa"
+  "clearConversationError": "Falha ao limpar a conversa",
+  "handoffFromAi": "A IA transferiu uma conversa para você",
+  "handoffFromTeammate": "Uma conversa foi transferida para você",
+  "handoffOpenHint": "Você é o responsável a partir de agora.",
+  "handoffOpen": "Abrir"
 }

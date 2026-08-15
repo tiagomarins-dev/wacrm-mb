@@ -75,5 +75,9 @@
   "clearConversationConfirm": "Clear conversation",
   "clearConversationCancel": "Cancel",
   "clearConversationSuccess": "Conversation cleared",
-  "clearConversationError": "Failed to clear the conversation"
+  "clearConversationError": "Failed to clear the conversation",
+  "handoffFromAi": "The AI handed a conversation to you",
+  "handoffFromTeammate": "A conversation was transferred to you",
+  "handoffOpenHint": "You are the assignee from now on.",
+  "handoffOpen": "Open"
 }

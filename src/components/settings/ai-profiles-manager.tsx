@@ -25,11 +25,21 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import type { AiProfile } from '@/types';
+import type { AiProfile, ReportMember } from '@/types';
 
 // Tools de domínio liberáveis por perfil (as de controle entram sempre no engine).
 const DOMAIN_TOOLS = ['get_curso', 'enviar_link_venda', 'buscar_suporte'] as const;
 const DEFAULT_MODEL = 'anthropic/claude-sonnet-4.6';
+
+// Assuntos que a tool transferir_humano sabe rotear. As chaves batem com o que
+// tools.ts:232 lê de handoff_routing — mudar aqui sem mudar lá quebra a rota.
+const HANDOFF_TOPICS = ['vendas', 'suporte'] as const;
+type HandoffTopic = (typeof HANDOFF_TOPICS)[number];
+
+// Valor do <option> que representa "não roteia para ninguém". String vazia porque
+// o select devolve string; vira ausência da chave no JSONB, que o engine trata
+// como desatribuir a conversa (cai na fila).
+const FILA = '';
 
 /**
  * Gerencia os perfis de IA (responsáveis atribuíveis). Lê a tabela BASE
@@ -53,6 +63,10 @@ export function AiProfilesManager() {
   const [tools, setTools] = useState<string[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Destino da transferência por assunto. Guarda user_id ou FILA.
+  const [routing, setRouting] = useState<Record<HandoffTopic, string>>({ vendas: FILA, suporte: FILA });
+  // Membros da conta que podem receber uma conversa. Viewer fica de fora: não atende.
+  const [members, setMembers] = useState<ReportMember[]>([]);
 
   const [deleteTarget, setDeleteTarget] = useState<AiProfile | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -78,6 +92,18 @@ export function AiProfilesManager() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading]);
 
+  // Membros para os selects de transferência. Mesma fonte da tela de relatórios
+  // (reports/page.tsx:64). Viewer não entra: não assume conversa.
+  useEffect(() => {
+    if (authLoading) return;
+    (async () => {
+      const res = await fetch('/api/account/members', { cache: 'no-store' });
+      if (!res.ok) return;
+      const json = (await res.json()) as { members: ReportMember[] };
+      setMembers(json.members.filter((m) => m.account_role !== 'viewer'));
+    })();
+  }, [authLoading]);
+
   function resetForm() {
     setEditingId(null);
     setNome('');
@@ -86,6 +112,7 @@ export function AiProfilesManager() {
     setMaxTurns(8);
     setTools([]);
     setEnabled(true);
+    setRouting({ vendas: FILA, suporte: FILA });
   }
 
   function startEdit(p: AiProfile) {
@@ -96,6 +123,10 @@ export function AiProfilesManager() {
     setMaxTurns(p.max_bot_turns);
     setTools(p.allowed_tools ?? []);
     setEnabled(p.enabled);
+    setRouting({
+      vendas: p.handoff_routing?.vendas ?? FILA,
+      suporte: p.handoff_routing?.suporte ?? FILA,
+    });
   }
 
   function toggleTool(tool: string) {
@@ -114,12 +145,21 @@ export function AiProfilesManager() {
     setSaving(true);
     // Vazio = todas as tools de domínio (null no banco).
     const allowed_tools = tools.length ? tools : null;
+    // Só entram os assuntos com destino escolhido: chave ausente faz a tool devolver
+    // null e o engine desatribuir a conversa (fila). Objeto vazio vira null para o
+    // banco ficar consistente com perfil que nunca configurou rota.
+    const rota: Record<string, string> = {};
+    for (const topico of HANDOFF_TOPICS) {
+      if (routing[topico]) rota[topico] = routing[topico];
+    }
+    const handoff_routing = Object.keys(rota).length ? rota : null;
     const payload = {
       nome: nome.trim(),
       model: model.trim() || DEFAULT_MODEL,
       persona_prompt: persona.trim() || null,
       max_bot_turns: maxTurns,
       allowed_tools,
+      handoff_routing,
       enabled,
     };
     try {
@@ -263,6 +303,43 @@ export function AiProfilesManager() {
               <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
               {t('enabledLabel')}
             </label>
+          </div>
+
+          {/* Destino da transferência por assunto: a IA escolhe vendas ou suporte ao
+              chamar transferir_humano, e a conversa é reatribuída a quem estiver aqui. */}
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">{t('p_handoff')}</label>
+            <div className="flex flex-col gap-3 sm:flex-row">
+              {HANDOFF_TOPICS.map((topico) => {
+                const valor = routing[topico];
+                // Destino que não está mais entre os membros (saiu da conta): mantém a
+                // opção visível para o save não apagar a rota sem ninguém perceber.
+                const orfao = valor && !members.some((m) => m.user_id === valor);
+                return (
+                  <div key={topico} className="flex-1">
+                    <span className="mb-1 block text-[11px] text-muted-foreground">
+                      {t(`p_handoff_${topico}`)}
+                    </span>
+                    <select
+                      value={valor}
+                      onChange={(e) => setRouting((prev) => ({ ...prev, [topico]: e.target.value }))}
+                      className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                    >
+                      <option value={FILA}>{t('p_handoffQueue')}</option>
+                      {members.map((m) => (
+                        <option key={m.user_id} value={m.user_id}>
+                          {m.full_name || m.user_id.slice(0, 8)}
+                        </option>
+                      ))}
+                      {orfao && (
+                        <option value={valor}>{t('p_handoffUnknown', { id: valor.slice(0, 8) })}</option>
+                      )}
+                    </select>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mt-1 text-[11px] text-muted-foreground">{t('p_handoffHint')}</p>
           </div>
 
           <div className="flex items-center gap-2">

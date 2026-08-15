@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { useTotalUnread } from "@/hooks/use-total-unread";
+import { useHandoffAlert } from "@/hooks/use-handoff-alert";
 import {
   Activity,
   BarChart3,
@@ -140,8 +141,11 @@ interface SidebarProps {
 export function Sidebar({ open = false, onClose, collapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useTranslation(["nav", "common"]);
-  const { profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { user, profile, profileLoading, account, accountRole, signOut } = useAuth();
   const totalUnread = useTotalUnread();
+  // Aviso de conversa transferida para mim. Mora aqui porque a sidebar está
+  // montada em todas as páginas do dashboard.
+  useHandoffAlert(user?.id ?? null);
 
   // Gate por papel: item some p/ quem não tem o papel mínimo (segurança
   // real é server-side). Enquanto profileLoading, accountRole é null →
