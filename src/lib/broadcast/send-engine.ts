@@ -4,6 +4,7 @@ import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { capabilitiesFor } from '@/lib/providers/types'
 import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
 import { sendRecipients, type BroadcastRecipientInput } from './send-batch'
+import { tagBroadcastRecipients } from './tag-recipients'
 import {
   resolveVariables,
   fetchCustomValueIndex,
@@ -20,6 +21,10 @@ export interface ScheduledBroadcastRow {
   template_name: string
   template_language: string | null
   template_variables: Record<string, VariableMapping> | null
+  /** Autor do disparo — vira o created_by da tag, se ela precisar ser criada. */
+  user_id?: string | null
+  /** Tag aplicada a quem receber (083). Null = não marca. */
+  tag_name?: string | null
 }
 
 export interface DrainResult {
@@ -141,7 +146,7 @@ export async function drainBroadcast(
   const variables = broadcast.template_variables ?? {}
 
   // Recipients sem telefone falham direto; o resto vai pro envio.
-  const sendable: { recipientId: string; input: BroadcastRecipientInput }[] = []
+  const sendable: { recipientId: string; contactId: string; input: BroadcastRecipientInput }[] = []
   const noPhoneIds: string[] = []
   for (const r of batch) {
     const contact = r.contact as unknown as
@@ -153,6 +158,7 @@ export async function drainBroadcast(
     }
     sendable.push({
       recipientId: r.id,
+      contactId: contact.id,
       input: {
         phone: contact.phone,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -184,11 +190,14 @@ export async function drainBroadcast(
 
     // results na mesma ordem do input → zip por índice.
     const nowIso = new Date().toISOString()
+    // Contatos alcançados neste tick, para a marcação de tag no fim.
+    const contatosEnviados: string[] = []
     for (let i = 0; i < sendable.length; i++) {
-      const { recipientId } = sendable[i]
+      const { recipientId, contactId } = sendable[i]
       const result = results[i]
       if (result?.status === 'sent') {
         sent++
+        if (contactId) contatosEnviados.push(contactId)
         await admin
           .from('broadcast_recipients')
           .update({
@@ -206,6 +215,18 @@ export async function drainBroadcast(
           .eq('id', recipientId)
       }
     }
+
+    // Marca a tag do disparo por TICK, não no fim da broadcast: o cron drena em
+    // lotes e pode levar vários ticks, então marcar aqui garante que ninguém
+    // fique de fora se o processo parar no meio.
+    await tagBroadcastRecipients(admin, {
+      tagName: broadcast.tag_name,
+      contactIds: contatosEnviados,
+      accountId: broadcast.account_id,
+      userId: broadcast.user_id ?? '',
+      // Cron roda como service role, sem papel de usuário: pode criar a tag.
+      canCreateTags: true,
+    })
   }
 
   // ── Sobrou pendente? Se não, finaliza a broadcast ──────────────

@@ -52,6 +52,8 @@ export default function NewBroadcastPage() {
   const [scheduledAt, setScheduledAt] = useState<string | null>(null);
   // Perfil de IA vinculado à campanha (null = atendimento humano).
   const [aiProfileId, setAiProfileId] = useState<string | null>(null);
+  // Tag aplicada a quem receber o disparo (null = não marcar).
+  const [tagName, setTagName] = useState<string | null>(null);
 
   async function handleSend() {
     if (!template) return;
@@ -77,6 +79,7 @@ export default function NewBroadcastPage() {
         variables,
         scheduledAt,
         aiProfileId,
+        tagName,
       });
       router.push(`/broadcasts/${broadcastId}`);
     } catch (err) {
@@ -293,6 +296,8 @@ export default function NewBroadcastPage() {
               scheduledAt={scheduledAt}
               onScheduleChange={setScheduledAt}
               aiProfileId={aiProfileId}
+              tagName={tagName}
+              onTagNameChange={setTagName}
               onAiProfileChange={setAiProfileId}
             />
           )}

@@ -113,7 +113,10 @@
     "confirmAndCreateWebhook": "Confirmar e criar",
     "aiProfileLabel": "Conversa assistida por IA (opcional)",
     "aiProfileNone": "Sem agente — atendimento humano",
-    "aiProfileHint": "Quando o lead responder ao template, este agente assume a conversa usando os dados do CSV como contexto."
+    "aiProfileHint": "Quando o lead responder ao template, este agente assume a conversa usando os dados do CSV como contexto.",
+    "tagLabel": "Marcar contatos com a tag (opcional)",
+    "tagPlaceholder": "ex.: MB Turbo lote 1",
+    "tagHint": "Aplicada só a quem receber a mensagem, para você filtrar depois em Contatos quem já foi abordado. Se a tag não existir, é criada."
   },
   "common": {
     "back": "Voltar",

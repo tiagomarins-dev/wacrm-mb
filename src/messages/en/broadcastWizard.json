@@ -113,7 +113,10 @@
     "confirmAndCreateWebhook": "Confirm & create",
     "aiProfileLabel": "AI-assisted conversation (optional)",
     "aiProfileNone": "No agent — human support",
-    "aiProfileHint": "When the lead replies to the template, this agent takes over the conversation using the CSV data as context."
+    "aiProfileHint": "When the lead replies to the template, this agent takes over the conversation using the CSV data as context.",
+    "tagLabel": "Tag contacts with (optional)",
+    "tagPlaceholder": "e.g. MB Turbo batch 1",
+    "tagHint": "Applied only to contacts who actually receive the message, so you can filter later in Contacts. The tag is created if it does not exist."
   },
   "common": {
     "back": "Back",

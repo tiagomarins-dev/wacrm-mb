@@ -10,6 +10,7 @@ import {
   fetchCustomValueIndex,
   type VariableMapping,
 } from '@/lib/broadcast/variables';
+import { tagBroadcastRecipients } from '@/lib/broadcast/tag-recipients';
 
 export type CustomFieldOperator = 'is' | 'is_not' | 'contains';
 
@@ -50,6 +51,12 @@ interface BroadcastPayload {
    * responde ao template, o webhook atribui a conversa a esse perfil.
    */
   aiProfileId?: string | null;
+  /**
+   * Nome da tag aplicada a quem RECEBEU o disparo, para depois filtrar em
+   * Contatos quem já foi abordado. Criada na hora se não existir (admin+).
+   * Vazio = não marca nada.
+   */
+  tagName?: string | null;
 }
 
 /** Limite superior de agendamento — evita datas absurdas (1 ano). */
@@ -84,7 +91,7 @@ interface BroadcastApiResult {
 }
 
 export function useBroadcastSending(): UseBroadcastSendingReturn {
-  const { accountId } = useAuth();
+  const { accountId, canEditSettings } = useAuth();
   // Conexão ativa (multi-número, 033): o broadcast nasce nela.
   const { activeConnectionId } = useActiveConnection();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -329,6 +336,7 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           status: isScheduled ? 'scheduled' : 'sending',
           scheduled_at: isScheduled ? payload.scheduledAt : null,
           ai_profile_id: payload.aiProfileId ?? null,
+          tag_name: payload.tagName?.trim() || null,
           total_recipients: contacts.length,
           sent_count: 0,
           delivered_count: 0,
@@ -416,6 +424,8 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
 
       let failedCount = 0;
       const totalRecipients = recipients.length;
+      // Contatos que receberam de fato, acumulados para a marcação de tag no fim.
+      const contatosEnviados: string[] = [];
 
       for (let i = 0; i < recipients.length; i += SEND_BATCH_SIZE) {
         const batch = recipients.slice(i, i + SEND_BATCH_SIZE);
@@ -474,6 +484,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
             }
 
             if (result.status === 'sent') {
+              // Só quem REALMENTE recebeu entra na marcação: a tag responde
+              // "com quem falamos", e template que falhou não é contato feito.
+              if (recipient.contact_id) contatosEnviados.push(recipient.contact_id);
               await supabase
                 .from('broadcast_recipients')
                 .update({
@@ -515,6 +528,22 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
           await sleep(SEND_BATCH_DELAY_MS);
         }
       }
+
+      // ── Step 4.5: Marca a tag do disparo nos contatos alcançados ──
+      // Reusa o mesmo par de funções da importação de contatos: resolve o nome
+      // para id (criando a tag se faltar, quando o papel permite) e insere em
+      // contact_tags ignorando duplicados. Roda DEPOIS do envio de propósito —
+      // a tag responde "com quem falamos", então quem falhou fica de fora.
+      // Falha aqui não derruba o disparo: as mensagens já saíram, e perder a
+      // marcação é bem menos grave que estourar erro num broadcast concluído.
+      const marcados = await tagBroadcastRecipients(supabase, {
+        tagName: payload.tagName,
+        contactIds: contatosEnviados,
+        accountId,
+        userId: user.id,
+        canCreateTags: canEditSettings,
+      });
+      if (marcados > 0) setProgress(94);
 
       // ── Step 5: Finalize status ───────────────────────────────────
       // Aggregate counts are maintained by the DB trigger (migration

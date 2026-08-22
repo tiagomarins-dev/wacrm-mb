@@ -45,6 +45,9 @@ interface Step4Props {
   /** Perfil de IA vinculado à campanha (null = atendimento humano). */
   aiProfileId: string | null;
   onAiProfileChange: (id: string | null) => void;
+  /** Tag aplicada a quem receber o disparo (null = não marcar). */
+  tagName: string | null;
+  onTagNameChange: (name: string | null) => void;
 }
 
 export function Step4ScheduleSend({
@@ -63,6 +66,8 @@ export function Step4ScheduleSend({
   onScheduleChange,
   aiProfileId,
   onAiProfileChange,
+  tagName,
+  onTagNameChange,
 }: Step4Props) {
   const { t } = useTranslation(['broadcastWizard', 'common']);
   // Formatação de data/hora pelo idioma ativo (substitui o `format` do date-fns).
@@ -216,6 +221,19 @@ export function Step4ScheduleSend({
           ))}
         </select>
         <p className="mt-1 text-xs text-muted-foreground">{t('step4.aiProfileHint')}</p>
+      </div>
+
+      {/* Tag do disparo: marca quem RECEBEU, para filtrar depois em Contatos */}
+      <div className="rounded-xl border border-border bg-card/50 p-4">
+        <p className="mb-1 text-sm font-medium text-foreground">{t('step4.tagLabel')}</p>
+        <Input
+          value={tagName ?? ''}
+          onChange={(e) => onTagNameChange(e.target.value || null)}
+          disabled={isProcessing}
+          placeholder={t('step4.tagPlaceholder')}
+          className="h-9 border-border bg-muted text-sm text-foreground"
+        />
+        <p className="mt-1 text-xs text-muted-foreground">{t('step4.tagHint')}</p>
       </div>
 
       {/* Send timing */}
