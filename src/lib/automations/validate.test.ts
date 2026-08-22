@@ -235,6 +235,13 @@ describe("validateTriggerForActivation", () => {
     );
   });
 
+  it("accepts keyword_match without match_type (defaults to contains)", () => {
+    const issues = validateTriggerForActivation("keyword_match", {
+      keywords: ["oi"],
+    });
+    expect(issues).toEqual([]);
+  });
+
   it("rejects keyword_match with an unknown match_type", () => {
     const issues = validateTriggerForActivation("keyword_match", {
       keywords: ["hi"],

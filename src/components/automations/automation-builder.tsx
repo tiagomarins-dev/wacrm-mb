@@ -1273,7 +1273,9 @@ function KeywordMatchConfig({
       .map((s) => s.trim())
       .filter(Boolean)
     setDraft(parsed.join(", "))
-    onChange({ ...config, keywords: parsed })
+    // Grava o match_type junto: o select exibe "contains" como padrão, mas só
+    // o usuário mexer nele persistiria o valor — e a ativação exige o campo.
+    onChange({ ...config, match_type: config?.match_type ?? "contains", keywords: parsed })
   }
 
   return (
