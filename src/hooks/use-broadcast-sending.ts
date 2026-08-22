@@ -177,6 +177,13 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
     if (!accountId) {
       throw new Error('Your profile is not linked to an account.');
     }
+    // contacts.connection_id é NOT NULL desde a 036. Sem conexão ativa o insert
+    // abaixo quebraria com o erro cru do Postgres, que não diz o que fazer.
+    if (!activeConnectionId) {
+      throw new Error(
+        'Selecione a conexão de WhatsApp ativa antes de disparar: os contatos novos do CSV nascem nela.',
+      );
+    }
 
     // De-duplicate by phone within the CSV (users can paste duplicates).
     const uniqueByPhone = new Map<string, { phone: string; name?: string }>();
@@ -213,6 +220,9 @@ export function useBroadcastSending(): UseBroadcastSendingReturn {
       .map((phone) => ({
         user_id: user.id,
         account_id: accountId,
+        // Contato nasce preso à conexão ativa (033) — espelha o import de
+        // contatos (import-modal.tsx:284). Sem isso a coluna NOT NULL estoura.
+        connection_id: activeConnectionId,
         phone,
         name: uniqueByPhone.get(phone)?.name ?? null,
       }));
