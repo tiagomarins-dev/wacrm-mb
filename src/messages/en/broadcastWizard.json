@@ -62,6 +62,7 @@
     "selectCustomFieldPlaceholder": "Select custom field…",
     "contactFields": {
       "name": "Contact Name",
+        "firstName": "First name",
       "phone": "Phone Number",
       "email": "Email Address",
       "company": "Company"

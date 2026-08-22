@@ -62,6 +62,7 @@
     "selectCustomFieldPlaceholder": "Selecionar campo personalizado…",
     "contactFields": {
       "name": "Nome do contato",
+        "firstName": "Primeiro nome",
       "phone": "Número de telefone",
       "email": "Endereço de e-mail",
       "company": "Empresa"

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { Contact, CustomField, MessageTemplate } from '@/types';
+import { valorDoCampo } from '@/lib/broadcast/variables';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -33,6 +34,7 @@ interface Step3Props {
 // Campos do contato: `labelKey` resolvido no render (array module-level).
 const contactFields = [
   { value: 'name', labelKey: 'step3.contactFields.name' },
+  { value: 'first_name', labelKey: 'step3.contactFields.firstName' },
   { value: 'phone', labelKey: 'step3.contactFields.phone' },
   { value: 'email', labelKey: 'step3.contactFields.email' },
   { value: 'company', labelKey: 'step3.contactFields.company' },
@@ -161,13 +163,8 @@ export function Step3Personalize({
         if (mapping.type === 'static' && mapping.value) {
           replacement = mapping.value;
         } else if (mapping.type === 'field' && mapping.value) {
-          const fieldMap: Record<string, string | undefined> = {
-            name: contact.name,
-            phone: contact.phone,
-            email: contact.email,
-            company: contact.company,
-          };
-          replacement = fieldMap[mapping.value] ?? placeholder;
+          // Mesma fonte do envio (variables.ts) — prévia e mensagem real não podem divergir.
+          replacement = valorDoCampo(contact, mapping.value) || placeholder;
         } else if (mapping.type === 'custom_field' && mapping.value) {
           replacement = customValues.get(mapping.value) || placeholder;
         } else if (mapping.type === 'payload' && mapping.value) {

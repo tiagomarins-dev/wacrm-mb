@@ -3,6 +3,8 @@ import {
   collectPayloadKeys,
   materializePayloadVariables,
   resolveVariables,
+  extrairPrimeiroNome,
+  valorDoCampo,
   type VariableMapping,
 } from './variables'
 import type { Contact } from '@/types'
@@ -108,5 +110,55 @@ describe('resolveVariables — defensivo payload', () => {
       { id: 'c1', name: 'X' } as never,
     )
     expect(params).toEqual([''])
+  })
+})
+
+describe('extrairPrimeiroNome', () => {
+  it('nome normal → primeira palavra', () => {
+    expect(extrairPrimeiroNome('Pamella Martins da Silva')).toBe('Pamella')
+  })
+
+  // Casos REAIS do lote morno-alto: 6 em minúsculo e 1 em maiúsculo em 100.
+  it('normaliza caixa quando a palavra está toda num caso só', () => {
+    expect(extrairPrimeiroNome('eduarda gabriele freitas pereira')).toBe('Eduarda')
+    expect(extrairPrimeiroNome('ANA KARINA RAMOS ROLIM')).toBe('Ana')
+    expect(extrairPrimeiroNome('júlia vitória rodrigues')).toBe('Júlia')
+  })
+
+  it('preserva caixa interna legítima', () => {
+    expect(extrairPrimeiroNome('McCarthy Souza')).toBe('McCarthy')
+    expect(extrairPrimeiroNome("D'Ávila Costa")).toBe("D'Ávila")
+  })
+
+  // Telefone no campo nome existe na base — saudação sem nome é melhor que com número.
+  it('lixo no campo nome → vazio', () => {
+    expect(extrairPrimeiroNome('21989513986')).toBe('')
+    expect(extrairPrimeiroNome('.')).toBe('')
+    expect(extrairPrimeiroNome('A B')).toBe('')
+    expect(extrairPrimeiroNome('')).toBe('')
+    expect(extrairPrimeiroNome(null)).toBe('')
+    expect(extrairPrimeiroNome(undefined)).toBe('')
+  })
+
+  it('partícula solta no começo não vira saudação', () => {
+    expect(extrairPrimeiroNome('de Souza Lima')).toBe('Souza')
+  })
+
+  it('espaço extra e sobra no fim não atrapalham', () => {
+    expect(extrairPrimeiroNome('  Gabriele   Corleth  ')).toBe('Gabriele')
+  })
+})
+
+describe('valorDoCampo', () => {
+  const c = { name: 'ana karina souza', phone: '5521999', email: 'a@b.com' } as never
+  it('first_name usa a extração', () => {
+    expect(valorDoCampo(c, 'first_name')).toBe('Ana')
+  })
+  it('demais campos seguem crus', () => {
+    expect(valorDoCampo(c, 'name')).toBe('ana karina souza')
+    expect(valorDoCampo(c, 'phone')).toBe('5521999')
+  })
+  it('campo desconhecido → undefined', () => {
+    expect(valorDoCampo(c, 'inexistente')).toBeUndefined()
   })
 })

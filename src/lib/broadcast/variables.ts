@@ -21,6 +21,60 @@ export type VariableMapping =
 export type CustomValueIndex = Map<string, Map<string, string>>
 
 /**
+ * Extrai o primeiro nome de um nome completo, para saudação de template.
+ *
+ * Três proteções além de "pegar a primeira palavra", porque a base de leads vem
+ * de formulário e traz sujeira: nome todo em minúsculo ou todo em maiúsculo,
+ * telefone digitado no campo errado, e nome começando por partícula.
+ *
+ * Devolve string vazia quando não dá para extrair nada confiável — melhor a
+ * saudação sair sem nome do que sair com "Oi, 21989513986!".
+ */
+export function extrairPrimeiroNome(nomeCompleto: string | null | undefined): string {
+  const limpo = (nomeCompleto ?? '').trim().replace(/\s+/g, ' ')
+  if (!limpo) return ''
+
+  // Partícula solta no começo ("de Souza") não é primeiro nome: pula.
+  const PARTICULAS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'di', 'del', "d'"])
+  const palavras = limpo.split(' ')
+  let escolhida = ''
+  for (const p of palavras) {
+    if (!PARTICULAS.has(p.toLowerCase())) {
+      escolhida = p
+      break
+    }
+  }
+  if (!escolhida) return ''
+
+  // Precisa parecer nome: só letras (com acento, hífen ou apóstrofo) e 3+ letras.
+  // Barra telefone no campo nome, iniciais soltas e emoji.
+  if (!/^[\p{L}][\p{L}'’-]{2,}$/u.test(escolhida)) return ''
+
+  // Normaliza caixa só quando a palavra INTEIRA está num caso só — assim
+  // "ANA" vira "Ana" e "eduarda" vira "Eduarda", sem estragar "McCarthy".
+  if (escolhida === escolhida.toLowerCase() || escolhida === escolhida.toUpperCase()) {
+    return escolhida.charAt(0).toUpperCase() + escolhida.slice(1).toLowerCase()
+  }
+  return escolhida
+}
+
+/**
+ * Valor de um campo do contato para o mapeamento de variável do template.
+ * Fonte ÚNICA: o envio (resolveVariables) e a pré-visualização do assistente
+ * leem daqui, senão a prévia mostra uma coisa e o cliente recebe outra.
+ */
+export function valorDoCampo(contact: Contact, campo: string): string | undefined {
+  const mapa: Record<string, string | undefined> = {
+    name: contact.name,
+    first_name: extrairPrimeiroNome(contact.name),
+    phone: contact.phone,
+    email: contact.email,
+    company: contact.company,
+  }
+  return mapa[campo]
+}
+
+/**
  * Resolve os placeholders de um template para um contato. Funções `static` e
  * `field` resolvem direto; `custom_field` lê do índice pré-carregado (evita
  * N+1 no loop de envio). Função pura — usada igual no browser e no servidor.
@@ -42,15 +96,7 @@ export function resolveVariables(
     const v = variables[key]
     if (v.type === 'static') return v.value
 
-    if (v.type === 'field') {
-      const fieldMap: Record<string, string | undefined> = {
-        name: contact.name,
-        phone: contact.phone,
-        email: contact.email,
-        company: contact.company,
-      }
-      return fieldMap[v.value] ?? ''
-    }
+    if (v.type === 'field') return valorDoCampo(contact, v.value) ?? ''
 
     // payload não deveria chegar aqui (o clone do webhook materializa em
     // 'static' antes de gravar) — defensivo pra nunca vazar o placeholder
