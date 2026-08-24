@@ -9,8 +9,8 @@ export const runtime = 'nodejs'
 const SELECT_FIELDS =
   'id, account_id, connection_id, template_name, template_language, template_variables, user_id, tag_name'
 const MAX_BROADCASTS_PER_TICK = 20
-const PER_BROADCAST_LIMIT = 50 // recipients por broadcast por tick
-const GLOBAL_RECIPIENT_CAP = 200 // teto total de envios por tick (anti-timeout / rate limit Meta)
+const PER_BROADCAST_LIMIT = 150 // recipients por broadcast por tick
+const GLOBAL_RECIPIENT_CAP = 300 // teto total de envios por tick (anti-timeout / rate limit Meta)
 
 /**
  * Cron de broadcast agendado. Batido por scheduler externo (sidecar) a cada

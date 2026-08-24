@@ -33,6 +33,9 @@ export interface SendRecipientsArgs {
   recipients: BroadcastRecipientInput[]
 }
 
+/** Envios simultâneos por lote dentro de um tick do cron. */
+const SEND_CONCURRENCY = 10
+
 export interface SendRecipientsResult {
   results: BroadcastResult[]
   sentCount: number
@@ -58,21 +61,17 @@ export async function sendRecipients(
     recipients,
   } = args
 
-  const results: BroadcastResult[] = []
-  let sentCount = 0
-  let failedCount = 0
-
-  for (const recipient of recipients) {
+  // Envia um destinatário: sanitiza, valida e tenta as variantes do telefone.
+  // Isolado em função para os envios rodarem em paralelo dentro do lote.
+  async function enviaUm(recipient: BroadcastRecipientInput): Promise<BroadcastResult> {
     const sanitized = sanitizePhoneForMeta(recipient.phone)
 
     if (!isValidE164(sanitized)) {
-      results.push({
+      return {
         phone: recipient.phone,
         status: 'failed',
         error: 'Invalid phone number format',
-      })
-      failedCount++
-      continue
+      }
     }
 
     // Retry com variantes do telefone quando Meta responde "not in allowed
@@ -109,22 +108,32 @@ export async function sendRecipients(
     }
 
     if (sentMessageId) {
-      results.push({
+      return {
         phone: recipient.phone,
         status: 'sent',
         whatsapp_message_id: sentMessageId,
-      })
-      sentCount++
-    } else {
-      console.error(`Failed to send broadcast to ${recipient.phone}:`, lastError)
-      results.push({
-        phone: recipient.phone,
-        status: 'failed',
-        error: lastError || 'Unknown error',
-      })
-      failedCount++
+      }
+    }
+    console.error(`Failed to send broadcast to ${recipient.phone}:`, lastError)
+    return {
+      phone: recipient.phone,
+      status: 'failed',
+      error: lastError || 'Unknown error',
     }
   }
+
+  // Lotes de SEND_CONCURRENCY em paralelo, lotes em sequência. A ordem de
+  // `results` espelha a de `recipients` — o send-engine casa resultado com
+  // destinatário pelo índice. O teto existe para o pico ficar longe do limite
+  // da Meta (80 msg/s) e não estourar sockets num tick grande.
+  const results: BroadcastResult[] = []
+  for (let i = 0; i < recipients.length; i += SEND_CONCURRENCY) {
+    const chunk = recipients.slice(i, i + SEND_CONCURRENCY)
+    results.push(...(await Promise.all(chunk.map(enviaUm))))
+  }
+
+  const sentCount = results.filter((r) => r.status === 'sent').length
+  const failedCount = results.length - sentCount
 
   return { results, sentCount, failedCount }
 }
