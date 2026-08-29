@@ -110,7 +110,20 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Cache-Control", value: "no-store" }],
       },
       {
-        source: "/:path((?!_next/static|_next/image|api).*)",
+        // Trampolim do link externo da Plataforma MB e a tela de login que ele
+        // atravessa: as duas URLs carregam telefone e nome do aluno na query.
+        // Nenhuma pode virar chave de cache compartilhado nem entrar no log da
+        // borda — daí também estarem no lookahead da regra pública abaixo, senão
+        // as duas regras casariam o mesmo path e disputariam o header.
+        source: "/inbox/abrir",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
+      },
+      {
+        source: "/login",
+        headers: [{ key: "Cache-Control", value: "no-store" }],
+      },
+      {
+        source: "/:path((?!_next/static|_next/image|api|inbox/abrir|login).*)",
         headers: [
           {
             key: "Cache-Control",

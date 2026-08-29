@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { parseSafeNext } from '@/lib/auth/safe-next'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
@@ -45,18 +46,35 @@ export async function middleware(request: NextRequest) {
     ) {
       url.pathname = `/join/${encodeURIComponent(inviteToken)}`
       url.search = ''
-    } else {
-      url.pathname = '/dashboard'
-      url.search = ''
+      return NextResponse.redirect(url)
     }
+    // Destino guardado quando a sessão ainda não existia (ex: chegou pelo link
+    // externo da Plataforma MB e logou em outra aba). `new URL` em vez de trocar
+    // o pathname porque o destino carrega query própria — e só é seguro DEPOIS
+    // do parseSafeNext, que é quem barra `//`, `\` e caractere de controle.
+    const nextParam = parseSafeNext(request.nextUrl.searchParams.get('next'))
+    if (nextParam) {
+      return NextResponse.redirect(new URL(nextParam, request.url))
+    }
+    url.pathname = '/dashboard'
+    url.search = ''
     return NextResponse.redirect(url)
   }
 
-  // Protected pages - redirect to login if not authenticated
+  // Protected pages - redirect to login if not authenticated.
+  // Guarda o destino em ?next= pra voltar depois do login. `url.search = ''` é
+  // obrigatório: o clone traz a query da rota original, e sem limpar o telefone
+  // do deep-link da Plataforma MB vazaria pra URL do /login.
   const protectedPaths = ['/dashboard', '/inbox', '/contacts', '/pipelines', '/broadcasts', '/automations', '/settings']
   if (!user && protectedPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
+    const dest = request.nextUrl.pathname + request.nextUrl.search
     const url = request.nextUrl.clone()
     url.pathname = '/login'
+    url.search = ''
+    const safe = parseSafeNext(dest)
+    // searchParams.set percent-encoda `?`, `&` e `=` internos sozinho —
+    // encodeURIComponent aqui duplicaria o encoding.
+    if (safe && safe !== '/dashboard') url.searchParams.set('next', safe)
     return NextResponse.redirect(url)
   }
 

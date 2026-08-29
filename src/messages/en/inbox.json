@@ -79,5 +79,11 @@
   "handoffFromAi": "The AI handed a conversation to you",
   "handoffFromTeammate": "A conversation was transferred to you",
   "handoffOpenHint": "You are the assignee from now on.",
-  "handoffOpen": "Open"
+  "handoffOpen": "Open",
+  "openLinkLoading": "Opening conversation…",
+  "openLinkInvalidPhone": "The phone number in the link is invalid.",
+  "openLinkNoSupportConnection": "Support connection unavailable. Contact your admin.",
+  "openLinkRateLimited": "Too many requests in a row. Wait a minute.",
+  "openLinkFailed": "Could not open the conversation.",
+  "openLinkBackToInbox": "Back to inbox"
 }
