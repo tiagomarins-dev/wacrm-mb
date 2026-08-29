@@ -11,8 +11,10 @@ import {
 } from "./support";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const ID = "50cb7049-b827-47f4-bf39-cd5b2883883f";
-const CONTA = "ad2de49f-eca2-47f5-9c6b-236145eb4d5c";
+// UUIDs fictícios de propósito: o teste não depende dos ids reais, e id de
+// conexão/conta de produção não tem por que viver no repositório.
+const ID = "11111111-2222-3333-4444-555555555555";
+const CONTA = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 /** Client falso que registra os filtros aplicados e devolve a linha combinada. */
 function fakeDb(row: unknown) {
