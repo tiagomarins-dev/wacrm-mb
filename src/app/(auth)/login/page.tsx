@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { parseSafeNext } from "@/lib/auth/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,12 @@ function LoginPageInner() {
   // account. After a successful sign-in we send them to the join
   // page to accept rather than to /dashboard.
   const inviteToken = searchParams.get("invite");
+  // Destino guardado pelo middleware ao barrar uma rota protegida (ex: o link
+  // "Enviar mensagem" da Plataforma MB). Validado AQUI porque é este ponto que
+  // consome o valor: no fluxo deslogado o middleware só escreveu o parâmetro e
+  // não o revalida na volta — sem isso, um `?next=` forjado redirecionaria pra
+  // fora logo depois de a senha ser digitada.
+  const nextParam = parseSafeNext(searchParams.get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -63,6 +70,10 @@ function LoginPageInner() {
 
     if (inviteToken) {
       router.push(`/join/${encodeURIComponent(inviteToken)}`);
+    } else if (nextParam) {
+      // replace: o Voltar não pode cair no /login já autenticado, que o
+      // middleware devolveria ao mesmo next — vaivém no histórico.
+      router.replace(nextParam);
     } else {
       router.push("/dashboard");
     }
@@ -147,7 +158,10 @@ function LoginPageInner() {
               href={
                 inviteToken
                   ? `/signup?invite=${encodeURIComponent(inviteToken)}`
-                  : "/signup"
+                  : nextParam
+                    ? // Só o valor JÁ validado viaja adiante.
+                      `/signup?next=${encodeURIComponent(nextParam)}`
+                    : "/signup"
               }
               className="text-primary hover:text-primary/80"
             >

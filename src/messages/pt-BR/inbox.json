@@ -79,5 +79,11 @@
   "handoffFromAi": "A IA transferiu uma conversa para você",
   "handoffFromTeammate": "Uma conversa foi transferida para você",
   "handoffOpenHint": "Você é o responsável a partir de agora.",
-  "handoffOpen": "Abrir"
+  "handoffOpen": "Abrir",
+  "openLinkLoading": "Abrindo a conversa…",
+  "openLinkInvalidPhone": "O telefone do link é inválido.",
+  "openLinkNoSupportConnection": "Conexão de Suporte indisponível. Fale com o administrador.",
+  "openLinkRateLimited": "Muitas aberturas seguidas. Aguarde um minuto.",
+  "openLinkFailed": "Não foi possível abrir a conversa.",
+  "openLinkBackToInbox": "Voltar para a caixa de entrada"
 }
