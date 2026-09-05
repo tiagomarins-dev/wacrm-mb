@@ -1097,9 +1097,44 @@ function TriggerCard({
   )
 }
 
-// Config do trigger webhook: mostra a URL pública da automação, exemplo
-// de chamada (curl) e regeneração do token com confirmação. Draft ainda
-// sem token exibe placeholder pedindo pra salvar primeiro.
+// Bloco de código somente-leitura com rótulo e botão de cópia no canto.
+function CopyableBlock({
+  label,
+  content,
+  copyTitle,
+  onCopy,
+}: {
+  label: string
+  content: string
+  copyTitle: string
+  onCopy: () => void
+}) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <label className="block text-xs font-medium text-muted-foreground">
+          {label}
+        </label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={onCopy}
+          title={copyTitle}
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+      <pre className="overflow-x-auto rounded-md border border-border bg-muted p-2 text-[10px] leading-relaxed text-muted-foreground">
+        {content}
+      </pre>
+    </div>
+  )
+}
+
+// Config do trigger webhook: mostra a URL pública da automação, o payload
+// de exemplo, o curl equivalente e a regeneração do token com confirmação.
+// Draft ainda sem token exibe placeholder pedindo pra salvar primeiro.
 function WebhookTriggerConfig({
   webhookToken,
   automationId,
@@ -1110,6 +1145,7 @@ function WebhookTriggerConfig({
   onTokenChange?: (token: string) => void
 }) {
   const { t } = useTranslation(["automationBuilder", "common"])
+  const { customFields } = useResources()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [regenerating, setRegenerating] = useState(false)
   // Origin só existe no browser — evita quebrar a pré-renderização.
@@ -1127,17 +1163,36 @@ function WebhookTriggerConfig({
   }
 
   const url = `${origin}/api/automations/webhook/${webhookToken}`
-  const curl = `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Idempotency-Key: evento-123' \\\n  -d '{"phone":"5521999998888","name":"Fulano","email":"fulano@email.com"}'`
+
+  // Exemplo montado com os campos customizados da conta: a rota rejeita
+  // (400) qualquer chave fora de phone/name/email que não exista em
+  // custom_fields. Só entram nomes que o interpolate() resolve — mesmo
+  // filtro do seletor de variáveis — porque campo com espaço ou acento
+  // nunca vira {{vars.campo}} nos nós. As três chaves reservadas nunca são
+  // sobrescritas: a rota as trata como contato, não como campo custom, e
+  // um phone de mentira derrubaria o exemplo na primeira chamada.
+  const sample: Record<string, string> = {
+    phone: "5521999998888",
+    name: "Fulano de Tal",
+    email: "fulano@email.com",
+  }
+  for (const f of customFields) {
+    if (/^\w+$/.test(f.field_name) && !(f.field_name in sample)) {
+      sample[f.field_name] = t("webhookSampleValue")
+    }
+  }
+  const payload = JSON.stringify(sample, null, 2)
+  const curl = `curl -X POST '${url}' \\\n  -H 'Content-Type: application/json' \\\n  -H 'X-Idempotency-Key: evento-123' \\\n  -d '${JSON.stringify(sample)}'`
 
   // Copiar com fallback: navigator.clipboard falha em HTTP puro
   // (self-host por IP sem TLS) — espelha o padrão do briefing-modal.
-  async function copyUrl() {
+  async function copy(text: string, successMessage: string) {
     try {
       if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url)
+        await navigator.clipboard.writeText(text)
       } else {
         const ta = document.createElement("textarea")
-        ta.value = url
+        ta.value = text
         ta.style.position = "fixed"
         ta.style.opacity = "0"
         document.body.appendChild(ta)
@@ -1145,7 +1200,7 @@ function WebhookTriggerConfig({
         document.execCommand("copy")
         document.body.removeChild(ta)
       }
-      toast.success(t("webhookCopied"))
+      toast.success(successMessage)
     } catch {
       toast.error(t("webhookCopyFailed"))
     }
@@ -1190,16 +1245,25 @@ function WebhookTriggerConfig({
             type="button"
             variant="ghost"
             size="icon"
-            onClick={copyUrl}
+            onClick={() => copy(url, t("webhookCopied"))}
             title={t("webhookCopy")}
           >
             <Copy className="h-3.5 w-3.5" />
           </Button>
         </div>
       </div>
-      <pre className="overflow-x-auto rounded-md border border-border bg-muted p-2 text-[10px] leading-relaxed text-muted-foreground">
-        {curl}
-      </pre>
+      <CopyableBlock
+        label={t("webhookPayloadLabel")}
+        content={payload}
+        copyTitle={t("webhookPayloadCopy")}
+        onCopy={() => copy(payload, t("webhookPayloadCopied"))}
+      />
+      <CopyableBlock
+        label={t("webhookCurlLabel")}
+        content={curl}
+        copyTitle={t("webhookCurlCopy")}
+        onCopy={() => copy(curl, t("webhookCurlCopied"))}
+      />
       {/* {{vars.campo}} literal vai por interpolação — chaves duplas no JSON
           seriam engolidas pelo i18next */}
       <p className="text-[11px] text-muted-foreground">
