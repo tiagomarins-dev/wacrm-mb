@@ -44,6 +44,28 @@ interface BuildPromptArgs {
   campaignContext?: string | null
 }
 
+/**
+ * Data e hora de agora no fuso de São Paulo, por extenso e em pt-BR
+ * ("terça-feira, 8 de setembro de 2026, 09:43"). O fuso é fixo porque a operação
+ * inteira (turmas, aulas ao vivo, horário comercial) roda no horário de Brasília,
+ * enquanto o servidor pode estar em UTC.
+ */
+function nowInSaoPaulo(now: Date = new Date()): string {
+  const data = now.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  })
+  const hora = now.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${data}, ${hora}`
+}
+
 // Monta o system prompt concatenando as camadas na ordem de precedência.
 export function buildSystemPrompt(args: BuildPromptArgs): string {
   const parts: string[] = []
@@ -60,6 +82,15 @@ export function buildSystemPrompt(args: BuildPromptArgs): string {
     )
     parts.push(VOZ_MILLA)
   }
+
+  // 3.5) Data e hora de agora, em Brasília. Sem isto o modelo não tem noção de
+  // tempo: as fichas de curso trazem datas absolutas (início de turma, dia da
+  // prova) e ele não consegue dizer se são passado ou futuro, então erra o tempo
+  // verbal e anuncia como "vai começar" uma aula que é hoje. Vem antes do
+  // catálogo de propósito, para valer na leitura de toda data que vier depois.
+  parts.push(
+    `HOJE É ${nowInSaoPaulo()}. Use esta data para situar no tempo qualquer data que aparecer nas fichas de curso ou no histórico: o que já passou, fale no passado; o que é do dia de hoje, fale como hoje. Nunca anuncie como futuro algo que já aconteceu.`,
+  )
 
   // 4) Instrução-chave de roteamento por assunto.
   parts.push(
