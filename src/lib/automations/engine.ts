@@ -548,6 +548,14 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
           .eq('account_id', args.automation.account_id)
       }
 
+      // Limpa a fila ANTES de rodar o agente: quem responde esta conversa é o run
+      // inline daqui. A ordem é o que evita a resposta em dobro, porque a fila tem
+      // duas fontes que apontam para o mesmo inbound — o dispatch do webhook e o
+      // trigger trg_enqueue_ai_on_transfer, que dispara no passo "Atribuir conversa"
+      // imediatamente antes deste. Como o agente leva ~12s e o cron drena a cada 8s,
+      // apagar depois chega tarde: o cron já teria levado o pending e respondido junto.
+      await db.from('ai_agent_pending').delete().eq('conversation_id', conversationId)
+
       // Roda o agente inline. id='' é seguro: runAiAgentForConversation NÃO usa
       // row.id (a telemetria grava por account/connection/conversation/contact/
       // profile — sem FK p/ ai_agent_pending).
@@ -561,9 +569,14 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         opening: true, // abertura: a IA cumprimenta e pergunta; não transfere nesta 1ª resposta
       })
 
-      // Safeguard anti-duplo-envio: cancela um run do agente AINDA ENFILEIRADO pelo
-      // dispatch normal do mesmo inbound. NÃO aborta um run já drenado/em execução.
-      await db.from('ai_agent_pending').delete().eq('conversation_id', conversationId)
+      // Segunda limpeza: enquanto o agente rodava, uma mensagem nova do cliente pode
+      // ter enfileirado outro pending para o texto que ESTA resposta já respondeu.
+      // Só remove o que ficou parado na fila; run em execução não é abortado.
+      await db
+        .from('ai_agent_pending')
+        .delete()
+        .eq('conversation_id', conversationId)
+        .eq('status', 'pending')
       // Detalhe HONESTO: reflete o desfecho real do agente (ok/blocked/skipped:*),
       // não uma string fixa — o log do step deixa de mascarar no-ops.
       return `ai_reply: ${agentStatus}`

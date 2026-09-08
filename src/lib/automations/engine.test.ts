@@ -348,12 +348,36 @@ describe("ai_reply step", () => {
         opening: true, // abertura: ai_reply marca a 1ª resposta sem handoff
       }),
     );
-    expect(h.state.deletes).toHaveLength(1);
-    expect(h.state.deletes[0].filters).toContainEqual([
-      "eq",
-      "conversation_id",
-      "conv-1",
-    ]);
+    expect(h.state.deletes).toHaveLength(2);
+    for (const d of h.state.deletes) {
+      expect(d.filters).toContainEqual(["eq", "conversation_id", "conv-1"]);
+    }
+    // A 2ª limpeza é restrita a 'pending': run em execução não pode ser abortado.
+    expect(h.state.deletes[1].filters).toContainEqual(["eq", "status", "pending"]);
+  });
+
+  it("limpa a fila ANTES de rodar o agente (evita o cron responder junto)", async () => {
+    setup();
+    vi.mocked(resolveAssignedProfile).mockResolvedValue({ id: "p1" } as never);
+
+    // O passo "Atribuir conversa" que roda antes deste dispara o trigger
+    // trg_enqueue_ai_on_transfer, então há um pending esperando. Como o agente leva
+    // ~12s e o cron drena a cada 8s, a fila precisa estar limpa antes da chamada:
+    // apagar só no fim deixa o cron levar o pending e responder em dobro.
+    let deletesAoIniciarOAgente = -1;
+    vi.mocked(runAiAgentForConversation).mockImplementation(async () => {
+      deletesAoIniciarOAgente = h.state.deletes.length;
+      return "ok" as never;
+    });
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv-1" },
+    });
+
+    expect(deletesAoIniciarOAgente).toBe(1);
   });
 
   it("com campaign_context: grava o contexto na conversa antes de rodar o agente (081)", async () => {
