@@ -70,3 +70,39 @@ describe("conversationEventLabel", () => {
       .toBe("evtTransferred:actor=someone,to=unknownAgent");
   });
 });
+
+describe("fechamento por inatividade (085)", () => {
+  it("rotula closed_idle com o motivo, sem depender de from/to_agent_id", () => {
+    const ev = {
+      id: "e-idle",
+      account_id: "a1",
+      conversation_id: "c1",
+      type: "closed_idle",
+      from_agent_id: null,
+      to_agent_id: null,
+      actor_user_id: null,
+      from_status: "open",
+      to_status: "closed",
+      created_at: "2026-09-09T12:00:00Z",
+    } as ConversationEvent;
+
+    expect(conversationEventLabel(ev, [], [], t)).toBe("evtClosedIdle");
+  });
+
+  it("fechamento manual (status_changed) segue sem pill", () => {
+    const ev = {
+      id: "e-man",
+      account_id: "a1",
+      conversation_id: "c1",
+      type: "status_changed",
+      from_agent_id: null,
+      to_agent_id: null,
+      actor_user_id: "u1",
+      from_status: "open",
+      to_status: "closed",
+      created_at: "2026-09-09T12:00:00Z",
+    } as ConversationEvent;
+
+    expect(conversationEventLabel(ev, [], [], t)).toBe("");
+  });
+});

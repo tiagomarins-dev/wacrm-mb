@@ -57,6 +57,7 @@
   "evtAssumed": "{{actor}} assumiu a conversa",
   "evtTransferred": "{{actor}} transferiu para {{to}}",
   "evtAssigned": "Atribuída a {{to}}",
+  "evtClosedIdle": "Finalizada por inatividade",
   "evtUnassignedIdle": "Desatribuída por inatividade",
   "evtAiHandoff": "IA encaminhou para {{to}}",
   "someone": "Um atendente",
