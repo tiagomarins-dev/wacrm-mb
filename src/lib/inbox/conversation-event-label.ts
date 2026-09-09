@@ -34,6 +34,9 @@ export function conversationEventLabel(
 
   // Defense in depth: tipos que não são de atribuição não têm pill (filtrados no mergeThread)
   if (ev.type === "status_changed") return "";
+  // Fechamento pelo sweep de inatividade (085). Vem antes dos ramos de
+  // atribuição porque não tem from/to_agent_id — o motivo é o próprio tipo.
+  if (ev.type === "closed_idle") return t("evtClosedIdle");
   // Desatribuição (cron por inatividade ou manual): sempre "por inatividade".
   if (ev.type === "unassigned") return t("evtUnassignedIdle");
   // Encaminhamento da IA → humano (from é bot/perfil de IA; actor = sistema).

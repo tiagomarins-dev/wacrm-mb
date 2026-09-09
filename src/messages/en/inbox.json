@@ -57,6 +57,7 @@
   "evtAssumed": "{{actor}} took over",
   "evtTransferred": "{{actor}} transferred to {{to}}",
   "evtAssigned": "Assigned to {{to}}",
+  "evtClosedIdle": "Closed (idle)",
   "evtUnassignedIdle": "Unassigned (idle)",
   "evtAiHandoff": "AI handed off to {{to}}",
   "someone": "A teammate",

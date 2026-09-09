@@ -437,10 +437,18 @@ export interface ConversationFavorite {
   created_at: string;
 }
 
-// Evento interno de conversa (migs 048/069). Gravado por trigger quando
+// Evento interno de conversa (migs 048/069/085). Gravado por trigger quando
 // assigned_agent_id ou status mudam; atribuições aparecem na thread,
 // status_changed é só telemetria (relatórios). Nunca enviado ao cliente.
-export type ConversationEventType = 'assigned' | 'transferred' | 'unassigned' | 'status_changed';
+// closed_idle é gravado pelo sweep de inatividade (085), que é o único caminho
+// que sabe o motivo do fechamento: aparece na thread para o atendente entender
+// por que a conversa saiu da fila.
+export type ConversationEventType =
+  | 'assigned'
+  | 'transferred'
+  | 'unassigned'
+  | 'status_changed'
+  | 'closed_idle';
 export interface ConversationEvent {
   id: string;
   account_id: string;
