@@ -35,6 +35,7 @@ import ptPipelinesPanels from "./pt-BR/pipelinesPanels.json";
 import ptConversations from "./pt-BR/conversations.json";
 import ptReports from "./pt-BR/reports.json";
 import ptSettingsBusinessHours from "./pt-BR/settingsBusinessHours.json";
+import ptSettingsMbClasses from "./pt-BR/settingsMbClasses.json";
 import ptPulse from "./pt-BR/pulse.json";
 import enCommon from "./en/common.json";
 import enNav from "./en/nav.json";
@@ -63,12 +64,13 @@ import enPipelinesPanels from "./en/pipelinesPanels.json";
 import enConversations from "./en/conversations.json";
 import enReports from "./en/reports.json";
 import enSettingsBusinessHours from "./en/settingsBusinessHours.json";
+import enSettingsMbClasses from "./en/settingsMbClasses.json";
 import enPulse from "./en/pulse.json";
 
-export const NAMESPACES = ["common", "nav", "header", "settings", "auth", "dashboard", "broadcasts", "contacts", "inbox", "settingsNav", "pipelines", "leadScore", "automations", "flows", "join", "broadcastWizard", "settingsWhatsapp", "settingsTemplates", "settingsQuickReplies", "settingsMembers", "settingsAiAgent", "automationBuilder", "flowEditor", "pipelinesPanels", "conversations", "reports", "settingsBusinessHours", "pulse"] as const;
+export const NAMESPACES = ["common", "nav", "header", "settings", "auth", "dashboard", "broadcasts", "contacts", "inbox", "settingsNav", "pipelines", "leadScore", "automations", "flows", "join", "broadcastWizard", "settingsWhatsapp", "settingsTemplates", "settingsQuickReplies", "settingsMembers", "settingsAiAgent", "automationBuilder", "flowEditor", "pipelinesPanels", "conversations", "reports", "settingsBusinessHours", "settingsMbClasses", "pulse"] as const;
 export const DEFAULT_NS = "common";
 
 export const resources = {
-  "pt-BR": { common: ptCommon, nav: ptNav, header: ptHeader, settings: ptSettings, auth: ptAuth, dashboard: ptDashboard, broadcasts: ptBroadcasts, contacts: ptContacts, inbox: ptInbox, settingsNav: ptSettingsNav, pipelines: ptPipelines, leadScore: ptLeadScore, automations: ptAutomations, flows: ptFlows, join: ptJoin, broadcastWizard: ptBroadcastWizard, settingsWhatsapp: ptSettingsWhatsapp, settingsTemplates: ptSettingsTemplates, settingsQuickReplies: ptSettingsQuickReplies, settingsMembers: ptSettingsMembers, settingsAiAgent: ptSettingsAiAgent, automationBuilder: ptAutomationBuilder, flowEditor: ptFlowEditor, pipelinesPanels: ptPipelinesPanels, conversations: ptConversations, reports: ptReports, settingsBusinessHours: ptSettingsBusinessHours, pulse: ptPulse },
-  en: { common: enCommon, nav: enNav, header: enHeader, settings: enSettings, auth: enAuth, dashboard: enDashboard, broadcasts: enBroadcasts, contacts: enContacts, inbox: enInbox, settingsNav: enSettingsNav, pipelines: enPipelines, leadScore: enLeadScore, automations: enAutomations, flows: enFlows, join: enJoin, broadcastWizard: enBroadcastWizard, settingsWhatsapp: enSettingsWhatsapp, settingsTemplates: enSettingsTemplates, settingsQuickReplies: enSettingsQuickReplies, settingsMembers: enSettingsMembers, settingsAiAgent: enSettingsAiAgent, automationBuilder: enAutomationBuilder, flowEditor: enFlowEditor, pipelinesPanels: enPipelinesPanels, conversations: enConversations, reports: enReports, settingsBusinessHours: enSettingsBusinessHours, pulse: enPulse },
+  "pt-BR": { common: ptCommon, nav: ptNav, header: ptHeader, settings: ptSettings, auth: ptAuth, dashboard: ptDashboard, broadcasts: ptBroadcasts, contacts: ptContacts, inbox: ptInbox, settingsNav: ptSettingsNav, pipelines: ptPipelines, leadScore: ptLeadScore, automations: ptAutomations, flows: ptFlows, join: ptJoin, broadcastWizard: ptBroadcastWizard, settingsWhatsapp: ptSettingsWhatsapp, settingsTemplates: ptSettingsTemplates, settingsQuickReplies: ptSettingsQuickReplies, settingsMembers: ptSettingsMembers, settingsAiAgent: ptSettingsAiAgent, automationBuilder: ptAutomationBuilder, flowEditor: ptFlowEditor, pipelinesPanels: ptPipelinesPanels, conversations: ptConversations, reports: ptReports, settingsBusinessHours: ptSettingsBusinessHours, settingsMbClasses: ptSettingsMbClasses, pulse: ptPulse },
+  en: { common: enCommon, nav: enNav, header: enHeader, settings: enSettings, auth: enAuth, dashboard: enDashboard, broadcasts: enBroadcasts, contacts: enContacts, inbox: enInbox, settingsNav: enSettingsNav, pipelines: enPipelines, leadScore: enLeadScore, automations: enAutomations, flows: enFlows, join: enJoin, broadcastWizard: enBroadcastWizard, settingsWhatsapp: enSettingsWhatsapp, settingsTemplates: enSettingsTemplates, settingsQuickReplies: enSettingsQuickReplies, settingsMembers: enSettingsMembers, settingsAiAgent: enSettingsAiAgent, automationBuilder: enAutomationBuilder, flowEditor: enFlowEditor, pipelinesPanels: enPipelinesPanels, conversations: enConversations, reports: enReports, settingsBusinessHours: enSettingsBusinessHours, settingsMbClasses: enSettingsMbClasses, pulse: enPulse },
 } as const;
