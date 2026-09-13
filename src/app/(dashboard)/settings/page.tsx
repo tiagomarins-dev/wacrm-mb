@@ -15,6 +15,7 @@ import { WhatsAppConfig } from '@/components/settings/whatsapp-config';
 import { TemplateManager } from '@/components/settings/template-manager';
 import { QuickRepliesManager } from '@/components/settings/quick-replies-manager';
 import { IntegrationsConfig } from '@/components/settings/integrations-config';
+import { MbClassSyncManager } from '@/components/settings/mb-class-sync-manager';
 import { LeadScoreConfigPanel } from '@/components/settings/lead-score-config';
 import { AiAgentSettings } from '@/components/settings/ai-agent-settings';
 import { BusinessHoursConfig } from '@/components/settings/business-hours-config';
@@ -67,6 +68,7 @@ export default function SettingsPage() {
     templates: <TemplateManager />,
     'quick-replies': <QuickRepliesManager />,
     integrations: <IntegrationsConfig />,
+    'mb-classes': <MbClassSyncManager />,
     'lead-score': <LeadScoreConfigPanel />,
     'ai-agent': <AiAgentSettings />,
     'business-hours': <BusinessHoursConfig />,

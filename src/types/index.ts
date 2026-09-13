@@ -996,6 +996,24 @@ export interface MbPaidCourse {
   enabled: boolean;
 }
 
+// Par curso da Plataforma MB → tag do CRM (tela Turmas MB, mig 086).
+export interface MbClassSyncPair {
+  id: string;
+  mb_course_id: number;
+  mb_course_name: string | null;
+  tag_id: string;
+  created_at: string;
+  tag: { name: string; color: string | null } | null;
+}
+
+// Curso da Plataforma MB conferido pelo id na tela Turmas MB.
+export interface MbCourseOption {
+  id_curso: number;
+  nome_curso: string;
+  vigente: string;
+  total_ativos: number;
+}
+
 // ── Inteligência de relatórios (Fase 3) ─────────────────────
 export type SaleType = 'ativa' | 'passiva';
 export type IntentLabel = 'vendas' | 'suporte' | 'outro';

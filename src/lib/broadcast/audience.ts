@@ -11,6 +11,28 @@ export interface BlueprintAudienceFilter {
 // fetchCustomValueIndex, variables.ts).
 const PAGE = 500
 
+// PostgREST devolve no máximo 1000 linhas por resposta — contact_tags de uma
+// turma grande passa disso, então os vínculos são lidos em páginas ordenadas.
+const TAG_PAGE = 1000
+
+/** contact_ids (com repetição) de quem carrega qualquer uma das tags. */
+async function contactIdsByTags(admin: SupabaseClient, tagIds: string[]): Promise<string[]> {
+  const ids: string[] = []
+  for (let from = 0; ; from += TAG_PAGE) {
+    const { data, error } = await admin
+      .from('contact_tags')
+      .select('contact_id')
+      .in('tag_id', tagIds)
+      .order('id')
+      .range(from, from + TAG_PAGE - 1)
+    if (error) throw error
+    const page = (data ?? []) as { contact_id: string }[]
+    for (const r of page) ids.push(r.contact_id)
+    if (page.length < TAG_PAGE) break
+  }
+  return ids
+}
+
 /**
  * Resolve a audiência do blueprint NO MOMENTO do disparo, escopada à
  * conta E à conexão do blueprint. O client aqui é service-role (bypassa
@@ -44,12 +66,7 @@ export async function resolveBlueprintAudience(
     const tagIds = filter.tagIds ?? []
     if (tagIds.length === 0) return []
     // contact_tags → ids únicos (espelha resolveAudience do hook client)
-    const { data: ct, error: ctErr } = await admin
-      .from('contact_tags')
-      .select('contact_id')
-      .in('tag_id', tagIds)
-    if (ctErr) throw ctErr
-    const ids = [...new Set((ct ?? []).map((r) => r.contact_id as string))]
+    const ids = [...new Set(await contactIdsByTags(admin, tagIds))]
     // contacts escopados, paginando o IN
     for (let i = 0; i < ids.length; i += PAGE) {
       const { data, error } = await admin
@@ -66,13 +83,7 @@ export async function resolveBlueprintAudience(
   // excludeTagIds: remove quem carrega qualquer tag de exclusão
   const exclude = filter.excludeTagIds ?? []
   if (exclude.length > 0 && contacts.length > 0) {
-    const excluded = new Set<string>()
-    const { data: ex, error: exErr } = await admin
-      .from('contact_tags')
-      .select('contact_id')
-      .in('tag_id', exclude)
-    if (exErr) throw exErr
-    for (const r of ex ?? []) excluded.add(r.contact_id as string)
+    const excluded = new Set(await contactIdsByTags(admin, exclude))
     contacts = contacts.filter((c) => !excluded.has(c.id))
   }
 
