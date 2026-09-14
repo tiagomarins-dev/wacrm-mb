@@ -19,12 +19,15 @@ function DashboardShellInner({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  // Telas "full-bleed" (inbox e /conversations com split-view) gerenciam a
-  // própria altura/scroll (3 painéis full-height + composer fixo). Nelas o main
-  // não rola nem tem padding — senão a área de mensagens/composer briga com o
-  // scroll/padding do main.
+  // Telas "full-bleed" (inbox, /conversations e /oportunidades com split-view)
+  // gerenciam a própria altura/scroll (painéis full-height + composer fixo). Nelas
+  // o main não rola nem tem padding — senão a área de mensagens/composer briga com
+  // o scroll/padding do main.
   const isFullBleed =
-    (pathname?.startsWith("/inbox") || pathname?.startsWith("/conversations")) ?? false;
+    (pathname?.startsWith("/inbox") ||
+      pathname?.startsWith("/conversations") ||
+      pathname?.startsWith("/oportunidades")) ??
+    false;
 
   // Sidebar drawer state — only used on mobile. On lg+ the sidebar is
   // always visible and this stays at `false` (ignored by the component).

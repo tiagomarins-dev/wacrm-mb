@@ -12,6 +12,7 @@ import {
   Activity,
   BarChart3,
   Crown,
+  Flame,
   GitBranch,
   LayoutDashboard,
   ListFilter,
@@ -115,6 +116,7 @@ const navAtendimento: NavItem[] = [
   { href: "/inbox", labelKey: "inbox", icon: MessageSquare },
   { href: "/conversations", labelKey: "conversations", icon: ListFilter },
   { href: "/contacts", labelKey: "contacts", icon: Users },
+  { href: "/oportunidades", labelKey: "opportunities", icon: Flame, minRole: "agent" },
 ];
 const navCrescimento: NavItem[] = [
   { href: "/pipelines", labelKey: "pipelines", icon: GitBranch },

@@ -1014,6 +1014,34 @@ export interface MbCourseOption {
   total_ativos: number;
 }
 
+// Tela Oportunidades (mig 087).
+export type OpportunityBucket = 'recent' | 'old';
+export type OpportunitySource = 'all' | 'click' | 'cart';
+export type OpportunityFilter = 'all' | 'mine' | 'unassigned';
+export type OpportunitySignal = 'click' | 'intent' | 'cart';
+
+// Linha da RPC `opportunities` — um contato com sinal de compra sem compra.
+export interface OpportunityRow {
+  contact_id: string;
+  name: string | null;
+  phone: string;
+  conversation_id: string | null;
+  assigned_agent_id: string | null;
+  signal_types: OpportunitySignal[];
+  signal_at: string;
+  click_count: number;
+  loss_reason: 'vai_decidir' | 'preco' | null;
+  product_code: string | null;
+  course_name: string | null;
+  bucket: OpportunityBucket;
+  is_student_other_course: boolean;
+  approached_at: string | null;
+  approached_by_name: string | null;
+  score: number;
+  classification: 'quente' | 'morno' | 'frio';
+  total_count: number;
+}
+
 // ── Inteligência de relatórios (Fase 3) ─────────────────────
 export type SaleType = 'ativa' | 'passiva';
 export type IntentLabel = 'vendas' | 'suporte' | 'outro';

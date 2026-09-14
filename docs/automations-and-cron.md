@@ -9,6 +9,7 @@ something has to **ping them on an interval**. All three share one secret.
 | `GET /api/flows/cron` | Sweeps abandoned/stale flow runs (marks them `timed_out`). |
 | `GET /api/broadcasts/cron` | Fires **scheduled broadcasts** when their time arrives. |
 | `GET /api/mb-sync/cron` | Every `MB_SYNC_INTERVAL` (3600s): syncs **MB class tags** with the active students of the MB Platform API (`mb_class_sync`). `?dry=1` simulates without writing. |
+| `GET /api/opportunities/cron` | Right after the MB sync: keeps the `oportunidade` tag on contacts shown in Atendimento → Oportunidades and removes it from those who bought. `?dry=1` simulates. |
 
 ## Auth
 
@@ -98,4 +99,27 @@ record a new baseline and let the next run apply:
 ```sql
 insert into mb_class_sync_runs (account_id, tag_id, course_ids, students)
 values ('<account>', '<tag>', '{90}', <expected new total>);
+```
+
+## Opportunities tag (`/api/opportunities/cron`)
+
+Runs right after `/api/mb-sync/cron` in the same compose loop, so it sees the
+enrollment tags that were just synced. It keeps the `oportunidade` tag in sync
+with the **Opportunities** page (Atendimento → Oportunidades): contacts with a
+purchase signal (checkout click, "vai decidir"/"preço", abandoned cart) who did
+not buy the course of that signal.
+
+- A contact enters the list → gets the tag.
+- The tag is removed **only when the contact buys** the course of its latest
+  signal (checked without a time window). Leaving the 30-day window keeps it.
+- Only accounts with rows in `mb_checkout_products` (Hotmart product code →
+  platform course ids) are processed. Products without a row show as
+  "curso não identificado" and never lose the tag automatically.
+- `?dry=1` returns counts without writing (and without creating the tag).
+
+Rollback:
+
+```sql
+delete from contact_tags where tag_id = '<oportunidade tag id>';
+delete from mb_checkout_products where account_id = '<account>';
 ```

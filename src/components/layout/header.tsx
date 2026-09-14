@@ -27,6 +27,7 @@ const pageTitleKeys: Record<string, string> = {
   "/inbox": "inbox",
   "/conversations": "conversations",
   "/contacts": "contacts",
+  "/oportunidades": "opportunities",
   "/pipelines": "pipelines",
   "/broadcasts": "broadcasts",
   "/automations": "automations",
