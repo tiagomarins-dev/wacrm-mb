@@ -72,10 +72,11 @@ services:
             curl -fsS -m 70 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/reports/classify-cron" >/dev/null 2>&1 || true
             sleep "$$SALES_CRON_INTERVAL"
           done ) &
-        # Loop DEDICADO da sincronização de turmas MB → tags (API curso.alunos.php).
+        # Loop DEDICADO: turmas MB → tags (API curso.alunos.php) e, em seguida, tag 'oportunidade'.
         # -m 130 cobre o maxDuration 120 da rota.
         ( while true; do
             curl -fsS -m 130 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/mb-sync/cron" >/dev/null 2>&1 || true
+            curl -fsS -m 130 -H "x-cron-secret: $$AUTOMATION_CRON_SECRET" "http://app:3000/api/opportunities/cron" >/dev/null 2>&1 || true
             sleep "$$MB_SYNC_INTERVAL"
           done ) &
         # Loop DEDICADO do inbound Evolution (poll curto p/ receber quase em
