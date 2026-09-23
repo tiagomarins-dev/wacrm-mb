@@ -77,6 +77,7 @@ import { resolveStatus } from "@/lib/inbox/conversation-statuses";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { conversationEventLabel } from "@/lib/inbox/conversation-event-label";
 import { mergeThread, type ThreadItem } from "@/lib/inbox/thread-merge";
+import { prependOlder, toThreadPage, withinLoadedWindow, THREAD_PAGE_SIZE } from "@/lib/inbox/thread-page";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { isNearBottom, NEAR_BOTTOM_PX } from "@/lib/inbox/scroll";
 import { BriefingModal } from "./briefing-modal";
@@ -230,6 +231,12 @@ export function MessageThread({
   // Status da conta (system+custom, 062) — dropdown de troca e badge atual.
   const { statuses } = useConversationStatuses();
   const [loading, setLoading] = useState(false);
+  // Paginação da thread (thread-page.ts): abre nas mais recentes e busca as
+  // antigas por clique. `restoreScrollRef` guarda a altura antes de inserir as
+  // antigas no topo, para a leitura não pular.
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const restoreScrollRef = useRef<{ height: number; top: number } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Rastreia se o usuário está colado no fim (atualizado no onScroll do
   // container). O auto-scroll só puxa pro fim quando isto é true — senão
@@ -447,18 +454,24 @@ export function MessageThread({
     (async () => {
       setLoading(true);
 
+      // Página das MAIS RECENTES (decrescente + limite). Buscar tudo em ordem
+      // crescente esbarra no teto de 1.000 linhas do PostgREST e esconde o fim
+      // da conversa — ver thread-page.ts.
       const { data, error } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(THREAD_PAGE_SIZE);
 
       if (cancelled) return;
 
       if (error) {
         console.error("Failed to fetch messages:", error);
       } else {
-        onMessagesLoadedRef.current(data ?? []);
+        const page = toThreadPage((data as Message[]) ?? []);
+        setHasOlder(page.hasOlder);
+        onMessagesLoadedRef.current(page.messages);
       }
 
       if (!cancelled) setLoading(false);
@@ -703,11 +716,56 @@ export function MessageThread({
 
   // Atualização (nova msg / status): só cola no fim se o usuário JÁ estava
   // no fim — senão respeita a leitura do histórico (não puxa pra baixo).
+  // Depois de inserir mensagens antigas no topo, devolve o scroll ao mesmo
+  // ponto de leitura (a altura cresceu acima do que estava na tela).
   useEffect(() => {
-    if (nearBottomRef.current && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = scrollRef.current;
+    if (!el) return;
+    const restore = restoreScrollRef.current;
+    if (restore) {
+      restoreScrollRef.current = null;
+      el.scrollTop = el.scrollHeight - restore.height + restore.top;
+      return;
+    }
+    if (nearBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
     }
   }, [messages]);
+
+  // Busca a página anterior à mensagem mais antiga carregada. `lte` + dedupe
+  // (prependOlder) para não pular mensagens com o mesmo timestamp na fronteira.
+  const loadOlder = useCallback(async () => {
+    const oldest = messages[0];
+    if (!conversationId || !oldest || loadingOlder) return;
+    setLoadingOlder(true);
+    const { data, error } = await createClient()
+      .from("messages")
+      .select("*")
+      .eq("conversation_id", conversationId)
+      .lte("created_at", oldest.created_at)
+      .order("created_at", { ascending: false })
+      .limit(THREAD_PAGE_SIZE);
+    setLoadingOlder(false);
+    if (error) {
+      console.error("Failed to fetch older messages:", error);
+      return;
+    }
+    const page = toThreadPage((data as Message[]) ?? []);
+    const merged = prependOlder(messages, page.messages);
+    // Nada novo além da fronteira: o histórico acabou.
+    if (merged.length === messages.length) {
+      setHasOlder(false);
+      return;
+    }
+    setHasOlder(page.hasOlder);
+    if (scrollRef.current) {
+      restoreScrollRef.current = {
+        height: scrollRef.current.scrollHeight,
+        top: scrollRef.current.scrollTop,
+      };
+    }
+    onMessagesLoadedRef.current(merged);
+  }, [conversationId, messages, loadingOlder]);
 
   const handleSend = useCallback(
     async (text: string, replyToId?: string) => {
@@ -964,7 +1022,14 @@ export function MessageThread({
 
   // Timeline mesclada (mensagens + eventos internos) memoizada. Declarada aqui
   // (antes de qualquer early-return) p/ não violar a ordem dos hooks.
-  const merged = useMemo(() => mergeThread(messages, events, notes), [messages, events, notes]);
+  const merged = useMemo(() => {
+    const oldestLoadedAt = messages[0]?.created_at;
+    return mergeThread(
+      messages,
+      withinLoadedWindow(events, oldestLoadedAt, hasOlder),
+      withinLoadedWindow(notes, oldestLoadedAt, hasOlder),
+    );
+  }, [messages, events, notes, hasOlder]);
 
   const contactDisplayName = contact?.name || contact?.phone || "Customer";
 
@@ -1507,6 +1572,22 @@ export function MessageThread({
           </div>
         ) : (
           <div className="space-y-4">
+            {hasOlder && (
+              <div className="flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={loadOlder}
+                  disabled={loadingOlder}
+                  className="text-xs text-muted-foreground"
+                >
+                  {loadingOlder && (
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  )}
+                  {t("loadOlder")}
+                </Button>
+              </div>
+            )}
             {messageGroups.map((group) => (
               <div key={group.date}>
                 {/* Date separator */}
