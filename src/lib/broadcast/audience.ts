@@ -7,9 +7,10 @@ export interface BlueprintAudienceFilter {
   excludeTagIds?: string[]
 }
 
-// PostgREST limita o IN(...) — pagina (mesmo racional de
-// fetchCustomValueIndex, variables.ts).
-const PAGE = 500
+// Ids vão na URL do IN(...): 200 UUIDs dão ~7,5 KB. Com 500 a URL passa de
+// 16 KB, o fetch do Node (undici) recusa com HeadersOverflowError e a
+// audiência inteira falha (mesmo limite de fetchCustomValueIndex, variables.ts).
+const PAGE = 200
 
 // PostgREST devolve no máximo 1000 linhas por resposta — contact_tags de uma
 // turma grande passa disso, então os vínculos são lidos em páginas ordenadas.
