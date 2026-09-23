@@ -122,8 +122,9 @@ export async function fetchCustomValueIndex(
   const index: CustomValueIndex = new Map()
   if (contactIds.length === 0) return index
 
-  // PostgREST limita o IN(...) ~1000 valores — pagina para ficar seguro.
-  const PAGE = 500
+  // Ids vão na URL do IN(...): acima de ~400 UUIDs a URL passa de 16 KB e o
+  // fetch do Node recusa (HeadersOverflowError). 200 fica com folga.
+  const PAGE = 200
   for (let i = 0; i < contactIds.length; i += PAGE) {
     const slice = contactIds.slice(i, i + PAGE)
     const { data } = await supabase
