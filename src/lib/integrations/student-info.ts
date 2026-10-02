@@ -36,7 +36,10 @@ export interface ProgressoAulas {
     nome_curso: string
     total_aulas: number
     aulas_concluidas: number
+    // aulas marcadas como concluídas pelo aluno ÷ total de aulas
     percentual_concluidas: number
+    // cobertura de vídeo do curso (0–100): soma do % assistido de cada aula ÷ total
+    // de aulas; aula nunca aberta conta como 0
     media_video_assistido: number
   }[]
 }
