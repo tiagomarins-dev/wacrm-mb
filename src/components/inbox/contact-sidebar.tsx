@@ -23,7 +23,6 @@ import {
   Tag as TagIcon,
   StickyNote,
   GraduationCap,
-  Loader2,
   Plus,
   X,
   Maximize2,
@@ -38,6 +37,7 @@ type StudentPanel = StudentInfoResponse & {
 };
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/dashboard/skeleton";
 import { format } from "date-fns";
 
 interface ContactSidebarProps {
@@ -81,63 +81,101 @@ export function ContactSidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contact?.id]);
   // Dados do Aluno (Millaborges) — busca ao vivo a cada abertura do contato.
+  // null = busca em andamento: o bloco mostra o skeleton, nunca o aluno de outra conversa.
   const [student, setStudent] = useState<StudentPanel | null>(null);
-  const [loadingStudent, setLoadingStudent] = useState(false);
 
-  const fetchContactData = useCallback(async () => {
-    if (!contact) return;
+  const contactId = contact?.id ?? null;
+  // A Plataforma MB localiza o aluno por e-mail e telefone: mudar um dos dois pede nova
+  // busca; mudar só o nome do contato, não.
+  const studentKey = contact
+    ? `${contact.id}|${contact.email ?? ""}|${contact.phone ?? ""}`
+    : null;
 
+  // Zera o que pertence ao contato no mesmo render em que ele muda, antes de qualquer
+  // busca terminar: o painel não chega a desenhar notas, tags ou aluno do contato
+  // anterior sob o nome do novo. As tags da conta (accountTags) não entram: não mudam
+  // com o contato.
+  const [shownContactId, setShownContactId] = useState(contactId);
+  if (shownContactId !== contactId) {
+    setShownContactId(contactId);
+    setNotes([]);
+    setTags([]);
+  }
+  const [shownStudentKey, setShownStudentKey] = useState(studentKey);
+  if (shownStudentKey !== studentKey) {
+    setShownStudentKey(studentKey);
+    setStudent(null);
+  }
+
+  // Notas e tags do contato, mais as tags da conta (seletor "+"). A resposta só é
+  // aplicada se o contato ainda for o mesmo: numa troca rápida de conversa, a busca
+  // do contato anterior pode terminar depois da atual.
+  useEffect(() => {
+    if (!contactId) return;
+    let ativo = true;
     const supabase = createClient();
 
-    // Fetch notes, tags do contato e todas as tags da conta em paralelo.
-    const [notesRes, tagsRes, accountTagsRes] = await Promise.all([
-      supabase
-        .from("contact_notes")
-        .select("*")
-        .eq("contact_id", contact.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("contact_tags")
-        .select("id, tag_id, tags(*)")
-        .eq("contact_id", contact.id),
-      // Todas as tags da conta (seletor "+"); RLS já isola por conta.
-      supabase.from("tags").select("*").order("name"),
-    ]);
+    (async () => {
+      const [notesRes, tagsRes, accountTagsRes] = await Promise.all([
+        supabase
+          .from("contact_notes")
+          .select("*")
+          .eq("contact_id", contactId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("contact_tags")
+          .select("id, tag_id, tags(*)")
+          .eq("contact_id", contactId),
+        // Todas as tags da conta (seletor "+"); RLS já isola por conta.
+        supabase.from("tags").select("*").order("name"),
+      ]);
+      if (!ativo) return;
 
-    if (notesRes.data) setNotes(notesRes.data);
-    if (tagsRes.data) {
-      const mapped = tagsRes.data
-        .filter((ct: Record<string, unknown>) => ct.tags)
-        .map((ct: Record<string, unknown>) => ({
-          ...(ct.tags as Tag),
-          contact_tag_id: ct.id as string,
-        }));
-      setTags(mapped);
-    }
-    if (accountTagsRes.data) setAccountTags(accountTagsRes.data as Tag[]);
+      if (notesRes.data) setNotes(notesRes.data);
+      if (tagsRes.data) {
+        const mapped = tagsRes.data
+          .filter((ct: Record<string, unknown>) => ct.tags)
+          .map((ct: Record<string, unknown>) => ({
+            ...(ct.tags as Tag),
+            contact_tag_id: ct.id as string,
+          }));
+        setTags(mapped);
+      }
+      if (accountTagsRes.data) setAccountTags(accountTagsRes.data as Tag[]);
+    })();
 
-    // Dados do Aluno: chama a rota proxy (server-to-server) a cada troca de contato.
-    setLoadingStudent(true);
-    try {
-      const r = await fetch("/api/integrations/student-info", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactId: contact.id }),
-      });
-      setStudent((await r.json()) as StudentPanel);
-    } catch {
-      setStudent({ status: "erro" });
-    } finally {
-      setLoadingStudent(false);
-    }
-  }, [contact]);
+    return () => {
+      ativo = false;
+    };
+  }, [contactId]);
 
-  // Load on contact change. setContactData/setTags run inside async
-  // Supabase callbacks, not synchronously in the effect body.
+  // Dados do Aluno: rota proxy (server-to-server), em paralelo com notas e tags para o
+  // painel não esperar uma busca para começar a outra. Mesma regra de descarte: a
+  // chamada à Plataforma MB pode levar vários segundos, tempo de sobra para o
+  // atendente já estar em outra conversa.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchContactData();
-  }, [fetchContactData]);
+    if (!contactId) return;
+    let ativo = true;
+
+    (async () => {
+      let data: StudentPanel;
+      try {
+        const r = await fetch("/api/integrations/student-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactId }),
+        });
+        data = (await r.json()) as StudentPanel;
+      } catch {
+        data = { status: "erro" };
+      }
+      if (ativo) setStudent(data);
+    })();
+
+    return () => {
+      ativo = false;
+    };
+  }, [contactId, studentKey]);
 
   const handleCopyPhone = useCallback(async () => {
     if (!contact?.phone) return;
@@ -397,7 +435,7 @@ export function ContactSidebar({
               Dados do Aluno
             </div>
             <div className="mt-2">
-              <StudentBlock student={student} loading={loadingStudent} />
+              <StudentBlock student={student} />
             </div>
           </div>
 
@@ -469,22 +507,26 @@ function Bar({ pct }: { pct: number }) {
   );
 }
 
-// Renderiza o painel "Dados do Aluno" conforme o status da rota.
-function StudentBlock({
-  student,
-  loading,
-}: {
-  student: StudentPanel | null;
-  loading: boolean;
-}) {
-  if (loading && !student) {
-    return (
-      <div className="flex justify-center py-3">
-        <Loader2 className="size-4 animate-spin text-primary" />
+// Silhueta do bloco do aluno (cadastro + cursos) enquanto a busca roda, para o painel
+// não mudar de altura de uma vez quando os dados chegam.
+function StudentSkeleton() {
+  return (
+    <div className="space-y-3" role="status" aria-label="Carregando dados do aluno">
+      <Skeleton className="h-[68px] rounded-lg" />
+      <div className="space-y-1.5">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="h-16 rounded-lg" />
+        <Skeleton className="h-16 rounded-lg" />
       </div>
-    );
-  }
-  if (!student || student.configured === false) {
+    </div>
+  );
+}
+
+// Renderiza o painel "Dados do Aluno" conforme o status da rota. student nulo = busca
+// em andamento.
+function StudentBlock({ student }: { student: StudentPanel | null }) {
+  if (!student) return <StudentSkeleton />;
+  if (student.configured === false) {
     return null; // integração não configurada → bloco discreto (some)
   }
   if (student.status === "no_identifier")
