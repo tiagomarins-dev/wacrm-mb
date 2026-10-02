@@ -565,7 +565,7 @@ function StudentBlock({
                             <span className="truncate font-medium text-foreground">{curso.nome_curso}</span>
                             {curso.progresso && (
                               <span className="shrink-0 text-muted-foreground">
-                                {curso.progresso.aulas_concluidas}/{curso.progresso.total_aulas} aulas
+                                {curso.progresso.aulas_concluidas}/{curso.progresso.total_aulas} concluídas
                               </span>
                             )}
                           </div>
@@ -574,20 +574,17 @@ function StudentBlock({
                             {curso.tag ? ` · ${curso.tag}` : ""}
                           </p>
                           {curso.progresso && (
-                            <>
-                              {/* Barra = % de aulas concluídas (rotulada p/ não confundir com vídeo). */}
-                              <div className="mt-1 flex items-center gap-2">
-                                <div className="flex-1">
-                                  <Bar pct={curso.progresso.percentual_concluidas} />
-                                </div>
-                                <span className="shrink-0 text-[10px] text-muted-foreground">
-                                  {Math.round(curso.progresso.percentual_concluidas)}% aulas
-                                </span>
+                            // Barra = quanto do curso o aluno assistiu em vídeo (aula não aberta
+                            // conta como 0). As aulas marcadas como concluídas ficam no contador
+                            // ao lado do nome, porque o check é manual e independe do vídeo.
+                            <div className="mt-1 flex items-center gap-2">
+                              <div className="flex-1">
+                                <Bar pct={curso.progresso.media_video_assistido} />
                               </div>
-                              <p className="mt-0.5 text-[10px] text-muted-foreground">
-                                Vídeo assistido: {Math.round(curso.progresso.media_video_assistido)}%
-                              </p>
-                            </>
+                              <span className="shrink-0 text-[10px] text-muted-foreground">
+                                {Math.round(curso.progresso.media_video_assistido)}% assistido
+                              </span>
+                            </div>
                           )}
                         </div>
                       ))}
