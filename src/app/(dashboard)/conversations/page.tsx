@@ -48,7 +48,9 @@ import {
   Loader2,
   MessagesSquare,
   CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
+import { deliveryAlert } from "@/lib/inbox/queue";
 import { cn } from "@/lib/utils";
 import { useCan } from "@/hooks/use-can";
 import { useActiveConnection } from "@/hooks/use-active-connection";
@@ -88,7 +90,7 @@ function assigneeLabel(a: Assignee, t: (k: string) => string): string {
 }
 
 export default function ConversationsPage() {
-  const { t } = useTranslation(["conversations", "common"]);
+  const { t } = useTranslation(["conversations", "common", "inbox"]);
   const { formatDateTime } = useFormat();
   const supabase = createClient();
   const { activeConnectionId } = useActiveConnection();
@@ -96,6 +98,13 @@ export default function ConversationsPage() {
   const { statuses } = useConversationStatuses();
 
   const [rows, setRows] = useState<Conversation[]>([]);
+  // Relógio da tela: o alerta de entrega depende do tempo (1h sem confirmação),
+  // então precisa reavaliar mesmo sem evento novo.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -608,6 +617,14 @@ export default function ConversationsPage() {
               rows.map((conv) => {
                 const displayName =
                   conv.contact?.name || conv.contact?.phone || "—";
+                // Alerta de entrega (regra em queue.ts); texto do namespace inbox.
+                const alert = deliveryAlert(conv, now);
+                const alertLabel =
+                  alert === "failed"
+                    ? t("inbox:deliveryAlertFailed")
+                    : alert === "undelivered"
+                      ? t("inbox:deliveryAlertUndelivered")
+                      : "";
                 return (
                   <TableRow
                     key={conv.id}
@@ -628,7 +645,16 @@ export default function ConversationsPage() {
                         className="size-5"
                       />
                     </TableCell>
-                    <TableCell className="font-medium text-foreground">{displayName}</TableCell>
+                    <TableCell className="font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        {displayName}
+                        {alert && (
+                          <span role="img" title={alertLabel} aria-label={alertLabel} className="shrink-0">
+                            <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                          </span>
+                        )}
+                      </span>
+                    </TableCell>
                     <TableCell className="hidden font-mono text-xs text-muted-foreground md:table-cell">
                       {conv.contact?.phone}
                     </TableCell>

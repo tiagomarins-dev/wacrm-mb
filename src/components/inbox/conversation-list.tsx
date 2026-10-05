@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useConversationStatuses } from "@/hooks/use-conversation-statuses";
 import { resolveStatus, type ResolvedStatus } from "@/lib/inbox/conversation-statuses";
 import type { Conversation } from "@/types";
-import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen, Star, AlertTriangle } from "lucide-react";
+import { Search, ArrowDown, ArrowUp, Users, Bot, MoreVertical, MailOpen, Star, AlertTriangle, AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 // Locale pt-BR do date-fns p/ traduzir os tempos relativos ("há 5 minutos").
 import { ptBR } from "date-fns/locale";
@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
-import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst, type QueueTab } from "@/lib/inbox/queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst, deliveryAlert, type QueueTab } from "@/lib/inbox/queue";
 import { buildInboxListFilter, isInboxListTruncated, INBOX_LIST_LIMIT } from "@/lib/inbox/inbox-list-query";
 import { conversationTitle } from "@/lib/inbox/conversation-title";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
@@ -503,6 +503,7 @@ export function ConversationList({
                 onMarkUnread={onMarkUnread}
                 isFavorite={favorites.has(conv.id)}
                 onToggleFavorite={onToggleFavorite}
+                now={now}
               />
             ))}
           </div>
@@ -521,6 +522,8 @@ interface ConversationItemProps {
   /** Favoritada pelo usuário (076) — estrela na linha + label do kebab. */
   isFavorite: boolean;
   onToggleFavorite: (id: string) => void;
+  /** Relógio da lista (ms) — base do alerta de entrega, que depende do tempo. */
+  now: number;
 }
 
 function ConversationItem({
@@ -531,6 +534,7 @@ function ConversationItem({
   onMarkUnread,
   isFavorite,
   onToggleFavorite,
+  now,
 }: ConversationItemProps) {
   // Idioma ativo da UI: 'pt-BR' usa o locale ptBR; 'en' usa o default (en-US).
   const { t, i18n } = useTranslation("inbox");
@@ -553,6 +557,15 @@ function ConversationItem({
         locale: dateLocale,
       })
     : "";
+
+  // Alerta de entrega (regra em queue.ts): o texto também vai no title/aria-label.
+  const alert = deliveryAlert(conversation, now);
+  const alertLabel =
+    alert === "failed"
+      ? t("deliveryAlertFailed")
+      : alert === "undelivered"
+        ? t("deliveryAlertUndelivered")
+        : "";
 
   return (
     <div className="relative group/item">
@@ -592,6 +605,13 @@ function ConversationItem({
             {conversation.last_message_text || "No messages yet"}
           </p>
           <div className="flex shrink-0 items-center gap-1.5">
+            {/* Contato não está recebendo (088). O title vai no span: no <svg>
+                o navegador não mostra tooltip. */}
+            {alert && (
+              <span role="img" title={alertLabel} aria-label={alertLabel} className="shrink-0">
+                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+              </span>
+            )}
             {/* Estrela de favorito (076) */}
             {isFavorite && (
               <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />

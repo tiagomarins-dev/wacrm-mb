@@ -43,6 +43,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { format, isToday, isYesterday, differenceInHours } from "date-fns";
+import { DeliveryAlertBanner } from "@/components/inbox/delivery-alert-banner";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -1546,6 +1547,9 @@ export function MessageThread({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Contato não está recebendo (088): faixa fixa entre o cabeçalho e as mensagens. */}
+      {conversation && <DeliveryAlertBanner conversation={conversation} />}
 
       {/* Messages Area.
           `min-h-0` é load-bearing: sem ele, este flex item não encolhe
