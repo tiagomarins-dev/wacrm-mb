@@ -406,6 +406,17 @@ export interface Conversation {
   last_message_at?: string;
   /** Sender da última mensagem (denormalizado, trigger 043). Base das abas Fila/SLA. */
   last_message_sender_type?: SenderType | null;
+  /** Última mensagem enviada por atendente ou bot (denormalizado, trigger 088). */
+  last_outbound_message_id?: string | null;
+  /** Quando a última mensagem nossa saiu (trigger 088). Base do alerta de não entrega. */
+  last_outbound_at?: string | null;
+  /**
+   * Entrega da última mensagem nossa (trigger 088). `pending` = só enviada;
+   * leitura conta como `delivered`. NULL = sem entrega a acompanhar: conexão
+   * que não devolve confirmação (não-Meta), conversa sem mensagem nossa, ou
+   * conversa que estava finalizada quando a coluna foi criada. Nunca alerta.
+   */
+  last_outbound_state?: 'pending' | 'delivered' | 'failed' | null;
   unread_count: number;
   created_at: string;
   updated_at: string;

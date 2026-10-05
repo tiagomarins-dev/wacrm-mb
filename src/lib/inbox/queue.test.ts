@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst } from "./queue";
+import { classifyTab, sortByTab, countByTab, effectiveDir, pinFavoritesFirst, deliveryAlert } from "./queue";
 import { AI_AGENT_USER_ID } from "@/lib/ai-agent/constants";
 import type { Conversation } from "@/types";
 
@@ -255,5 +255,53 @@ describe("pinFavoritesFirst", () => {
   it("id favoritado ausente da lista é no-op", () => {
     const list = [mk("a")];
     expect(pinFavoritesFirst(list, new Set(["zzz"])).map((c) => c.id)).toEqual(["a"]);
+  });
+});
+
+describe("deliveryAlert", () => {
+  // Conversa com a última mensagem nossa pendente há `min` minutos.
+  const pending = (min: number, over: Partial<Conversation> = {}) =>
+    conv({
+      status: "open",
+      last_message_sender_type: "agent",
+      last_outbound_state: "pending",
+      last_outbound_at: at(min),
+      ...over,
+    });
+
+  it("pendente dentro de 1h não alerta; o limite é estrito", () => {
+    expect(deliveryAlert(pending(59), NOW)).toBeNull();
+    expect(deliveryAlert(pending(60), NOW)).toBeNull();
+    const umSegundoDepois = new Date(NOW - 60 * 60_000 - 1000).toISOString();
+    expect(deliveryAlert(pending(0, { last_outbound_at: umSegundoDepois }), NOW)).toBe("undelivered");
+    expect(deliveryAlert(pending(61), NOW)).toBe("undelivered");
+  });
+
+  it("falha alerta na hora, sem esperar o limite", () => {
+    expect(deliveryAlert(pending(0, { last_outbound_state: "failed" }), NOW)).toBe("failed");
+  });
+
+  it("entregue ou sem acompanhamento (estado nulo) não alerta", () => {
+    expect(deliveryAlert(pending(600, { last_outbound_state: "delivered" }), NOW)).toBeNull();
+    expect(deliveryAlert(pending(600, { last_outbound_state: null }), NOW)).toBeNull();
+  });
+
+  it("última mensagem do cliente apaga o alerta, com falha ou pendência", () => {
+    const cliente = { last_message_sender_type: "customer" as const };
+    expect(deliveryAlert(pending(0, { ...cliente, last_outbound_state: "failed" }), NOW)).toBeNull();
+    expect(deliveryAlert(pending(120, cliente), NOW)).toBeNull();
+  });
+
+  it("conversa finalizada não alerta", () => {
+    expect(deliveryAlert(pending(0, { status: "closed", last_outbound_state: "failed" }), NOW)).toBeNull();
+  });
+
+  it("data ausente ou inválida não alerta", () => {
+    expect(deliveryAlert(pending(0, { last_outbound_at: null }), NOW)).toBeNull();
+    expect(deliveryAlert(pending(0, { last_outbound_at: "não é data" }), NOW)).toBeNull();
+  });
+
+  it("mensagem do bot conta como nossa", () => {
+    expect(deliveryAlert(pending(61, { last_message_sender_type: "bot" }), NOW)).toBe("undelivered");
   });
 });

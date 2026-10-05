@@ -87,5 +87,9 @@
   "openLinkNoSupportConnection": "Support connection unavailable. Contact your admin.",
   "openLinkRateLimited": "Too many requests in a row. Wait a minute.",
   "openLinkFailed": "Could not open the conversation.",
-  "openLinkBackToInbox": "Back to inbox"
+  "openLinkBackToInbox": "Back to inbox",
+  "deliveryAlertUndelivered": "Messages not delivered: the contact is not receiving them",
+  "deliveryAlertFailed": "The last message failed to send",
+  "deliveryBannerUndelivered": "This contact is not receiving messages. The last one was sent {{when}} and has not been delivered yet.",
+  "deliveryBannerFailed": "The last message failed to send and did not reach the contact."
 }

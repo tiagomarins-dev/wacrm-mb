@@ -12,6 +12,15 @@ export type QueueTab = "fila" | "minhas" | "sla" | "ia" | "geral";
 export const SLA_THRESHOLD_MIN = 30;
 const SLA_MS = SLA_THRESHOLD_MIN * 60_000;
 
+// Tempo (min) que a última mensagem nossa pode ficar só "enviada" (um tick)
+// antes de a conversa contar como "contato não está recebendo".
+export const UNDELIVERED_THRESHOLD_MIN = 60;
+const UNDELIVERED_MS = UNDELIVERED_THRESHOLD_MIN * 60_000;
+
+// Tipo do alerta de entrega: falha devolvida pelo WhatsApp, ou mensagem parada
+// sem confirmação de entrega. null = nada a sinalizar.
+export type DeliveryAlert = "failed" | "undelivered" | null;
+
 // Set vazio reaproveitado quando o caller não passa os ids de IA (mantém
 // compatibilidade com chamadas de 4 args — ver classifyTab abaixo).
 const NO_AI_IDS: ReadonlySet<string> = new Set();
@@ -124,4 +133,23 @@ export function pinFavoritesFirst(
   const rest: Conversation[] = [];
   for (const c of list) (favorites.has(c.id) ? pinned : rest).push(c);
   return [...pinned, ...rest];
+}
+
+// O contato está deixando de receber o que mandamos? Lê só os campos
+// denormalizados da conversa (trigger 088), sem consultar mensagens.
+// A ordem das checagens importa:
+//  - conversa finalizada não pede ação do operador;
+//  - se a última mensagem é do cliente, ele respondeu depois do nosso envio: o
+//    canal está vivo, mesmo que a nossa mensagem anterior tenha falhado;
+//  - falha é certeza de não entrega e sinaliza na hora;
+//  - "só enviada" é normal nos primeiros minutos, então só conta depois do limite.
+// Estado NULL (conexão sem confirmação de entrega) nunca alerta.
+export function deliveryAlert(conv: Conversation, now: number): DeliveryAlert {
+  if (conv.status === "closed") return null;
+  if (conv.last_message_sender_type === "customer") return null;
+  if (conv.last_outbound_state === "failed") return "failed";
+  if (conv.last_outbound_state !== "pending" || !conv.last_outbound_at) return null;
+  const sentAt = new Date(conv.last_outbound_at).getTime();
+  if (Number.isNaN(sentAt)) return null;
+  return now - sentAt > UNDELIVERED_MS ? "undelivered" : null;
 }

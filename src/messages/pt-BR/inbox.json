@@ -87,5 +87,9 @@
   "openLinkNoSupportConnection": "Conexão de Suporte indisponível. Fale com o administrador.",
   "openLinkRateLimited": "Muitas aberturas seguidas. Aguarde um minuto.",
   "openLinkFailed": "Não foi possível abrir a conversa.",
-  "openLinkBackToInbox": "Voltar para a caixa de entrada"
+  "openLinkBackToInbox": "Voltar para a caixa de entrada",
+  "deliveryAlertUndelivered": "Mensagens não entregues: o contato não está recebendo",
+  "deliveryAlertFailed": "A última mensagem falhou no envio",
+  "deliveryBannerUndelivered": "Este contato não está recebendo as mensagens. A última foi enviada {{when}} e ainda não foi entregue.",
+  "deliveryBannerFailed": "A última mensagem falhou no envio e não chegou ao contato."
 }
