@@ -8,6 +8,7 @@ import { Flame, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
+import { linkLabel } from "@/lib/opportunities/link-label";
 import { useActiveConnection } from "@/hooks/use-active-connection";
 import { useAuth } from "@/hooks/use-auth";
 import { useConversationWorkspace } from "@/hooks/use-conversation-workspace";
@@ -289,7 +290,17 @@ export default function OpportunitiesPage() {
                           <div className="text-foreground font-medium">{r.name || t("leadScore:unnamed")}</div>
                           <div className="text-muted-foreground font-mono text-xs">{r.phone}</div>
                         </TableCell>
-                        <TableCell className="text-sm">{r.course_name ?? t("courseUnknown")}</TableCell>
+                        <TableCell className="text-sm">
+                          <div>{r.course_name ?? t("courseUnknown")}</div>
+                          {r.last_click_url && (
+                            <div
+                              className="text-muted-foreground max-w-56 truncate font-mono text-xs"
+                              title={t("lastClickTitle", { url: r.last_click_url })}
+                            >
+                              {linkLabel(r.last_click_url)}
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell>{signalChips(r)}</TableCell>
                         <TableCell className="text-muted-foreground text-xs">{ago(r.signal_at)}</TableCell>
                         <TableCell>
