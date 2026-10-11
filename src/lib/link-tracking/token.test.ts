@@ -70,6 +70,17 @@ describe('createAgentLinkToken', () => {
     expect(inserts[0].run_id).toBeNull()
     expect(inserts[0].source).toBe('agent')
     expect(inserts[0].url).toBe('https://pay.hotmart.com/x')
+    expect(inserts[0].is_sale).toBe(false)
+  })
+
+  it('is_sale informado vai para a linha do token', async () => {
+    const { db, inserts } = makeDb(null)
+    await createAgentLinkToken(
+      db,
+      { account_id: 'a', contact_id: null, url: 'https://bit.ly/x', is_sale: true },
+      NOW,
+    )
+    expect(inserts[0].is_sale).toBe(true)
   })
 
   it('url não-http → lança', async () => {
@@ -95,6 +106,17 @@ describe('createManualLinkToken', () => {
     expect(inserts[0].flow_id).toBeNull()
     expect(inserts[0].run_id).toBeNull()
     expect(inserts[0].url).toBe('https://exemplo.com/p')
+    expect(inserts[0].is_sale).toBe(false)
+  })
+
+  it('is_sale informado vai para a linha do token', async () => {
+    const { db, inserts } = makeDb(null)
+    await createManualLinkToken(
+      db,
+      { account_id: 'a', contact_id: null, url: 'https://pay.hotmart.com/x', is_sale: true },
+      NOW,
+    )
+    expect(inserts[0].is_sale).toBe(true)
   })
 
   it('contact_id null é aceito', async () => {
@@ -128,6 +150,23 @@ describe('consumeLinkToken', () => {
     expect(p?.url).toBe('https://example.com/x')
     expect(p?.account_id).toBe('acc-1')
     expect(p?.source).toBe('flow')
+    expect(p?.is_sale).toBe(false)
+  })
+
+  it('token marcado como venda → devolve is_sale true', async () => {
+    const { db } = makeDb({
+      account_id: 'acc-1',
+      source: 'agent',
+      flow_id: null,
+      run_id: null,
+      node_key: 'agent',
+      contact_id: 'contact-1',
+      url: 'https://bit.ly/x',
+      expires_at: new Date(NOW + 1000).toISOString(),
+      is_sale: true,
+    })
+    const p = await consumeLinkToken(db, 'abc', NOW)
+    expect(p?.is_sale).toBe(true)
   })
 
   it('token do agente → source=agent, run_id null', async () => {

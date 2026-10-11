@@ -168,6 +168,7 @@ describe('enviar_link_venda', () => {
     const ins = captured.inserts.find((i) => i.table === 'link_tokens')
     expect(ins.payload.run_id).toBeNull()
     expect(ins.payload.source).toBe('agent')
+    expect(ins.payload.is_sale).toBe(true)
   })
 
   it('curso sem link → sinaliza sem_link (não erro técnico)', async () => {

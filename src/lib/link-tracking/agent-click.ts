@@ -4,6 +4,7 @@
 // de resumeRunOnLinkClick (flows/engine.ts:1250), mas com flow_run_id=null. NÃO retoma
 // flow nenhum. source/node_key vêm do payload (dinâmicos). connection_id é resolvido do
 // contato (o token não carrega connection_id; link_clicks.connection_id é nullable).
+// is_sale vem do token: quem cria o link decide se ele é de venda.
 // ============================================================
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ConsumedToken } from './token'
@@ -37,7 +38,8 @@ export async function recordAgentClick(
     source: payload.source,
     target_url: payload.url,
     user_agent: userAgent,
-    is_sale: false,
+    // marca decidida no envio e guardada no token; pesa em dobro no Lead Score
+    is_sale: payload.is_sale,
   })
   if (error) console.error('[link] agent click insert failed:', error.message)
 }

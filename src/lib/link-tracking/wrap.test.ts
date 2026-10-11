@@ -23,6 +23,7 @@ function makeDb() {
       select: () => b,
       insert: (p: unknown) => ((op.type = 'insert'), (op.payload = p), b),
       eq: () => b,
+      not: () => b,
       maybeSingle: () => Promise.resolve(resolve()),
       then: (f: (v: unknown) => unknown) => Promise.resolve(resolve()).then(f),
     }
@@ -61,6 +62,13 @@ describe('wrapTrackableLinks', () => {
     expect(inserts).toHaveLength(1)
     expect(inserts[0].url).toBe('https://exemplo.com/p')
     expect(inserts[0].source).toBe('manual')
+    expect(inserts[0].is_sale).toBe(false)
+  })
+
+  it('link do checkout da Hotmart → token marcado como venda', async () => {
+    const { db, inserts } = makeDb()
+    await wrapTrackableLinks(db, 'segue https://pay.hotmart.com/O1?off=abc', ARGS)
+    expect(inserts[0].is_sale).toBe(true)
   })
 
   it('URL já /r/ → não re-wrapa', async () => {

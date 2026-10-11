@@ -205,9 +205,10 @@ export async function execTool(ctx: AgentCtx, call: ToolCall): Promise<ToolResul
       }
       const base = getSiteUrl()
       if (!base) return { output: { error: 'site url não configurada' }, detectedTopic: 'vendas' }
+      // Link de matrícula do curso: sempre de venda, qualquer que seja o destino.
       const token = await createAgentLinkToken(
         ctx.db,
-        { account_id: ctx.accountId, contact_id: ctx.contactId, url: curso.link_venda },
+        { account_id: ctx.accountId, contact_id: ctx.contactId, url: curso.link_venda, is_sale: true },
         Date.now(),
       )
       return { output: { url: `${base}/r/${token}`, curso: curso.nome }, detectedTopic: 'vendas' }
