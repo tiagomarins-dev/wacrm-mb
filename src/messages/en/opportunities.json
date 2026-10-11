@@ -24,6 +24,7 @@
   "signalPrice": "Found it expensive",
   "weakSignal": "weak signal",
   "courseUnknown": "Unknown course",
+  "lastClickTitle": "Last link clicked: {{url}}",
   "badgeStudent": "Already a student",
   "badgeApproached": "Approached {{when}}",
   "badgeApproachedBy": "Approached {{when}} by {{name}}",

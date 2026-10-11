@@ -1050,6 +1050,8 @@ export interface OpportunityRow {
   approached_by_name: string | null;
   score: number;
   classification: 'quente' | 'morno' | 'frio';
+  // Destino do último clique em link de venda; null sem sinal de clique.
+  last_click_url: string | null;
   total_count: number;
 }
 

@@ -24,6 +24,7 @@
   "signalPrice": "Achou caro",
   "weakSignal": "sinal fraco",
   "courseUnknown": "Curso não identificado",
+  "lastClickTitle": "Último link clicado: {{url}}",
   "badgeStudent": "Já é aluno",
   "badgeApproached": "Abordado {{when}}",
   "badgeApproachedBy": "Abordado {{when}} por {{name}}",
