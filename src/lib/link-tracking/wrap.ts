@@ -2,11 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { getSiteUrl } from '@/lib/site-url'
 import { findUrls } from './url-detect'
 import { createManualLinkToken } from './token'
+import { isSaleUrl, loadCourseSaleLinks } from './sale-link'
 
 // Reescreve os links http(s) do texto do atendente em /r/<token> rastreável.
 // Guardas: !text → devolve text; getSiteUrl() ausente (runtime) → devolve text (não
 // quebra o envio); URL já /r/ → não re-wrapa. Substitui do FIM p/ o INÍCIO para não
-// deslocar os índices ainda não processados.
+// deslocar os índices ainda não processados. Cada link sai marcado como de venda
+// ou não (isSaleUrl); os links de matrícula dos cursos são lidos uma vez por texto.
 export async function wrapTrackableLinks(
   db: SupabaseClient,
   text: string | null | undefined,
@@ -19,6 +21,7 @@ export async function wrapTrackableLinks(
   const urls = findUrls(text)
   if (urls.length === 0) return text
   const prefix = `${base}/r/`
+  const courseLinks = await loadCourseSaleLinks(db, args.accountId)
 
   let out = text
   for (let i = urls.length - 1; i >= 0; i--) {
@@ -26,7 +29,7 @@ export async function wrapTrackableLinks(
     if (url.startsWith(prefix)) continue // já é /r/ → não re-wrapa
     const token = await createManualLinkToken(
       db,
-      { account_id: args.accountId, contact_id: args.contactId, url },
+      { account_id: args.accountId, contact_id: args.contactId, url, is_sale: isSaleUrl(url, courseLinks) },
       Date.now(),
     )
     out = out.slice(0, start) + `${prefix}${token}` + out.slice(end)

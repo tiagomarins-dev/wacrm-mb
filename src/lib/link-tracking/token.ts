@@ -49,9 +49,10 @@ export async function createLinkToken(
 // flow_run. Espelha createLinkToken, mas grava flow_id/run_id = null e
 // source='agent'. NÃO refatora createLinkToken (caminho de flows intocado).
 // Requer migration 037 (flow_id/run_id nullable + coluna source).
+// `is_sale` marca o link de venda; o clique copia a marca para link_clicks.
 export async function createAgentLinkToken(
   db: SupabaseClient,
-  args: { account_id: string; contact_id: string | null; url: string },
+  args: { account_id: string; contact_id: string | null; url: string; is_sale?: boolean },
   now: number,
 ): Promise<string> {
   if (!/^https?:\/\//i.test(args.url)) {
@@ -67,6 +68,7 @@ export async function createAgentLinkToken(
     source: 'agent',
     contact_id: args.contact_id,
     url: args.url,
+    is_sale: args.is_sale ?? false,
     expires_at: new Date(now + TTL_MS).toISOString(),
   })
   if (error) throw new Error(`failed to create agent link token: ${error.message}`)
@@ -75,10 +77,10 @@ export async function createAgentLinkToken(
 
 // Token rastreável para links enviados pelo ATENDENTE humano (source='manual').
 // Espelha createAgentLinkToken (flow_id/run_id = null); só troca node_key/source
-// para 'manual'. Requer `now` para o TTL. Sem migration (link_tokens.source livre).
+// para 'manual'. Requer `now` para o TTL. `is_sale` marca o link de venda.
 export async function createManualLinkToken(
   db: SupabaseClient,
-  args: { account_id: string; contact_id: string | null; url: string },
+  args: { account_id: string; contact_id: string | null; url: string; is_sale?: boolean },
   now: number,
 ): Promise<string> {
   if (!/^https?:\/\//i.test(args.url)) {
@@ -94,6 +96,7 @@ export async function createManualLinkToken(
     source: 'manual',
     contact_id: args.contact_id,
     url: args.url,
+    is_sale: args.is_sale ?? false,
     expires_at: new Date(now + TTL_MS).toISOString(),
   })
   if (error) throw new Error(`failed to create manual link token: ${error.message}`)
@@ -106,9 +109,11 @@ export async function createManualLinkToken(
 // Token consumido: superset de LinkTokenPayload com account_id + source —
 // o /r usa `source` p/ rotear (flow vs agent) e `account_id` p/ o registro
 // do clique do agente (que não tem run de onde puxar o account_id).
+// `is_sale` só vale para token de agente/atendente; no de flow a marca vem do nó.
 export interface ConsumedToken extends LinkTokenPayload {
   account_id: string
   source: string
+  is_sale: boolean
 }
 
 export async function consumeLinkToken(
@@ -119,7 +124,7 @@ export async function consumeLinkToken(
   if (!id) return null
   const { data } = await db
     .from('link_tokens')
-    .select('account_id, source, flow_id, run_id, node_key, contact_id, url, expires_at')
+    .select('account_id, source, flow_id, run_id, node_key, contact_id, url, expires_at, is_sale')
     .eq('id', id)
     .maybeSingle()
   if (!data) return null
@@ -132,6 +137,7 @@ export async function consumeLinkToken(
     contact_id: string | null
     url: string
     expires_at: string
+    is_sale: boolean | null
   }
   if (new Date(row.expires_at).getTime() < now) return null
   if (!/^https?:\/\//i.test(row.url)) return null
@@ -143,5 +149,6 @@ export async function consumeLinkToken(
     node_key: row.node_key,
     contact_id: row.contact_id,
     url: row.url,
+    is_sale: row.is_sale ?? false,
   }
 }

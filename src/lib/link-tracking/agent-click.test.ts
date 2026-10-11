@@ -36,6 +36,7 @@ const payload: ConsumedToken = {
   node_key: 'agent',
   contact_id: 'contact-1',
   url: 'https://pay.hotmart.com/x',
+  is_sale: false,
 }
 
 describe('recordAgentClick', () => {
@@ -50,6 +51,12 @@ describe('recordAgentClick', () => {
     expect(p.target_url).toBe('https://pay.hotmart.com/x')
     expect(p.is_sale).toBe(false)
     expect(p.account_id).toBe('acc-1')
+  })
+
+  it('token de venda → grava is_sale true no clique', async () => {
+    const { db, inserts } = makeDb({ connection_id: 'conn-9' })
+    await recordAgentClick(db, { ...payload, is_sale: true }, 'Mozilla/5.0')
+    expect(inserts[0].payload.is_sale).toBe(true)
   })
 
   it('contato sem connection → grava connection_id null (coluna é nullable)', async () => {
