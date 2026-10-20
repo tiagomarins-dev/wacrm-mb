@@ -12,12 +12,15 @@
 -- O contato que já tem um gêmeo com 55 na mesma conexão fica de fora: o
 -- índice único (account_id, connection_id, phone_normalized) impediria o
 -- UPDATE, e juntar os dois exige repontar conversas — tratado à parte.
+-- Também fica de fora quem já escreveu para nós: o telefone dele veio do
+-- wa_id da Meta, já com o código do país, e um estrangeiro com formato de
+-- brasileiro (celular do Peru 51 9xxxxxxxx) seria reescrito para outra pessoa.
 --
 -- Backup em contacts_bkp_pre_55 (id + telefone antigo) para desfazer:
 --   UPDATE contacts c SET phone = b.phone FROM contacts_bkp_pre_55 b WHERE b.id = c.id;
 --
--- Idempotente: na segunda rodada nenhum telefone tem mais 10/11 dígitos
--- que caia na regra, e o backup não é sobrescrito.
+-- Idempotente: o que a regra corrige deixa de ter 10/11 dígitos, e quem
+-- ficou de fora continua de fora numa nova rodada.
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS contacts_bkp_pre_55 AS
@@ -48,6 +51,10 @@ WITH alvo AS (
               AND o.connection_id IS NOT DISTINCT FROM c.connection_id
               AND o.id <> c.id
               AND o.phone_normalized = '55' || regexp_replace(c.phone, '\D', '', 'g'))
+     AND NOT EXISTS (
+           SELECT 1 FROM conversations cv
+             JOIN messages m ON m.conversation_id = cv.id
+            WHERE cv.contact_id = c.id AND m.sender_type = 'customer')
 ),
 bkp AS (
   INSERT INTO contacts_bkp_pre_55 (id, phone, salvo_em)

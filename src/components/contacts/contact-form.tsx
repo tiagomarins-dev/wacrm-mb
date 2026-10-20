@@ -161,7 +161,10 @@ export function ContactForm({
           .from('contacts')
           .update({
             name: name.trim() || null,
-            phone: withBrazilCountryCode(phone),
+            // Na edição, o 55 só entra se o atendente mexeu no telefone: um
+            // número estrangeiro já gravado (wa_id) não pode ser reescrito ao
+            // salvar só o nome.
+            phone: phone === contact?.phone ? phone.trim() : withBrazilCountryCode(phone),
             email: email.trim() || null,
             company: company.trim() || null,
             updated_at: new Date().toISOString(),
