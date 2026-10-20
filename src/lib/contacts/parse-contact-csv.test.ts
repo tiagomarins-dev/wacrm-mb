@@ -71,6 +71,13 @@ describe('parseContactCsv', () => {
     });
   });
 
+  it('celular brasileiro sem 55 ganha o código do país', () => {
+    const csv = `phone,name
+(15) 99130-6578,Luiz`;
+
+    expect(parseContactCsv(csv).rows[0].phone).toBe('5515991306578');
+  });
+
   // Colunas extras (fora de phone/name/email/company/tags) viram `extras` —
   // o background do lead usado pelo agente de IA no broadcast.
   it('captures unrecognized columns as extras', () => {

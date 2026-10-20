@@ -7,6 +7,8 @@ import {
   phoneVariants,
   phonesMatch,
   sanitizePhoneForMeta,
+  addBrazilCountryCode,
+  withBrazilCountryCode,
 } from "./phone-utils";
 
 describe("sanitizePhoneForMeta", () => {
@@ -181,5 +183,51 @@ describe("brPhoneNinthDigitVariant", () => {
   });
   it("9 dígitos que NÃO começam em 9 → null (não é celular padrão)", () => {
     expect(brPhoneNinthDigitVariant("5521812345678")).toBeNull();
+  });
+});
+
+describe("addBrazilCountryCode", () => {
+  it("celular brasileiro sem 55 (11 dígitos) ganha o 55", () => {
+    expect(addBrazilCountryCode("15991306578")).toBe("5515991306578");
+    expect(addBrazilCountryCode("21987654321")).toBe("5521987654321");
+  });
+
+  it("fixo ou celular antigo de 10 dígitos ganha o 55", () => {
+    expect(addBrazilCountryCode("2133334444")).toBe("552133334444");
+    expect(addBrazilCountryCode("1199998888")).toBe("551199998888");
+  });
+
+  it("número já com 55 não muda", () => {
+    expect(addBrazilCountryCode("5515991306578")).toBe("5515991306578");
+    expect(addBrazilCountryCode("552133334444")).toBe("552133334444");
+  });
+
+  it("número estrangeiro não muda", () => {
+    expect(addBrazilCountryCode("14155551212")).toBe("14155551212"); // EUA
+    expect(addBrazilCountryCode("37063949836")).toBe("37063949836"); // Lituânia
+    expect(addBrazilCountryCode("351912345678")).toBe("351912345678"); // Portugal
+  });
+
+  it("DDD inexistente ou 11 dígitos sem o 9 não muda", () => {
+    expect(addBrazilCountryCode("20991306578")).toBe("20991306578");
+    expect(addBrazilCountryCode("15891306578")).toBe("15891306578");
+    expect(addBrazilCountryCode("1501234567")).toBe("1501234567");
+  });
+});
+
+describe("withBrazilCountryCode", () => {
+  it("formata para só dígitos com 55 quando corrige", () => {
+    expect(withBrazilCountryCode(" (15) 99130-6578 ")).toBe("5515991306578");
+  });
+
+  it("mantém o texto digitado quando não corrige", () => {
+    expect(withBrazilCountryCode(" +55 15 99130-6578 ")).toBe("+55 15 99130-6578");
+    expect(withBrazilCountryCode("")).toBe("");
+  });
+});
+
+describe("sanitizePhoneForMeta com Brasil sem 55", () => {
+  it("acrescenta o 55 no envio", () => {
+    expect(sanitizePhoneForMeta("15991306578")).toBe("5515991306578");
   });
 });
