@@ -6,13 +6,22 @@ import { AlertCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { deliveryAlert } from "@/lib/inbox/queue";
-import type { Conversation } from "@/types";
+import { describeDeliveryError } from "@/lib/inbox/delivery-error";
+import type { Conversation, Message } from "@/types";
 
 // Faixa fixa no topo da conversa quando o contato não está recebendo o que
 // mandamos (regra em queue.ts, dado do trigger 088). Fica num componente à
 // parte por causa do relógio: o alerta depende do tempo, e um relógio dentro
 // da thread re-renderizaria todas as mensagens a cada minuto.
-export function DeliveryAlertBanner({ conversation }: { conversation: Conversation }) {
+// `lastOutbound` é a última mensagem nossa (conversation.last_outbound_message_id)
+// quando ela está carregada na thread: dela sai o motivo da falha (092).
+export function DeliveryAlertBanner({
+  conversation,
+  lastOutbound,
+}: {
+  conversation: Conversation;
+  lastOutbound?: Message | null;
+}) {
   const { t, i18n } = useTranslation("inbox");
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -31,6 +40,13 @@ export function DeliveryAlertBanner({ conversation }: { conversation: Conversati
       })
     : "";
 
+  // Motivo só quando a mensagem está de fato em 'failed': um recibo fora de
+  // ordem pode deixar error_message numa mensagem que voltou a 'sent'.
+  const motivo =
+    alert === "failed" && lastOutbound?.status === "failed" && lastOutbound.error_message
+      ? describeDeliveryError(t, lastOutbound)
+      : null;
+
   return (
     <div
       role="alert"
@@ -39,9 +55,12 @@ export function DeliveryAlertBanner({ conversation }: { conversation: Conversati
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
       <p>
         {alert === "failed"
-          ? t("deliveryBannerFailed")
+          ? motivo
+            ? t("deliveryBannerFailedReason", { reason: motivo })
+            : t("deliveryBannerFailed")
           : t("deliveryBannerUndelivered", { when })}
       </p>
     </div>
   );
 }
+

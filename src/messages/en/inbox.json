@@ -91,5 +91,16 @@
   "deliveryAlertUndelivered": "Messages not delivered: the contact is not receiving them",
   "deliveryAlertFailed": "The last message failed to send",
   "deliveryBannerUndelivered": "This contact is not receiving messages. The last one was sent {{when}} and has not been delivered yet.",
-  "deliveryBannerFailed": "The last message failed to send and did not reach the contact."
+  "deliveryBannerFailed": "The last message failed to send and did not reach the contact.",
+  "deliveryBannerFailedReason": "The last message did not reach the contact. Reason: {{reason}}",
+  "deliveryErrorGeneric": "Meta error code {{code}} ({{title}})",
+  "deliveryError": {
+    "131049": "Meta held the template because this contact has already received many marketing templates (from several businesses). Try later or use a Utility template.",
+    "131026": "the message could not be delivered. The number may not be on WhatsApp, may have blocked the business or may use an outdated app.",
+    "131047": "more than 24 hours have passed since the contact's last message. Only a template can be sent.",
+    "131050": "the contact asked not to receive marketing messages from this business.",
+    "131000": "temporary Meta failure. Try sending again.",
+    "131021": "the contact's number is the same as the connection's.",
+    "131008": "a template variable was not filled in."
+  }
 }

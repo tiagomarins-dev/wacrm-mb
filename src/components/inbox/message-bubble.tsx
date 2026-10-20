@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { describeDeliveryError } from "@/lib/inbox/delivery-error";
 import { cn } from "@/lib/utils";
 import { buildLinkParts } from "@/lib/link-tracking/url-detect";
 import type { Message, MessageReaction } from "@/types";
@@ -41,7 +42,8 @@ interface MessageBubbleProps {
   tokenMap?: Record<string, string>;
 }
 
-function StatusIcon({ status }: { status: Message["status"] }) {
+// `motivo` vira a dica (title) do ícone de falha: a explicação do código da Meta (092).
+function StatusIcon({ status, motivo }: { status: Message["status"]; motivo?: string | null }) {
   switch (status) {
     case "sending":
       return <Clock className="h-3 w-3 text-muted-foreground" />;
@@ -52,7 +54,11 @@ function StatusIcon({ status }: { status: Message["status"] }) {
     case "read":
       return <CheckCheck className="h-3 w-3 text-blue-400" />;
     case "failed":
-      return <XCircle className="h-3 w-3 text-red-400" />;
+      return (
+        <span title={motivo ?? undefined} aria-label={motivo ?? undefined} className="inline-flex">
+          <XCircle className="h-3 w-3 text-red-400" />
+        </span>
+      );
     default:
       return null;
   }
@@ -497,7 +503,16 @@ export function MessageBubble({
           >
             {time}
           </span>
-          {isAgent && <StatusIcon status={message.status} />}
+          {isAgent && (
+            <StatusIcon
+              status={message.status}
+              motivo={
+                message.status === "failed" && message.error_message
+                  ? describeDeliveryError(t, message)
+                  : null
+              }
+            />
+          )}
           {/* Badge de cliques — toda bolha OUTBOUND com link rastreável (/r/<token>),
               mesmo com 0 cliques: sinaliza que o link ESTÁ rastreado (o contador só sobe
               com clique de contato real). Cor casa com a bolha bg-primary (igual o

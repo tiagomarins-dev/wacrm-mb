@@ -14,6 +14,7 @@ import {
   handleTemplateWebhookChange,
   isTemplateWebhookField,
 } from '@/lib/whatsapp/template-webhook'
+import { formatStatusErrors, firstStatusErrorCode } from '@/lib/whatsapp/status-errors'
 
 // Lazy-initialized to avoid build-time crash when env vars are missing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -366,9 +367,18 @@ async function handleStatusUpdate(status: {
 }) {
   // 1) Mirror onto messages (legacy behavior) — Meta's status values
   //    already match the CHECK constraint on messages.status.
+  //    Na falha, grava também o motivo da Meta (092) para a conversa mostrar
+  //    por que o contato não recebeu. Os campos só entram quando há erro:
+  //    recibo de sucesso nunca apaga um motivo já gravado.
+  const motivo = status.status === 'failed' ? formatStatusErrors(status.errors) : null
+  const msgUpdate: Record<string, unknown> = { status: status.status }
+  if (motivo) {
+    msgUpdate.error_message = motivo
+    msgUpdate.error_code = firstStatusErrorCode(status.errors)
+  }
   const { error: msgErr } = await supabaseAdmin()
     .from('messages')
-    .update({ status: status.status })
+    .update(msgUpdate)
     .eq('message_id', status.id)
 
   if (msgErr) {
@@ -403,12 +413,7 @@ async function handleStatusUpdate(status: {
   if (status.status === 'read') update.read_at = tsIso
   // Falha de entrega: persiste o motivo que a Meta manda no recibo (código +
   // título + detalhe) — sem isso o painel mostra "Falhou" sem causa.
-  if (status.status === 'failed' && status.errors?.length) {
-    update.error_message = status.errors
-      .map((e) => [e.code, e.title, e.message, e.error_data?.details].filter(Boolean).join(' — '))
-      .join(' | ')
-      .slice(0, 500)
-  }
+  if (motivo) update.error_message = motivo
 
   const { error: recUpdateErr } = await supabaseAdmin()
     .from('broadcast_recipients')
