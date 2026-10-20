@@ -12,6 +12,7 @@ import {
   isUniqueViolation,
   type ExistingContact,
 } from '@/lib/contacts/dedupe';
+import { withBrazilCountryCode } from '@/lib/whatsapp/phone-utils';
 import {
   Dialog,
   DialogContent,
@@ -87,7 +88,7 @@ export function ContactForm({
   // Runs on blur so we don't query on every keystroke.
   async function checkDuplicate() {
     if (isEdit || !accountId) return;
-    const value = phone.trim();
+    const value = withBrazilCountryCode(phone);
     if (!value) {
       setDupMatch(null);
       return;
@@ -160,7 +161,7 @@ export function ContactForm({
           .from('contacts')
           .update({
             name: name.trim() || null,
-            phone: phone.trim(),
+            phone: withBrazilCountryCode(phone),
             email: email.trim() || null,
             company: company.trim() || null,
             updated_at: new Date().toISOString(),
@@ -175,7 +176,7 @@ export function ContactForm({
             account_id: accountId,
             connection_id: activeConnectionId ?? null,
             name: name.trim() || null,
-            phone: phone.trim(),
+            phone: withBrazilCountryCode(phone),
             email: email.trim() || null,
             company: company.trim() || null,
           })
@@ -218,7 +219,7 @@ export function ContactForm({
           const existing = await findExistingContact(
             supabase,
             accountId,
-            phone.trim(),
+            withBrazilCountryCode(phone),
             activeConnectionId ?? undefined,
           );
           if (existing) setDupMatch({ contact: existing, exact: true });

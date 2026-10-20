@@ -3,6 +3,8 @@
  * tag-column handling stays aligned with phone/name/email/company.
  */
 
+import { withBrazilCountryCode } from '@/lib/whatsapp/phone-utils';
+
 export interface ParsedContactRow {
   phone: string;
   name?: string;
@@ -76,8 +78,11 @@ export function parseContactCsv(text: string): ParseContactCsvResult {
     if (!line) continue;
 
     const values = parseCsvLine(line);
-    const phone = values[phoneIdx]?.replace(/["']/g, '').trim();
-    if (!phone) continue;
+    // Brasileiro sem o 55 ganha o código do país já aqui: a deduplicação contra
+    // a base (phone_normalized) e o envio pela Meta usam o número completo.
+    const lido = values[phoneIdx]?.replace(/["']/g, '').trim();
+    if (!lido) continue;
+    const phone = withBrazilCountryCode(lido);
 
     // Extras da linha: só células não-vazias (chave = header em lowercase).
     let extras: Record<string, string> | undefined;

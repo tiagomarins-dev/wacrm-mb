@@ -1,11 +1,57 @@
+// DDDs em uso no Brasil (Anatel). Primeiro filtro para reconhecer um celular
+// ou fixo brasileiro gravado sem o código do país.
+const DDDS_BR = new Set([
+  '11', '12', '13', '14', '15', '16', '17', '18', '19', '21', '22', '24', '27', '28',
+  '31', '32', '33', '34', '35', '37', '38', '41', '42', '43', '44', '45', '46', '47',
+  '48', '49', '51', '53', '54', '55', '61', '62', '63', '64', '65', '66', '67', '68',
+  '69', '71', '73', '74', '75', '77', '79', '81', '82', '83', '84', '85', '86', '87',
+  '88', '89', '91', '92', '93', '94', '95', '96', '97', '98', '99',
+])
+
+/**
+ * Acrescenta o 55 a um telefone brasileiro digitado sem o código do país
+ * (contato criado à mão ou por planilha). Sem o 55, a Meta trata o número como
+ * de outro país e o template de primeiro contato falha.
+ *
+ * Reconhece como brasileiro, só com dígitos:
+ *  - 11 dígitos: DDD válido + celular começando em 9 (ex.: 15 99130 6578);
+ *  - 10 dígitos: DDD válido + fixo ou celular antigo de 8 dígitos (2–9).
+ * Número estrangeiro com DDI de 1 dígito não cai na regra: o código de área
+ * dos EUA/Canadá nunca tem 9 no meio ("1X9…") e o exemplo lituano "370 6…" tem
+ * 0 na terceira posição. Fica o risco residual de um número estrangeiro sem
+ * DDI que imite esse formato, raro no WhatsApp.
+ * Qualquer outra entrada volta igual.
+ */
+export function addBrazilCountryCode(digits: string): string {
+  if (!/^\d{10,11}$/.test(digits) || !DDDS_BR.has(digits.slice(0, 2))) return digits
+  const terceiro = digits[2]
+  if (digits.length === 11 && terceiro !== '9') return digits
+  if (digits.length === 10 && !/[2-9]/.test(terceiro)) return digits
+  return `55${digits}`
+}
+
+/**
+ * Telefone para gravar no contato: com o 55 quando é um número brasileiro
+ * digitado sem ele (só dígitos, para casar com phone_normalized); senão o
+ * texto como foi digitado, sem espaços nas pontas.
+ */
+export function withBrazilCountryCode(phone: string): string {
+  const texto = (phone ?? '').trim()
+  const digits = texto.replace(/\D/g, '')
+  const corrigido = addBrazilCountryCode(digits)
+  return corrigido !== digits ? corrigido : texto
+}
+
 /**
  * Sanitize phone number for Meta WhatsApp API.
  * Meta requires digits only — no + prefix, no spaces, no dashes.
  * e.g. "+370 63949836" → "37063949836"
+ * Telefone brasileiro sem o 55 ganha o código do país (addBrazilCountryCode):
+ * vale para todo envio pela Meta (tela, automações, flows, disparos).
  */
 export function sanitizePhoneForMeta(phone: string): string {
   if (!phone) return ''
-  return phone.replace(/\D/g, '')
+  return addBrazilCountryCode(phone.replace(/\D/g, ''))
 }
 
 /**
