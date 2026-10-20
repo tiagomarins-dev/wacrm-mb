@@ -220,14 +220,19 @@ describe("withBrazilCountryCode", () => {
     expect(withBrazilCountryCode(" (15) 99130-6578 ")).toBe("5515991306578");
   });
 
+  it("número digitado com + é internacional e não muda", () => {
+    expect(withBrazilCountryCode("+51 997 597 024")).toBe("+51 997 597 024");
+  });
+
   it("mantém o texto digitado quando não corrige", () => {
     expect(withBrazilCountryCode(" +55 15 99130-6578 ")).toBe("+55 15 99130-6578");
     expect(withBrazilCountryCode("")).toBe("");
   });
 });
 
-describe("sanitizePhoneForMeta com Brasil sem 55", () => {
-  it("acrescenta o 55 no envio", () => {
-    expect(sanitizePhoneForMeta("15991306578")).toBe("5515991306578");
+describe("sanitizePhoneForMeta não completa o 55", () => {
+  it("wa_id estrangeiro com formato de brasileiro segue igual no envio", () => {
+    expect(sanitizePhoneForMeta("51997597024")).toBe("51997597024"); // Peru
+    expect(sanitizePhoneForMeta("4512345678")).toBe("4512345678"); // Dinamarca
   });
 });
