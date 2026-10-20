@@ -1549,7 +1549,16 @@ export function MessageThread({
       </div>
 
       {/* Contato não está recebendo (088): faixa fixa entre o cabeçalho e as mensagens. */}
-      {conversation && <DeliveryAlertBanner conversation={conversation} />}
+      {conversation && (
+        <DeliveryAlertBanner
+          conversation={conversation}
+          lastOutbound={
+            conversation.last_outbound_message_id
+              ? messages.find((m) => m.id === conversation.last_outbound_message_id) ?? null
+              : null
+          }
+        />
+      )}
 
       {/* Messages Area.
           `min-h-0` é load-bearing: sem ele, este flex item não encolhe

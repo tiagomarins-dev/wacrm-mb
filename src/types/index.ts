@@ -543,6 +543,10 @@ export interface Message {
   sender_name?: string | null;
   /** Cliques no link rastreável (/r/<token>) enviado nesta mensagem (066). Badge realtime. */
   link_click_count?: number;
+  /** Código da falha de entrega devolvido pela Meta (092). Só quando status='failed'. */
+  error_code?: number | null;
+  /** Código, título e detalhe da falha, como a Meta mandou (092). */
+  error_message?: string | null;
 }
 
 export type ReactionActor = 'customer' | 'agent';
