@@ -105,6 +105,8 @@ interface NavItem {
    * server-side, nas RPCs/rotas). Omitido = visível pra todos.
    */
   minRole?: AccountRole;
+  /** Item de relatório: some para quem tem `hide_reports` (canViewReports). */
+  reports?: boolean;
 }
 
 // Dashboard fica solto no topo; os demais entram em 2 grupos rotulados
@@ -124,7 +126,7 @@ const navCrescimento: NavItem[] = [
   { href: "/automations", labelKey: "automations", icon: Zap },
   { href: "/flows", labelKey: "flows", icon: Workflow, beta: true },
   { href: "/lead-score", labelKey: "leadScore", icon: TrendingUp },
-  { href: "/reports", labelKey: "reports", icon: BarChart3 },
+  { href: "/reports", labelKey: "reports", icon: BarChart3, reports: true },
   { href: "/pulse", labelKey: "pulse", icon: Activity, minRole: "owner" },
 ];
 
@@ -143,7 +145,8 @@ interface SidebarProps {
 export function Sidebar({ open = false, onClose, collapsed = false }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useTranslation(["nav", "common"]);
-  const { user, profile, profileLoading, account, accountRole, signOut } = useAuth();
+  const { user, profile, profileLoading, account, accountRole, canViewReports, signOut } =
+    useAuth();
   const totalUnread = useTotalUnread();
   // Aviso de conversa transferida para mim. Mora aqui porque a sidebar está
   // montada em todas as páginas do dashboard.
@@ -153,7 +156,11 @@ export function Sidebar({ open = false, onClose, collapsed = false }: SidebarPro
   // real é server-side). Enquanto profileLoading, accountRole é null →
   // item gated fica oculto (sem flash de aparecer-e-sumir).
   const visibleItems = (items: NavItem[]) =>
-    items.filter((i) => !i.minRole || (accountRole && hasMinRole(accountRole, i.minRole)));
+    items.filter(
+      (i) =>
+        (!i.minRole || (accountRole && hasMinRole(accountRole, i.minRole))) &&
+        (!i.reports || canViewReports),
+    );
   // Only surface the account-name strip when it actually carries
   // information. A solo user's personal account is named after them
   // (the 017 signup trigger seeds it from `full_name`), so showing it

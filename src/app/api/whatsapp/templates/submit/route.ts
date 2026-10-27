@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { canCallerManageTemplates, TEMPLATE_FORBIDDEN_MESSAGE } from '@/lib/auth/template-access'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { resolveOutboundConfig } from '@/lib/connections/resolve'
 import { getActiveConnection } from '@/lib/connections/active'
@@ -111,6 +112,11 @@ export async function POST(request: Request) {
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
       )
+    }
+
+    // Permissão de template (admin+ ou agent liberado) antes de tocar a Meta.
+    if (!(await canCallerManageTemplates(supabase, accountId))) {
+      return NextResponse.json({ error: TEMPLATE_FORBIDDEN_MESSAGE }, { status: 403 })
     }
 
     let payload: TemplatePayload

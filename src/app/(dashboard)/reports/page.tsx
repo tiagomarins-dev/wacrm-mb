@@ -39,10 +39,15 @@ export default function ReportsPage() {
   const { t } = useTranslation(["reports", "common"]);
   const supabase = createClient();
   const router = useRouter();
-  const { user, canEditSettings, isOwner } = useAuth();
+  const { user, canEditSettings, isOwner, canViewReports, profileLoading } = useAuth();
   const { activeConnectionId } = useActiveConnection();
   const { statuses } = useConversationStatuses();
   const { formatDateTime } = useFormat();
+
+  // Gate de UI para quem tem hide_reports (a trava real é reports_hidden nas RPCs, 094).
+  useEffect(() => {
+    if (!profileLoading && !canViewReports) router.replace("/dashboard");
+  }, [profileLoading, canViewReports, router]);
 
   const [windowDays, setWindowDays] = useState<number>(30);
   const [members, setMembers] = useState<ReportMember[]>([]);

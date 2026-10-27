@@ -107,3 +107,25 @@ export function canDeleteAccount(role: AccountRole): boolean {
 export function canTransferOwnership(role: AccountRole): boolean {
   return role === "owner";
 }
+
+// ============================================================
+// Permissões por pessoa
+//
+// Flags de profiles que ajustam um membro sem trocar o papel dele
+// (migration 094). Espelham os helpers SQL `can_manage_templates` e
+// `reports_hidden`, que são a trava real; estes predicados só decidem
+// o que a interface mostra.
+// ============================================================
+
+/**
+ * Admin+ sempre gerencia templates; agent só com a flag
+ * `can_manage_templates`. Viewer nunca.
+ */
+export function canManageTemplates(role: AccountRole, flag: boolean): boolean {
+  return hasMinRole(role, "admin") || (role === "agent" && flag);
+}
+
+/** Relatórios somem para quem tem `hide_reports`, exceto o owner. */
+export function canViewReports(role: AccountRole, hideReports: boolean): boolean {
+  return role === "owner" || !hideReports;
+}

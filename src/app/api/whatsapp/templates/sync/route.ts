@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { canCallerManageTemplates, TEMPLATE_FORBIDDEN_MESSAGE } from '@/lib/auth/template-access'
 import { decrypt } from '@/lib/whatsapp/encryption'
 import { syncConnectionTemplates } from '@/lib/whatsapp/template-sync'
 
@@ -42,6 +43,11 @@ export async function POST() {
         { error: 'Your profile is not linked to an account.' },
         { status: 403 },
       )
+    }
+
+    // Permissão de template (admin+ ou agent liberado) antes de tocar a Meta.
+    if (!(await canCallerManageTemplates(supabase, accountId))) {
+      return NextResponse.json({ error: TEMPLATE_FORBIDDEN_MESSAGE }, { status: 403 })
     }
 
     // Multi-número (033): lista TODAS as conexões da conta (sem

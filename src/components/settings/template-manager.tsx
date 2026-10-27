@@ -180,7 +180,7 @@ function emptyButton(type: TemplateButton['type']): TemplateButton {
 
 export function TemplateManager() {
   const supabase = createClient();
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, canManageTemplates } = useAuth();
   // Conexões da conta (rótulo + filtro) — sem novo fetch; hook já carrega (033).
   const { connections, activeConnectionId } = useActiveConnection();
   // i18n: namespace próprio do painel de Modelos + chaves comuns (Cancelar/Excluir/etc.)
@@ -636,6 +636,8 @@ export function TemplateManager() {
   // Ações (Editar/Reenviar/Excluir) — compartilhadas por card e linha da tabela.
   // Editar aparece p/ APPROVED; Reenviar p/ REJECTED|PAUSED; Excluir sempre.
   function renderActions(template: MessageTemplate) {
+    // Sem permissão de template a lista fica só de leitura (a rota também devolve 403).
+    if (!canManageTemplates) return null;
     const statusKey = template.status || 'DRAFT';
     return (
       <div className="flex items-center gap-1 shrink-0">
@@ -727,21 +729,23 @@ export function TemplateManager() {
         title={t('panelTitle')}
         description={t('panelDescription')}
         action={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={handleSyncFromMeta}
-              disabled={syncing}
-              title={t('syncTooltip')}
-            >
-              <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
-              {syncing ? t('syncing') : t('syncFromMeta')}
-            </Button>
-            <Button onClick={openCreate}>
-              <Plus className="size-4" />
-              {t('newTemplate')}
-            </Button>
-          </div>
+          canManageTemplates && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={handleSyncFromMeta}
+                disabled={syncing}
+                title={t('syncTooltip')}
+              >
+                <RefreshCw className={`size-4 ${syncing ? 'animate-spin' : ''}`} />
+                {syncing ? t('syncing') : t('syncFromMeta')}
+              </Button>
+              <Button onClick={openCreate}>
+                <Plus className="size-4" />
+                {t('newTemplate')}
+              </Button>
+            </div>
+          )
         }
       />
 
