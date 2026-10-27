@@ -5,9 +5,11 @@ import {
   canDeleteAccount,
   canEditSettings,
   canManageMembers,
+  canManageTemplates,
   canSendMessages,
   canTransferOwnership,
   canViewOnly,
+  canViewReports,
   hasMinRole,
   isAccountRole,
   roleRank,
@@ -126,5 +128,20 @@ describe("capability predicates", () => {
     expect(canTransferOwnership("admin")).toBe(false);
     expect(canTransferOwnership("agent")).toBe(false);
     expect(canTransferOwnership("viewer")).toBe(false);
+  });
+
+  it("canManageTemplates: admin+ sempre, agent só com a flag", () => {
+    expect(canManageTemplates("owner", false)).toBe(true);
+    expect(canManageTemplates("admin", false)).toBe(true);
+    expect(canManageTemplates("agent", false)).toBe(false);
+    expect(canManageTemplates("agent", true)).toBe(true);
+    expect(canManageTemplates("viewer", true)).toBe(false);
+  });
+
+  it("canViewReports: hide_reports esconde de todos menos do owner", () => {
+    expect(canViewReports("agent", false)).toBe(true);
+    expect(canViewReports("agent", true)).toBe(false);
+    expect(canViewReports("admin", true)).toBe(false);
+    expect(canViewReports("owner", true)).toBe(true);
   });
 });

@@ -15,7 +15,9 @@ import { DEFAULT_CURRENCY } from "@/lib/currency";
 import {
   canEditSettings as canEditSettingsFor,
   canManageMembers as canManageMembersFor,
+  canManageTemplates as canManageTemplatesFor,
   canSendMessages as canSendMessagesFor,
+  canViewReports as canViewReportsFor,
   isAccountRole,
   type AccountRole,
 } from "@/lib/auth/roles";
@@ -34,6 +36,10 @@ interface Profile {
   beta_features: string[];
   account_id: string | null;
   account_role: AccountRole | null;
+  /** Agent liberado a gerenciar templates (migration 094). */
+  can_manage_templates: boolean;
+  /** Membro sem acesso a relatórios (migration 094; não vale p/ owner). */
+  hide_reports: boolean;
 }
 
 interface AccountSummary {
@@ -101,6 +107,10 @@ interface AuthContextValue {
   canEditSettings: boolean;
   /** True if the caller can send messages and edit operational data (agent+). */
   canSendMessages: boolean;
+  /** Cria/edita/exclui templates: admin+ ou agent com `can_manage_templates`. */
+  canManageTemplates: boolean;
+  /** Vê relatórios: todos, menos quem tem `hide_reports` (owner sempre vê). */
+  canViewReports: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -136,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // missing account collapses to null rather than a half-
           // populated row (shouldn't happen post-017 NOT NULL, but
           // belt-and-braces against forks running older schemas).
-          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, account:accounts!inner(id, name, default_currency)",
+          "id, full_name, email, avatar_url, role, beta_features, account_id, account_role, can_manage_templates, hide_reports, account:accounts!inner(id, name, default_currency)",
         )
         .eq("user_id", userId)
         .maybeSingle();
@@ -196,6 +206,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           beta_features: data.beta_features ?? [],
           account_id: data.account_id ?? null,
           account_role: accountRole,
+          can_manage_templates: data.can_manage_templates === true,
+          hide_reports: data.hide_reports === true,
         });
         setAccount(accountRow);
       }
@@ -308,8 +320,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       canManageMembers: role ? canManageMembersFor(role) : false,
       canEditSettings: role ? canEditSettingsFor(role) : false,
       canSendMessages: role ? canSendMessagesFor(role) : false,
+      canManageTemplates: role
+        ? canManageTemplatesFor(role, profile?.can_manage_templates ?? false)
+        : false,
+      // Enquanto o perfil carrega (role null) fica false: o menu não pisca o item.
+      canViewReports: role ? canViewReportsFor(role, profile?.hide_reports ?? false) : false,
     };
-  }, [profile?.account_role, profile?.account_id]);
+  }, [
+    profile?.account_role,
+    profile?.account_id,
+    profile?.can_manage_templates,
+    profile?.hide_reports,
+  ]);
 
   return (
     <AuthContext.Provider
@@ -361,6 +383,8 @@ export function useAuth(): AuthContextValue {
       canManageMembers: false,
       canEditSettings: false,
       canSendMessages: false,
+      canManageTemplates: false,
+      canViewReports: false,
     };
   }
   return ctx;
