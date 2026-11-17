@@ -15,6 +15,16 @@ import { normalizeStatus } from "@/lib/whatsapp/template-status-normalize";
 const META_API_VERSION = "v21.0";
 const META_API_BASE = `https://graph.facebook.com/${META_API_VERSION}`;
 const PAGE_CAP = 20;
+// Teto de linhas por resposta do PostgREST: a leitura dos existentes pagina
+// neste tamanho para a lista não vir cortada.
+const SELECT_PAGE = 1000;
+// Linhas por gravação em lote: mantém o corpo da requisição pequeno mesmo
+// no catálogo máximo (PAGE_CAP × 100 templates).
+const WRITE_CHUNK = 500;
+// Gravações simultâneas quando um lote é refeito linha a linha.
+const ROW_CONCURRENCY = 10;
+// Colunas do índice único que identifica um template dentro da conexão.
+const CONFLICT_KEY = "connection_id,name,language";
 
 interface MetaButton {
   type: string;
@@ -137,6 +147,14 @@ function extractSampleValues(
   return sv;
 }
 
+type TemplateRow = ReturnType<typeof buildRow>;
+
+// Chave de um template dentro da conexão. O separador é um caractere que
+// não ocorre em nome nem em idioma, então pares distintos nunca colidem.
+function templateKey(name: string, language: string): string {
+  return `${name}\u0000${language}`;
+}
+
 // Monta a linha do banco a partir do template da Meta, amarrada à conta
 // e à CONEXÃO (033). user_id é mantido só como auditoria/autor.
 function buildRow(
@@ -183,10 +201,51 @@ function buildRow(
   };
 }
 
+// Lê (id, name, language) de todos os templates já gravados da conexão e
+// devolve um mapa chave → id. É essa lista que separa "novo" de "existente"
+// na contagem inserted/updated. Pagina com ordem estável porque o PostgREST
+// corta a resposta em SELECT_PAGE linhas, e uma lista cortada contaria
+// template existente como novo.
+async function loadExistingIds(
+  db: SupabaseClient,
+  accountId: string,
+  connectionId: string,
+): Promise<{ ids: Map<string, string>; error: string | null }> {
+  const ids = new Map<string, string>();
+  for (let from = 0; ; from += SELECT_PAGE) {
+    const { data, error } = await db
+      .from("message_templates")
+      .select("id, name, language")
+      .eq("account_id", accountId)
+      .eq("connection_id", connectionId)
+      .order("id")
+      .range(from, from + SELECT_PAGE - 1);
+    if (error) return { ids, error: error.message };
+    const page = (data ?? []) as { id: string; name: string; language: string }[];
+    for (const r of page) ids.set(templateKey(r.name, r.language), r.id);
+    if (page.length < SELECT_PAGE) return { ids, error: null };
+  }
+}
+
+// Grava UMA linha pelo caminho individual: update por id quando o template
+// já existe, insert quando é novo. Devolve a mensagem de erro ou null.
+async function writeSingleRow(
+  db: SupabaseClient,
+  row: TemplateRow,
+  existingId: string | undefined,
+): Promise<string | null> {
+  const { error } = existingId
+    ? await db.from("message_templates").update(row).eq("id", existingId)
+    : await db.from("message_templates").insert(row);
+  return error ? error.message : null;
+}
+
 // Sincroniza os templates da Meta de UMA conexão (WABA) para o banco,
-// escopados por (account_id, connection_id). Mantém lookup→update/insert
-// (não upsert) de propósito: preserva a contagem inserted/updated que o
-// toast do template-manager exibe; o índice único (033) impede duplicata.
+// escopados por (account_id, connection_id), em duas idas ao banco: uma
+// leitura dos templates existentes e uma gravação em lote (upsert no índice
+// único connection_id+name+language). O upsert não informa o que foi criado
+// e o que foi alterado, então inserted/updated — exibidos no toast do
+// template-manager — saem da comparação com a lista lida antes.
 export async function syncConnectionTemplates(
   db: SupabaseClient,
   conn: ConnLite,
@@ -203,7 +262,7 @@ export async function syncConnectionTemplates(
   }
 
   // Paginação da Meta com timeout por página (AbortController) — uma WABA
-  // lenta não pode travar o loop do route que chama esta função.
+  // lenta não pode segurar a resposta do route, que espera todas as conexões.
   const metaTemplates: MetaTemplate[] = [];
   let nextUrl: string | null = `${META_API_BASE}/${conn.waba_id}/message_templates?limit=100&fields=id,name,language,status,category,components,quality_score`;
   let pageCount = 0;
@@ -222,7 +281,7 @@ export async function syncConnectionTemplates(
       if (body.data) metaTemplates.push(...body.data);
       nextUrl = body.paging?.next ?? null;
     } catch (e) {
-      // Aborta esta conexão; o route segue para as demais.
+      // Para a paginação desta conexão; o que já veio ainda é gravado.
       errors.push({
         name: "*",
         language: "*",
@@ -234,44 +293,73 @@ export async function syncConnectionTemplates(
     }
   }
 
-  // Persistência por template, escopada à conexão.
-  for (const t of metaTemplates) {
-    const row = buildRow(t, accountId, conn.id, userId);
-    const { data: existing, error: lookupErr } = await db
-      .from("message_templates")
-      .select("id")
-      .eq("account_id", accountId)
-      .eq("connection_id", conn.id)
-      .eq("name", t.name)
-      .eq("language", t.language)
-      .maybeSingle();
+  const total = metaTemplates.length;
+  const truncated = pageCount >= PAGE_CAP && nextUrl !== null;
+  if (total === 0) return { total, inserted, updated, errors, truncated };
 
-    if (lookupErr) {
-      errors.push({ name: t.name, language: t.language, message: lookupErr.message });
+  // Sem a lista dos existentes não há como classificar novo/existente:
+  // a conexão não é gravada e o erro sai com o curinga "*", como na falha
+  // da Meta.
+  const existing = await loadExistingIds(db, accountId, conn.id);
+  if (existing.error) {
+    errors.push({ name: "*", language: "*", message: existing.error });
+    return { total, inserted, updated, errors, truncated };
+  }
+
+  // Uma linha por chave (a última ocorrência vale): o Postgres rejeita o
+  // lote inteiro se a mesma chave aparecer duas vezes no mesmo upsert.
+  const byKey = new Map<string, TemplateRow>();
+  for (const t of metaTemplates) {
+    byKey.set(
+      templateKey(t.name, t.language),
+      buildRow(t, accountId, conn.id, userId),
+    );
+  }
+  const rows = [...byKey.values()];
+
+  // Contabiliza uma linha gravada como nova ou existente.
+  const count = (row: TemplateRow) => {
+    if (existing.ids.has(templateKey(row.name, row.language))) updated++;
+    else inserted++;
+  };
+
+  for (let i = 0; i < rows.length; i += WRITE_CHUNK) {
+    const chunk = rows.slice(i, i + WRITE_CHUNK);
+    const { error: batchErr } = await db
+      .from("message_templates")
+      .upsert(chunk, { onConflict: CONFLICT_KEY });
+    if (!batchErr) {
+      chunk.forEach(count);
       continue;
     }
 
-    if (existing?.id) {
-      const { error } = await db
-        .from("message_templates")
-        .update(row)
-        .eq("id", existing.id);
-      if (error)
-        errors.push({ name: t.name, language: t.language, message: error.message });
-      else updated++;
-    } else {
-      const { error } = await db.from("message_templates").insert(row);
-      if (error)
-        errors.push({ name: t.name, language: t.language, message: error.message });
-      else inserted++;
+    // O upsert é atômico: uma linha inválida derruba o lote inteiro e o
+    // erro não diz qual foi. O lote é então refeito linha a linha, por
+    // update/insert simples (que não dependem do índice único nem do
+    // ON CONFLICT), para gravar as válidas e apontar em `errors` o nome e
+    // o idioma de cada uma que falhar.
+    console.warn(
+      `[template-sync] lote da conexão ${conn.id} falhou (${batchErr.message}); gravando linha a linha`,
+    );
+    for (let j = 0; j < chunk.length; j += ROW_CONCURRENCY) {
+      const group = chunk.slice(j, j + ROW_CONCURRENCY);
+      const results = await Promise.all(
+        group.map((row) =>
+          writeSingleRow(
+            db,
+            row,
+            existing.ids.get(templateKey(row.name, row.language)),
+          ),
+        ),
+      );
+      results.forEach((message, k) => {
+        const row = group[k];
+        if (message)
+          errors.push({ name: row.name, language: row.language, message });
+        else count(row);
+      });
     }
   }
 
-  return {
-    total: metaTemplates.length,
-    inserted,
-    updated,
-    errors,
-    truncated: pageCount >= PAGE_CAP && nextUrl !== null,
-  };
+  return { total, inserted, updated, errors, truncated };
 }

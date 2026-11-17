@@ -69,26 +69,38 @@ export async function POST() {
       )
     }
 
+    // Conexão sem WABA não tem catálogo de templates — pula (não aborta).
+    const syncable = connections.filter((conn) => {
+      if (conn.waba_id) return true
+      console.warn(`[templates/sync] conexão ${conn.id} sem waba_id — pulada`)
+      return false
+    })
+
+    // Decifra todos os tokens antes de iniciar qualquer sync: um token
+    // ilegível encerra a requisição sem deixar sync de outra conexão rodando.
+    const targets = syncable.map((conn) => ({
+      id: conn.id as string,
+      waba_id: conn.waba_id as string,
+      access_token: decrypt(conn.access_token),
+    }))
+
+    // As conexões são independentes (cada uma tem a própria WABA e grava só
+    // as próprias linhas), então sincronizam ao mesmo tempo: o tempo total é
+    // o da conexão mais lenta, não a soma. Promise.all preserva a ordem das
+    // conexões no resultado, o que mantém a ordem de `errors` estável.
+    const results = await Promise.all(
+      targets.map((target) =>
+        syncConnectionTemplates(supabase, target, accountId, user.id),
+      ),
+    )
+
     // Agrega os contadores entre as conexões (resposta plana p/ o front).
     let total = 0
     let inserted = 0
     let updated = 0
     const errors: { name: string; language: string; message: string }[] = []
     let truncated = false
-
-    for (const conn of connections) {
-      // Conexão sem WABA não tem catálogo de templates — pula (não aborta).
-      if (!conn.waba_id) {
-        console.warn(`[templates/sync] conexão ${conn.id} sem waba_id — pulada`)
-        continue
-      }
-      const accessToken = decrypt(conn.access_token)
-      const r = await syncConnectionTemplates(
-        supabase,
-        { id: conn.id, waba_id: conn.waba_id, access_token: accessToken },
-        accountId,
-        user.id,
-      )
+    for (const r of results) {
       total += r.total
       inserted += r.inserted
       updated += r.updated
