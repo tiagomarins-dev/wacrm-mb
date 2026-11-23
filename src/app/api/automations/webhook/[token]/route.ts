@@ -10,6 +10,9 @@
 //     token criaria um bucket novo a cada tentativa e nunca estouraria)
 //   - caps: body 32KB, idempotency key 200 chars, strings 500 chars
 //   - todo campo extra do payload precisa existir em custom_fields (400 senão)
+//   - `transient` é a exceção: objeto de valores só desta execução (ex.:
+//     token de link de senha), lido como {{transient.x}}. Não é validado
+//     contra custom_fields, não grava no contato e não entra em `vars`
 //   - nota: o POST /api/automations/engine (autenticado) também aceita
 //     webhook_received e roda todas as automações webhook da conta —
 //     mesmo tenant, sem token; intencional.
@@ -28,7 +31,9 @@ import {
 } from '@/lib/rate-limit'
 import type { Automation } from '@/types'
 
-const RESERVED_KEYS = ['phone', 'name', 'email'] as const
+const RESERVED_KEYS = ['phone', 'name', 'email', 'transient'] as const
+const MAX_TRANSIENT_KEYS = 20
+const TRANSIENT_KEY_RE = /^\w{1,64}$/
 const MAX_BODY_BYTES = 32 * 1024
 const MAX_VALUE_LEN = 500
 const PHONE_RE = /^\d{10,15}$/
@@ -109,6 +114,28 @@ export async function POST(
     if (typeof payload.email !== 'string' || !EMAIL_RE.test(payload.email)) {
       return NextResponse.json({ error: 'Campo "email" inválido.' }, { status: 400 })
     }
+  }
+
+  // `transient`: objeto plano de valores curtos, só para a execução.
+  let transient: Record<string, string> | undefined
+  if (payload.transient !== undefined) {
+    const t = payload.transient
+    const entries =
+      t && typeof t === 'object' && !Array.isArray(t) ? Object.entries(t as Record<string, unknown>) : null
+    if (
+      !entries ||
+      entries.length > MAX_TRANSIENT_KEYS ||
+      entries.some(([k, v]) => !TRANSIENT_KEY_RE.test(k) || !isValidValue(v))
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Campo "transient" deve ser um objeto de até 20 chaves (letras, dígitos e _) com texto de até 500 caracteres, número ou booleano.',
+        },
+        { status: 400 },
+      )
+    }
+    transient = Object.fromEntries(entries.map(([k, v]) => [k, String(v)]))
   }
 
   try {
@@ -225,13 +252,20 @@ export async function POST(
     )
     if (!conversation) throw new Error('conversation resolution failed')
 
-    // 11. Dispatch fire-and-forget — payload inteiro vira {{vars.*}}
+    // 11. Dispatch fire-and-forget — payload vira {{vars.*}} (menos o
+    //     `transient`, que segue à parte como {{transient.*}})
+    const { transient: _transient, ...vars } = payload
+    void _transient
     void runSingleAutomation(auto, {
       accountId: auto.account_id,
       connectionId: auto.connection_id,
       triggerType: 'webhook_received',
       contactId: contact.id as string,
-      context: { conversation_id: conversation.id as string, vars: payload },
+      context: {
+        conversation_id: conversation.id as string,
+        vars,
+        ...(transient ? { transient } : {}),
+      },
     }).catch((err) => console.error('[automation-webhook] dispatch error:', err))
 
     // 12. Aceito — execução é assíncrona

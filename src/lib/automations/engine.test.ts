@@ -127,7 +127,7 @@ vi.mock("@/lib/ai-agent/dispatch", () => ({
   resolveAssignedProfile: vi.fn(async () => null),
 }));
 
-import { runAutomationsForTrigger } from "./engine";
+import { runAutomationsForTrigger, semTransient } from "./engine";
 import { engineSendTemplate } from "./meta-send";
 import { runAiAgentForConversation } from "@/lib/ai-agent/engine";
 import { resolveAssignedProfile } from "@/lib/ai-agent/dispatch";
@@ -550,5 +550,71 @@ describe("send_template — interpolação de variáveis", () => {
     };
     expect(call.templateName).toBe("boas_vindas");
     expect(call.params).toEqual(["Maria", "Medicina UERJ", "fixo"]);
+  });
+});
+
+// Botão de URL com {{1}}: o sufixo vem de button_variables, interpolado
+// (inclusive {{transient.x}}), e só vai ao envio quando existe.
+describe("send_template — sufixo de botão de URL", () => {
+  const passo = (config: Record<string, unknown>) => ({
+    id: "s1",
+    automation_id: "a1",
+    step_type: "send_template",
+    position: 0,
+    parent_step_id: null,
+    step_config: { template_name: "mb_acesso_conta_link", language: "pt_BR", ...config },
+  });
+
+  it("interpola {{transient.token}} em buttonParams por índice", async () => {
+    vi.mocked(engineSendTemplate).mockClear();
+    h.state.owned = { id: "c1" };
+    h.state.automations = [automationWithUpdateStep()];
+    h.state.steps = [
+      passo({ variables: { "1": "{{transient.nome}}" }, button_variables: { "0": "{{transient.token}}" } }),
+    ];
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv1", transient: { nome: "Maria", token: "tok123" } },
+    });
+
+    const call = vi.mocked(engineSendTemplate).mock.calls[0][0] as {
+      params: string[];
+      buttonParams?: Record<number, string>;
+    };
+    expect(call.params).toEqual(["Maria"]);
+    expect(call.buttonParams).toEqual({ 0: "tok123" });
+  });
+
+  it("sem button_variables (ou valor vazio) não manda buttonParams", async () => {
+    vi.mocked(engineSendTemplate).mockClear();
+    h.state.owned = { id: "c1" };
+    h.state.automations = [automationWithUpdateStep()];
+    h.state.steps = [passo({ button_variables: { "0": "{{transient.inexistente}}" } })];
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv1" },
+    });
+
+    const call = vi.mocked(engineSendTemplate).mock.calls[0][0] as unknown as Record<string, unknown>;
+    expect(call).not.toHaveProperty("buttonParams");
+  });
+});
+
+describe("semTransient", () => {
+  it("remove transient e preserva o resto do contexto", () => {
+    const ctx = { conversation_id: "c", vars: { a: 1 }, transient: { token: "x" } };
+    expect(semTransient(ctx)).toEqual({ conversation_id: "c", vars: { a: 1 } });
+    expect(ctx.transient).toEqual({ token: "x" });
+  });
+
+  it("devolve o mesmo objeto quando não há transient", () => {
+    const ctx = { conversation_id: "c" };
+    expect(semTransient(ctx)).toBe(ctx);
   });
 });

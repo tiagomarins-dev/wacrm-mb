@@ -35,6 +35,22 @@ export interface AutomationContext {
   tag_id?: string
   /** Agent the conversation was assigned to, for conversation_assigned. */
   agent_id?: string
+  /**
+   * Valores que só existem durante esta execução (ex.: o token de um link
+   * de senha vindo do webhook). Interpolados como {{transient.x}} e nunca
+   * gravados: semTransient() os tira de todo ponto que serializa o contexto
+   * (fila do Wait, corpo do send_webhook). Não entram em `vars` justamente
+   * para não virarem campo do contato.
+   */
+  transient?: Record<string, string>
+}
+
+/** Cópia do contexto sem `transient`, para tudo que persiste ou envia o contexto. */
+export function semTransient(context: AutomationContext): AutomationContext {
+  if (!context.transient) return context
+  const { transient: _omitido, ...resto } = context
+  void _omitido
+  return resto
 }
 
 export interface DispatchInput {
@@ -315,7 +331,7 @@ async function executeStepsFrom(args: ExecuteArgs): Promise<void> {
         parent_step_id: args.parentStepId,
         branch: args.branch,
         next_step_position: step.position + 1,
-        context: args.context,
+        context: semTransient(args.context),
         run_at: new Date(Date.now() + ms).toISOString(),
         status: 'pending',
       })
@@ -427,6 +443,14 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
             // placeholder literal (ex: "{{vars.nome}}").
             .map((k) => interpolate(String(cfg.variables![k]), args))
         : []
+      // Sufixo dos botões de URL com {{1}}, por índice do botão no template.
+      // Valor vazio depois da interpolação não vai: a Meta recusa o envio
+      // e o erro do send-builder diz qual botão ficou sem valor.
+      const buttonParams: Record<number, string> = {}
+      for (const [indice, bruto] of Object.entries(cfg.button_variables ?? {})) {
+        const valor = interpolate(String(bruto), args)
+        if (valor !== '' && Number.isInteger(Number(indice))) buttonParams[Number(indice)] = valor
+      }
       const { whatsapp_message_id } = await engineSendTemplate({
         accountId: args.automation.account_id,
         userId: args.automation.user_id,
@@ -435,6 +459,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
         templateName: cfg.template_name,
         language: cfg.language,
         params,
+        ...(Object.keys(buttonParams).length > 0 ? { buttonParams } : {}),
       })
       return `template sent via Meta (${whatsapp_message_id})`
     }
@@ -665,7 +690,7 @@ async function runStep(step: AutomationStep, args: ExecuteArgs): Promise<string>
     case 'send_webhook': {
       const cfg = step.step_config as SendWebhookStepConfig
       if (!cfg.url) throw new Error('send_webhook needs url')
-      const body = cfg.body_template ? interpolate(cfg.body_template, args) : JSON.stringify(args.context)
+      const body = cfg.body_template ? interpolate(cfg.body_template, args) : JSON.stringify(semTransient(args.context))
       const res = await fetch(cfg.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(cfg.headers ?? {}) },
@@ -791,6 +816,7 @@ function interpolate(s: string, args: ExecuteArgs): string {
     const [ns, prop] = String(key).split('.')
     if (ns === 'message' && prop === 'text') return String(args.context.message_text ?? '')
     if (ns === 'vars' && prop) return String(args.context.vars?.[prop] ?? '')
+    if (ns === 'transient' && prop) return String(args.context.transient?.[prop] ?? '')
     return ''
   })
 }

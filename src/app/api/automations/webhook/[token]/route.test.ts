@@ -266,6 +266,48 @@ describe('happy path', () => {
   })
 })
 
+describe('transient (valores só da execução)', () => {
+  it('vai para context.transient, fora de vars, sem custom value nem validação de campo', async () => {
+    store.automation = automationFixture()
+    const res = await call({
+      phone: '5521999998888',
+      transient: { token: 'abc123', nome: 'Maria' },
+    })
+    expect(res.status).toBe(202)
+    // nenhum campo customizado exigido nem gravado
+    expect(store.upserts).toEqual([])
+    expect(store.contactUpdates).toEqual([])
+    const [, input] = vi.mocked(runSingleAutomation).mock.calls[0]
+    const ctx = (input as unknown as { context: Record<string, unknown> }).context
+    expect(ctx.transient).toEqual({ token: 'abc123', nome: 'Maria' })
+    expect(ctx.vars).toEqual({ phone: '5521999998888' })
+  })
+
+  it('converte número e booleano para texto', async () => {
+    store.automation = automationFixture()
+    await call({ phone: '5521999998888', transient: { n: 7, ok: true } })
+    const [, input] = vi.mocked(runSingleAutomation).mock.calls[0]
+    expect((input as { context: { transient: unknown } }).context.transient).toEqual({ n: '7', ok: 'true' })
+  })
+
+  it('400 para transient que não é objeto plano ou tem chave/valor inválido', async () => {
+    store.automation = automationFixture()
+    const invalidos = [
+      'texto',
+      ['a'],
+      { 'chave com espaço': 'x' },
+      { token: { aninhado: true } },
+      { token: 'x'.repeat(501) },
+      Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`k${i}`, 'v'])),
+    ]
+    for (const transient of invalidos) {
+      const res = await call({ phone: '5521999998888', transient })
+      expect(res.status).toBe(400)
+    }
+    expect(vi.mocked(runSingleAutomation)).not.toHaveBeenCalled()
+  })
+})
+
 describe('rate limit por IP (anti-enumeração)', () => {
   it('429 na 61ª chamada — mesmo trocando o token (bucket é por IP)', async () => {
     store.automation = null // 404s também consomem o bucket

@@ -53,6 +53,8 @@
   "templateVariables": "Template variables",
   "templateVariablePlaceholder": "Static text or {{example}}",
   "templateVariablesHint": "Each variable takes static text or {{example}} from the payload/context.",
+  "templateButtonVariables": "Button links",
+  "templateButtonVariablesHint": "Suffix that completes each button link. Takes static text, {{vars.field}} or {{example}} (webhook value that is never saved on the contact).",
   "templateAddVariable": "Add variable",
   "varSelectSource": "Choose value…",
   "varPayloadGroup": "Webhook payload",

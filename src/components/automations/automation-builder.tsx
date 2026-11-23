@@ -64,6 +64,7 @@ import type {
   CustomField,
   KeywordMatchTriggerConfig,
   MessageTemplate,
+  TemplateButton,
   Tag as TagRecord,
 } from "@/types"
 import { createClient } from "@/lib/supabase/client"
@@ -502,15 +503,18 @@ function SendTemplateFields({
   templateName,
   language,
   variables,
+  buttonVariables,
   onChange,
 }: {
   templateName: string
   language: string
   variables: Record<string, string>
+  buttonVariables: Record<string, string>
   onChange: (patch: {
     template_name: string
     language: string
     variables?: Record<string, string>
+    button_variables?: Record<string, string>
   }) => void
 }) {
   const { t } = useTranslation(["automationBuilder", "common"])
@@ -579,6 +583,15 @@ function SendTemplateFields({
         .sort((a, b) => Number(a) - Number(b))
     : []
 
+  // Botões de URL com {{1}} no template selecionado: cada um pede o sufixo
+  // que completa o link no envio (índice = posição do botão no template).
+  const urlButtons = (selected?.buttons ?? [])
+    .map((button, index) => ({ button, index }))
+    .filter(
+      (b): b is { button: Extract<TemplateButton, { type: "URL" }>; index: number } =>
+        b.button.type === "URL" && /\{\{1\}\}/.test(b.button.url),
+    )
+
   return (
     <>
       <FieldBlock label={t("template")}>
@@ -592,6 +605,7 @@ function SendTemplateFields({
               template_name: name ?? "",
               language: lang ?? "",
               variables: {},
+              button_variables: {},
             })
           }}
           className={SELECT_CLASS}
@@ -638,7 +652,35 @@ function SendTemplateFields({
             {t("templateVariablesHint", { example: "{{vars.campo}}" })}
           </p>
         </FieldBlock>
-      ) : (
+      ) : null}
+      {urlButtons.length > 0 && (
+        <FieldBlock label={t("templateButtonVariables")}>
+          <div className="space-y-1.5">
+            {urlButtons.map(({ button, index }) => (
+              <div key={index} className="space-y-1">
+                <span className="block font-mono text-[11px] text-muted-foreground">
+                  {button.text}: {button.url}
+                </span>
+                <VariableValueField
+                  value={buttonVariables[String(index)] ?? ""}
+                  onChange={(v) =>
+                    onChange({
+                      template_name: templateName,
+                      language,
+                      variables,
+                      button_variables: { ...buttonVariables, [String(index)]: v },
+                    })
+                  }
+                />
+              </div>
+            ))}
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {t("templateButtonVariablesHint", { example: "{{transient.token}}" })}
+          </p>
+        </FieldBlock>
+      )}
+      {placeholders.length > 0 ? null : (
         current &&
         !selected && (
           <TemplateVariablesEditor
@@ -1677,6 +1719,7 @@ function StepEditor({
           templateName={(cfg.template_name as string) ?? ""}
           language={(cfg.language as string) ?? ""}
           variables={(cfg.variables as Record<string, string>) ?? {}}
+          buttonVariables={(cfg.button_variables as Record<string, string>) ?? {}}
           onChange={(patch) => set(patch)}
         />
       )

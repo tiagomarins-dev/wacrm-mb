@@ -8,6 +8,8 @@ import {
 } from '@/lib/whatsapp/phone-utils'
 import { supabaseAdmin } from './admin-client'
 import { resolveOutboundConfigForConversation } from '@/lib/connections/resolve'
+import { isMessageTemplate } from '@/lib/whatsapp/template-row-guard'
+import type { MessageTemplate } from '@/types'
 
 // ------------------------------------------------------------
 // Automation-side Meta sender.
@@ -60,6 +62,8 @@ interface SendTemplateArgs {
   templateName: string
   language?: string
   params?: string[]
+  /** Sufixo dos botões de URL com {{1}}, por índice do botão no template. */
+  buttonParams?: Record<number, string>
 }
 
 export async function engineSendText(args: SendTextArgs): Promise<{ whatsapp_message_id: string }> {
@@ -114,14 +118,29 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
   // Envio pelo provider da conexão (Fase B) — wire idêntico p/ Meta.
   const provider = createMessageProvider(config, accessToken)
 
+  // Botão de URL com variável só sai quando o helper monta os componentes a
+  // partir da linha do template; sem botão, segue o envio só-corpo de sempre.
+  const templateRow =
+    input.kind === 'template' && input.buttonParams && Object.keys(input.buttonParams).length > 0
+      ? await loadTemplateRow(db, input.accountId, config.id, input.templateName, input.language)
+      : null
+
   const attempt = async (phone: string): Promise<string> => {
     if (input.kind === 'template') {
-      const r = await provider.sendTemplate({
-        to: phone,
-        templateName: input.templateName,
-        language: input.language,
-        params: input.params,
-      })
+      const r = templateRow
+        ? await provider.sendTemplate({
+            to: phone,
+            templateName: input.templateName,
+            language: input.language,
+            template: templateRow,
+            messageParams: { body: input.params, buttonParams: input.buttonParams },
+          })
+        : await provider.sendTemplate({
+            to: phone,
+            templateName: input.templateName,
+            language: input.language,
+            params: input.params,
+          })
       return r.messageId
     }
     const r = await provider.sendText({
@@ -189,4 +208,28 @@ async function sendViaMeta(input: SendInput): Promise<{ whatsapp_message_id: str
     .eq('id', input.conversationId)
 
   return { whatsapp_message_id: waMessageId }
+}
+
+// Linha do template na conexão que vai enviar (mesma busca do send-engine de
+// broadcasts). Sem ela não há como montar o botão de URL, então falha com
+// mensagem clara em vez de mandar um envio que a Meta recusaria.
+async function loadTemplateRow(
+  db: ReturnType<typeof supabaseAdmin>,
+  accountId: string,
+  connectionId: string,
+  name: string,
+  language: string | undefined,
+): Promise<MessageTemplate> {
+  const { data } = await db
+    .from('message_templates')
+    .select('*')
+    .eq('account_id', accountId)
+    .eq('connection_id', connectionId)
+    .eq('name', name)
+    .eq('language', language ?? 'en_US')
+    .maybeSingle()
+  if (!data || !isMessageTemplate(data)) {
+    throw new Error(`template ${name} (${language ?? 'en_US'}) not found on this connection`)
+  }
+  return data
 }

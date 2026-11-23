@@ -823,6 +823,8 @@ export interface SendTemplateStepConfig {
   template_name: string;
   language?: string;
   variables?: Record<string, string>;
+  /** Sufixo dos botões de URL com {{1}}, por índice do botão; aceita {{vars.x}} e {{transient.x}}. */
+  button_variables?: Record<string, string>;
 }
 
 export interface TagStepConfig {
