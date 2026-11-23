@@ -53,6 +53,8 @@
   "templateVariables": "Variáveis do template",
   "templateVariablePlaceholder": "Texto fixo ou {{example}}",
   "templateVariablesHint": "Cada variável aceita texto fixo ou {{example}} vindo do payload/contexto.",
+  "templateButtonVariables": "Link dos botões",
+  "templateButtonVariablesHint": "Sufixo que completa o link de cada botão. Aceita texto fixo, {{campo}} ou {{example}} (valor do webhook que não é gravado no contato).",
   "templateAddVariable": "Adicionar variável",
   "varSelectSource": "Escolher valor…",
   "varPayloadGroup": "Payload do webhook",
