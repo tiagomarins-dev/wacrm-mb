@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createClient } from '@/lib/supabase/client';
 import { useAuth } from '@/hooks/use-auth';
 import { useActiveConnection } from '@/hooks/use-active-connection';
@@ -25,7 +26,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Search, X } from 'lucide-react';
 
 interface ContactFormProps {
   open: boolean;
@@ -47,6 +48,7 @@ export function ContactForm({
   onViewExisting,
 }: ContactFormProps) {
   const supabase = createClient();
+  const { t } = useTranslation('contacts');
   const { accountId } = useAuth();
   // Conexão ativa (multi-número, 033): novo contato nasce nela e o dedup
   // é por-conexão (mesmo número em 2 conexões = 2 contatos).
@@ -71,6 +73,23 @@ export function ContactForm({
   const [tags, setTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [loadingTags, setLoadingTags] = useState(false);
+  const [tagQuery, setTagQuery] = useState('');
+
+  // Separa as tags escolhidas (sempre visíveis em chips removíveis) das
+  // disponíveis, filtradas pela busca. Contas com dezenas de tags precisam
+  // disso para o seletor caber numa caixa rolável pequena.
+  const selectedTags = useMemo(
+    () => tags.filter((tag) => selectedTagIds.includes(tag.id)),
+    [tags, selectedTagIds],
+  );
+  const availableTags = useMemo(() => {
+    const q = tagQuery.trim().toLowerCase();
+    return tags.filter(
+      (tag) =>
+        !selectedTagIds.includes(tag.id) &&
+        (!q || tag.name.toLowerCase().includes(q)),
+    );
+  }, [tags, selectedTagIds, tagQuery]);
 
   useEffect(() => {
     if (open) {
@@ -80,6 +99,7 @@ export function ContactForm({
       setCompany(contact?.company ?? '');
       setSelectedTagIds(contactTags.map((ct) => ct.tag_id));
       setDupMatch(null);
+      setTagQuery('');
       fetchTags();
     }
   }, [open, contact]);
@@ -238,7 +258,9 @@ export function ContactForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-md">
+      {/* Altura limitada à viewport: os campos rolam por dentro e o rodapé
+          com Cancelar/Criar fica sempre visível em tela baixa. */}
+      <DialogContent className="bg-popover border-border text-popover-foreground sm:max-w-md max-h-[90dvh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-popover-foreground">
             {isEdit ? 'Edit Contact' : 'Add Contact'}
@@ -250,132 +272,161 @@ export function ContactForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="cf-name" className="text-muted-foreground">
-              Name
-            </Label>
-            <Input
-              id="cf-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="John Doe"
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="-mx-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-4 pb-4">
+            <div className="space-y-2">
+              <Label htmlFor="cf-name" className="text-muted-foreground">
+                Name
+              </Label>
+              <Input
+                id="cf-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="cf-phone" className="text-muted-foreground">
-              Phone <span className="text-red-400">*</span>
-            </Label>
-            <Input
-              id="cf-phone"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                if (dupMatch) setDupMatch(null);
-              }}
-              onBlur={checkDuplicate}
-              placeholder="+1 234 567 8900"
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-            {dupMatch ? (
-              <div
-                className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
-                  dupMatch.exact
-                    ? 'border-red-500/40 bg-red-500/10 text-red-300'
-                    : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
-                }`}
-              >
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <div className="space-y-1">
-                  <p>
-                    {dupMatch.exact
-                      ? 'A contact with this phone number already exists.'
-                      : 'A contact with a very similar number already exists.'}
-                  </p>
-                  {onViewExisting && (
-                    <button
-                      type="button"
-                      onClick={() => onViewExisting(dupMatch.contact.id)}
-                      className="font-medium underline underline-offset-2 hover:no-underline"
-                    >
-                      View {dupMatch.contact.name || dupMatch.contact.phone}
-                    </button>
+            <div className="space-y-2">
+              <Label htmlFor="cf-phone" className="text-muted-foreground">
+                Phone <span className="text-red-400">*</span>
+              </Label>
+              <Input
+                id="cf-phone"
+                value={phone}
+                onChange={(e) => {
+                  setPhone(e.target.value);
+                  if (dupMatch) setDupMatch(null);
+                }}
+                onBlur={checkDuplicate}
+                placeholder="+1 234 567 8900"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+              {dupMatch ? (
+                <div
+                  className={`flex items-start gap-2 rounded-md border px-2.5 py-2 text-xs ${
+                    dupMatch.exact
+                      ? 'border-red-500/40 bg-red-500/10 text-red-300'
+                      : 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+                  }`}
+                >
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p>
+                      {dupMatch.exact
+                        ? 'A contact with this phone number already exists.'
+                        : 'A contact with a very similar number already exists.'}
+                    </p>
+                    {onViewExisting && (
+                      <button
+                        type="button"
+                        onClick={() => onViewExisting(dupMatch.contact.id)}
+                        className="font-medium underline underline-offset-2 hover:no-underline"
+                      >
+                        View {dupMatch.contact.name || dupMatch.contact.phone}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Include country code, e.g. +1 for US
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cf-email" className="text-muted-foreground">
+                Email
+              </Label>
+              <Input
+                id="cf-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="john@example.com"
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="cf-company" className="text-muted-foreground">
+                Company
+              </Label>
+              <Input
+                id="cf-company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Acme Inc."
+                className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Tags</Label>
+              {loadingTags ? (
+                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                  <Loader2 className="size-3 animate-spin" />
+                  Loading tags...
+                </div>
+              ) : tags.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No tags available. Create tags in Settings.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {selectedTags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedTags.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.id)}
+                          aria-label={t('removeTagAria', { name: tag.name })}
+                          className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-current cursor-pointer"
+                          style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                        >
+                          {tag.name}
+                          <X className="size-3" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={tagQuery}
+                      onChange={(e) => setTagQuery(e.target.value)}
+                      // Enter na busca não pode enviar o formulário do contato.
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.preventDefault();
+                      }}
+                      placeholder={t('tagSearchPlaceholder')}
+                      className="h-8 pl-8 bg-muted border-border text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
+                  {availableTags.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {tagQuery.trim() ? t('tagNoMatch') : t('tagAllSelected')}
+                    </p>
+                  ) : (
+                    <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto rounded-md border border-border p-2">
+                      {availableTags.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          onClick={() => toggleTag(tag.id)}
+                          className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium opacity-70 transition-opacity hover:opacity-100 cursor-pointer"
+                          style={{ backgroundColor: tag.color + '20', color: tag.color }}
+                        >
+                          {tag.name}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Include country code, e.g. +1 for US
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cf-email" className="text-muted-foreground">
-              Email
-            </Label>
-            <Input
-              id="cf-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="john@example.com"
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cf-company" className="text-muted-foreground">
-              Company
-            </Label>
-            <Input
-              id="cf-company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="Acme Inc."
-              className="bg-muted border-border text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Tags</Label>
-            {loadingTags ? (
-              <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                <Loader2 className="size-3 animate-spin" />
-                Loading tags...
-              </div>
-            ) : tags.length === 0 ? (
-              <p className="text-xs text-muted-foreground">
-                No tags available. Create tags in Settings.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {tags.map((tag) => {
-                  const selected = selectedTagIds.includes(tag.id);
-                  return (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      onClick={() => toggleTag(tag.id)}
-                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors cursor-pointer ${
-                        selected
-                          ? 'ring-2 ring-primary ring-offset-1 ring-offset-border'
-                          : 'opacity-60 hover:opacity-100'
-                      }`}
-                      style={{
-                        backgroundColor: tag.color + '20',
-                        color: tag.color,
-                        borderColor: tag.color,
-                      }}
-                    >
-                      {tag.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <DialogFooter className="bg-popover border-border">

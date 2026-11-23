@@ -38,5 +38,9 @@
   "deletedToast_one": "{{count}} contato excluído",
   "deletedToast_other": "{{count}} contatos excluídos",
   "openConversation": "Abrir conversa",
-  "openConversationError": "Erro ao abrir conversa"
+  "openConversationError": "Erro ao abrir conversa",
+  "tagSearchPlaceholder": "Buscar tags...",
+  "tagNoMatch": "Nenhuma tag corresponde à busca.",
+  "tagAllSelected": "Todas as tags já foram selecionadas.",
+  "removeTagAria": "Remover tag {{name}}"
 }

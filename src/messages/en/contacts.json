@@ -38,5 +38,9 @@
   "deletedToast_one": "{{count}} contact deleted",
   "deletedToast_other": "{{count}} contacts deleted",
   "openConversation": "Open conversation",
-  "openConversationError": "Failed to open conversation"
+  "openConversationError": "Failed to open conversation",
+  "tagSearchPlaceholder": "Search tags...",
+  "tagNoMatch": "No tags match your search.",
+  "tagAllSelected": "All tags are selected.",
+  "removeTagAria": "Remove tag {{name}}"
 }
