@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
     conversation: null as Record<string, unknown> | null,
     deletes: [] as { table: string; filters: [string, string, unknown][] }[],
     logs: [] as unknown[],
+    pending: [] as Record<string, unknown>[],
   },
 }));
 
@@ -74,6 +75,10 @@ vi.mock("./admin-client", () => {
       return { data: { steps_executed: [], status: "success" }, error: null };
     }
     if (table === "automation_steps") return { data: state.steps, error: null };
+    if (table === "automation_pending_executions" && type === "insert") {
+      state.pending.push(ops.payload as Record<string, unknown>);
+      return { data: null, error: null };
+    }
     return { data: null, error: null };
   }
 
@@ -603,6 +608,35 @@ describe("send_template — sufixo de botão de URL", () => {
 
     const call = vi.mocked(engineSendTemplate).mock.calls[0][0] as unknown as Record<string, unknown>;
     expect(call).not.toHaveProperty("buttonParams");
+  });
+});
+
+describe("Wait não persiste transient", () => {
+  it("a linha da fila leva o contexto sem transient", async () => {
+    h.state.pending = [];
+    h.state.owned = { id: "c1" };
+    h.state.automations = [automationWithUpdateStep()];
+    h.state.steps = [
+      {
+        id: "w1",
+        automation_id: "a1",
+        step_type: "wait",
+        position: 0,
+        parent_step_id: null,
+        step_config: { amount: 5, unit: "minutes" },
+      },
+    ];
+
+    await runAutomationsForTrigger({
+      accountId: ACCOUNT,
+      triggerType: "new_message_received",
+      contactId: "c1",
+      context: { conversation_id: "conv1", vars: { a: "1" }, transient: { token: "segredo" } },
+    });
+
+    expect(h.state.pending).toHaveLength(1);
+    expect(h.state.pending[0].context).toEqual({ conversation_id: "conv1", vars: { a: "1" } });
+    expect(JSON.stringify(h.state.pending[0])).not.toContain("segredo");
   });
 });
 

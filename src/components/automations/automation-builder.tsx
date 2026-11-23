@@ -676,7 +676,7 @@ function SendTemplateFields({
             ))}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {t("templateButtonVariablesHint", { example: "{{transient.token}}" })}
+            {t("templateButtonVariablesHint", { campo: "{{vars.campo}}", example: "{{transient.token}}" })}
           </p>
         </FieldBlock>
       )}
