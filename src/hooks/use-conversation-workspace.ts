@@ -302,9 +302,12 @@ export function useConversationWorkspace({
   // Favorita/desfavorita (076) — otimista com rollback. Guard de accountId:
   // o profile pode ainda não ter carregado (use-auth derived) e o insert
   // violaria NOT NULL.
+  // O id sai do objeto `user` antes do callback para a dependência declarada
+  // bater com a que o React Compiler infere e a memoização ser preservada.
+  const favoriteUserId = user?.id;
   const handleToggleFavorite = useCallback(
     async (id: string) => {
-      if (!user?.id || !accountId) return;
+      if (!favoriteUserId || !accountId) return;
       const snapshot = favorites;
       const wasFavorite = favorites.has(id);
       const next = new Set(favorites);
@@ -317,11 +320,11 @@ export function useConversationWorkspace({
         ? await supabase
             .from("conversation_favorites")
             .delete()
-            .match({ conversation_id: id, user_id: user.id })
+            .match({ conversation_id: id, user_id: favoriteUserId })
         : await supabase
             .from("conversation_favorites")
             .upsert(
-              { account_id: accountId, conversation_id: id, user_id: user.id },
+              { account_id: accountId, conversation_id: id, user_id: favoriteUserId },
               { onConflict: "user_id,conversation_id", ignoreDuplicates: true },
             );
       if (error) {
@@ -329,7 +332,7 @@ export function useConversationWorkspace({
         setFavorites(snapshot);
       }
     },
-    [user?.id, accountId, favorites],
+    [favoriteUserId, accountId, favorites],
   );
 
   // Marca a conversa como não lida (unread_count=1) + rollback local no erro.
