@@ -1,10 +1,12 @@
 name: CI
 
+# producao é a branch que vai para o servidor; a imagem Docker não roda
+# typecheck, então este job é a barreira contra erro de tipo antes do deploy.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, producao]
   push:
-    branches: [main]
+    branches: [main, producao]
 
 # Cancel older CI runs for the same branch when a new commit arrives —
 # saves minutes when someone pushes a stack of fixes to one PR.

@@ -66,6 +66,14 @@ const nextConfig: NextConfig = {
   // uma imagem Docker mínima sem o node_modules completo.
   output: "standalone",
 
+  // O typecheck do `next build` é a etapa mais cara do build na VPS de
+  // produção e repete o que o `npm run typecheck` e a CI já validam. Só a
+  // imagem Docker liga SKIP_BUILD_TYPECHECK; build local e CI continuam
+  // travando em erro de tipo.
+  typescript: {
+    ignoreBuildErrors: process.env.SKIP_BUILD_TYPECHECK === "1",
+  },
+
   /**
    * Cache-Control policy.
    *
