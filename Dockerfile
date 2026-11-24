@@ -34,6 +34,9 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
 # Telemetria do Next desligada no build
 ENV NEXT_TELEMETRY_DISABLED=1
+# Pula o typecheck do `next build` (ver next.config.ts): o erro de tipo é
+# barrado pela CI no PR e pelo `npm run typecheck`, não aqui.
+ENV SKIP_BUILD_TYPECHECK=1
 RUN npm run build
 
 # ---- Stage 3: runner — imagem final enxuta de produção ----

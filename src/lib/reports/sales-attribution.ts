@@ -15,9 +15,15 @@ export type SaleCandidate = {
   confidence: "high" | "low";
 };
 
-// Converte 'YYYY-MM-DD HH:MM:SS' (ou ISO) da MB em Date.
+// Converte a data da MB em Date. A MB manda 'YYYY-MM-DD HH:MM:SS' sem offset,
+// no horário de São Paulo (fuso do MySQL dela). O offset precisa ser explícito:
+// o container roda em UTC e leria a hora como UTC, deslocando a janela em 3h.
+// -03:00 fixo vale porque o Brasil não tem horário de verão. ISO com offset ou
+// 'Z' passa direto.
 function parseMbDate(s: string): Date {
-  return new Date(s.includes("T") ? s : s.replace(" ", "T"));
+  const iso = s.includes("T") ? s : s.replace(" ", "T");
+  const hasOffset = /(Z|[+-]\d{2}:?\d{2})$/.test(iso);
+  return new Date(hasOffset ? iso : `${iso}-03:00`);
 }
 
 // Decide quais matrículas contam como venda atribuível desta conversa.
